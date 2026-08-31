@@ -1615,6 +1615,18 @@ input:focus {
 .kv-cmp.above { color: var(--dn); }
 .kv-cmp.below { color: var(--up); }
 
+/* Pastille de lecture rapide d'un ratio (seuils documentes dans App._healthFlag) */
+.kv-tag {
+    margin-top: 2px; align-self: flex-start;
+    padding: 1px 7px; border-radius: 999px;
+    font-family: var(--font-ui); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    border: 1px solid transparent;
+}
+.kv-tag.ok { color: var(--up); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+.kv-tag.warn { color: var(--dn); border-color: color-mix(in srgb, var(--dn) 40%, transparent); }
+.kv-tag.mid { color: var(--text-secondary); border-color: var(--l2); }
+
 /* Historiques annuels en barres (croissance CA / BPA) */
 .growth-series {
     display: grid;

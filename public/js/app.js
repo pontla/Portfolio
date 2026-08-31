@@ -4944,11 +4944,13 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         // retarder l'affichage des sections rapides ci-dessus.
         this.renderResearchValuation(null);
         this.renderResearchGrowth(null);
+        this.renderResearchHealth(null);
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
             this.researchAnalysis = a;
             this.renderResearchValuation(a);
             this.renderResearchGrowth(a);
+            this.renderResearchHealth(a);
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
 
@@ -5121,6 +5123,89 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             src.textContent = hasHist
                 ? 'FMP · consensus analystes Yahoo Finance'
                 : (a.isUS ? 'Historique annuel indisponible' : 'Historique complet : actions US uniquement');
+        }
+    },
+
+    // Seuils de lecture rapide des ratios de solidite financiere.
+    // Volontairement explicites et ajustables : [borne "confortable", borne "vigilance"].
+    // `dir` = 'high' quand une valeur elevee est bonne, 'low' quand elle est mauvaise.
+    _healthFlag(value, ok, warn, dir) {
+        if (value == null || !isFinite(value)) return '';
+        const good = dir === 'high' ? value >= ok : value <= ok;
+        const bad = dir === 'high' ? value < warn : value > warn;
+        const cls = good ? 'ok' : (bad ? 'warn' : 'mid');
+        const txt = good ? 'confortable' : (bad ? 'vigilance' : 'correct');
+        return `<span class="kv-tag ${cls}">${txt}</span>`;
+    },
+
+    renderResearchHealth(a) {
+        const card = document.getElementById('researchHealthCard');
+        const grid = document.getElementById('researchHealthGrid');
+        const series = document.getElementById('researchHealthSeries');
+        const src = document.getElementById('researchHealthSrc');
+        if (!card || !grid || !series) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            grid.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            series.innerHTML = '';
+            return;
+        }
+
+        const h = a.health || {};
+        const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
+        const ND = 'Non disponible';
+        const money = (x) => Utils.formatCompact(x, cur);
+        const ratio = (x) => (x == null || !isFinite(x))
+            ? null
+            : new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x);
+        const mult = (x) => (x == null || !isFinite(x))
+            ? null
+            : new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(x) + ' ×';
+
+        const kv = (label, valueStr, tip, tag = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${tag}</div>`;
+
+        const netDebt = (h.totalDebt != null && h.totalCash != null) ? h.totalDebt - h.totalCash : null;
+
+        grid.innerHTML =
+            kv('Dette nette / EBITDA', mult(h.netDebtToEbitda),
+                'Nombre d\'années d\'EBITDA nécessaires pour rembourser la dette nette. Sous 1 : très solide ; au-dessus de 3 : endettement lourd.',
+                this._healthFlag(h.netDebtToEbitda, 1, 3, 'low')) +
+            kv('Dette / Capitaux propres', ratio(h.debtToEquity),
+                'Dette rapportée aux capitaux propres. Au-dessus de 2, la société dépend fortement de ses créanciers (normal pour les banques et les utilities).',
+                this._healthFlag(h.debtToEquity, 1, 2, 'low')) +
+            kv('Liquidité générale', ratio(h.currentRatio),
+                'Actifs courants divisés par les dettes à moins d\'un an. Sous 1, la trésorerie court terme peut manquer.',
+                this._healthFlag(h.currentRatio, 1.5, 1, 'high')) +
+            kv('Liquidité réduite', ratio(h.quickRatio),
+                'Même calcul en excluant les stocks, plus difficiles à transformer en cash. Sous 1 : dépendance aux ventes de stocks.',
+                this._healthFlag(h.quickRatio, 1, 0.7, 'high')) +
+            kv('Couverture des intérêts', mult(h.interestCoverage),
+                'Résultat d\'exploitation divisé par les intérêts payés. Sous 3, la charge de la dette pèse ; au-dessus de 8, elle est indolore.',
+                this._healthFlag(h.interestCoverage, 8, 3, 'high')) +
+            kv('Trésorerie', h.totalCash == null ? null : money(h.totalCash),
+                'Trésorerie et placements court terme au dernier bilan publié.') +
+            kv('Dette totale', h.totalDebt == null ? null : money(h.totalDebt),
+                'Dettes financières court et long terme au dernier bilan publié.') +
+            kv('Dette nette', netDebt == null ? null : money(netDebt),
+                'Dette totale moins la trésorerie. Négative : la société a plus de cash que de dettes.',
+                netDebt == null ? '' : `<span class="kv-tag ${netDebt <= 0 ? 'ok' : 'mid'}">${netDebt <= 0 ? 'trésorerie nette' : 'endettée'}</span>`);
+
+        const trendLabel = { croissant: 'en hausse', stable: 'stable', 'décroissant': 'en baisse' }[h.fcfTrend] || null;
+        series.innerHTML = this._growthSeries(
+            `Flux de trésorerie disponible${trendLabel ? ' — ' + trendLabel : ''}`,
+            AnalysisUtils.arr(h.fcfHistory), money,
+            'Cash restant après investissements sur les 5 derniers exercices. C\'est lui qui finance dividendes, rachats d\'actions et remboursement de dette.'
+        );
+
+        if (src) {
+            const hasFcf = AnalysisUtils.arr(h.fcfHistory).some(p => p.value != null);
+            src.textContent = hasFcf
+                ? 'FMP · Yahoo Finance'
+                : (a.isUS ? 'Historique de trésorerie indisponible' : 'Historique complet : actions US uniquement');
         }
     },
 

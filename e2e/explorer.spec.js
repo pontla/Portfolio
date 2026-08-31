@@ -143,6 +143,32 @@ test('section Croissance : historiques annuels en barres et consensus analystes'
     await expect(series.locator('.gs-yoy.up').first()).toBeVisible();
 });
 
+test('section Santé financière : ratios avec pastilles de risque et historique FCF', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchHealthCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchHealthGrid');
+    await expect(grid.locator('.research-kv')).toHaveCount(8);
+    await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
+
+    // dette nette = 108 Md − 61 Md (quoteSummary)
+    await expect(grid).toContainText('Dette nette');
+    await expect(grid).toContainText('47 Md');
+    // dette nette/EBITDA 0,4 et couverture des intérêts 30 -> confortable ;
+    // liquidité générale 1,0 -> correct ; dette nette positive -> endettée
+    await expect(grid.locator('.kv-tag.ok').first()).toBeVisible();
+    await expect(grid.locator('.kv-tag.mid').first()).toBeVisible();
+    await expect(grid).toContainText('endettée');
+
+    // FCF sur 5 exercices + tendance dans le titre
+    const series = page.locator('#researchHealthSeries');
+    await expect(series.locator('.gs-row')).toHaveCount(5);
+    await expect(series.locator('.gs-title')).toContainText('Flux de trésorerie disponible');
+    await expect(series.locator('.gs-empty')).toHaveCount(0);
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(
