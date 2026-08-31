@@ -2,9 +2,11 @@
   "name": "portfolio-tools",
   "private": true,
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@vitest/coverage-v8": "^4.1.11",
     "vitest": "^4.1.11",
     "wrangler": "^4.127.1"
