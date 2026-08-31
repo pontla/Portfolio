@@ -4654,7 +4654,8 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         const months = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '5Y': 60 }[range] || 12;
         const end = new Date();
         const start = new Date();
-        start.setMonth(start.getMonth() - months);
+        if (range === 'MAX') start.setFullYear(start.getFullYear() - 50);
+        else start.setMonth(start.getMonth() - months);
 
         const cur = Utils.getCurrency(symbol);
         const stats = this.service.calculatePortfolio(this.chartState.currency);
@@ -4686,9 +4687,10 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: { mode: 'index', axis: 'x', intersect: false },
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: (ctx) => Utils.formatCurrency(ctx.parsed.y, cur) } }
+                    tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => Utils.formatCurrency(ctx.parsed.y, cur) } }
                 },
                 scales: {
                     x: { grid: { display: false }, border: { display: false }, ticks: { color: ink.tick, font: { size: 11 }, maxTicksLimit: 7 } },

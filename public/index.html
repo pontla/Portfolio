@@ -39,7 +39,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=47">
+    <link rel="stylesheet" href="style.css?v=48">
 </head>
 
 <body>
@@ -570,6 +570,7 @@
                                 <span id="researchMeta" class="research-meta"></span>
                             </div>
                             <div class="research-price">
+                                <span class="research-price-cap">Dernier cours</span>
                                 <span id="researchPrice" class="research-price-val">—</span>
                                 <span id="researchChange" class="research-price-chg"></span>
                             </div>
@@ -597,6 +598,7 @@
                                 <button class="range-btn" data-range="6M"><span class="label">6M</span></button>
                                 <button class="range-btn active" data-range="1Y"><span class="label">1A</span></button>
                                 <button class="range-btn" data-range="5Y"><span class="label">5A</span></button>
+                                <button class="range-btn" data-range="MAX"><span class="label">Max</span></button>
                             </div>
                         </div>
                         <div class="research-chart-wrap">
@@ -955,7 +957,7 @@
     </div>
 
     <!-- App Logic -->
-    <script src="js/app.js?v=94"></script>
+    <script src="js/app.js?v=95"></script>
 </body>
 
 </html>

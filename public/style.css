@@ -1441,8 +1441,8 @@ input:focus {
 }
 
 /* ===== EXPLORER / ANALYSE D'UNE VALEUR ===== */
-#view-research .card { margin-top: 16px; }
-#view-research .research-search-card { margin-top: 0; display: flex; flex-direction: column; gap: 12px; }
+#view-research .card { margin-top: 16px; padding: 20px; }
+#view-research .research-search-card { margin-top: 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 
 .research-search {
     position: relative;
@@ -1518,15 +1518,37 @@ input:focus {
 .research-card-head h3 { margin: 0; font-size: 15px; }
 .research-sub { color: var(--text-secondary); font-size: 12px; }
 
-.research-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.research-logo { width: 44px; height: 44px; border-radius: 10px; object-fit: contain; background: var(--l1); flex: none; }
-.research-id { flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 2px; }
+.research-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.research-logo { width: 48px; height: 48px; border-radius: 12px; object-fit: contain; background: var(--l1); flex: none; }
+.research-id { flex: 1 1 auto; min-width: 140px; display: flex; flex-direction: column; gap: 3px; }
 .research-id h2 { margin: 0; font-size: 20px; }
 .research-name { color: var(--text-primary); font-size: 13px; }
 .research-meta { color: var(--text-secondary); font-size: 12px; }
-.research-price { text-align: right; }
-.research-price-val { display: block; font-size: 20px; font-weight: 700; font-family: var(--font-mono); }
+.research-price {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: right;
+    padding: 10px 16px;
+    border: 1px solid var(--l1);
+    border-radius: 12px;
+    background: var(--tile);
+}
+.research-price-cap {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-secondary);
+}
+.research-price-val { display: block; font-size: 21px; font-weight: 700; font-family: var(--font-mono); }
 .research-price-chg { font-size: 13px; font-weight: 600; }
+
+@media (min-width: 769px) {
+    .research-head { flex-wrap: nowrap; }
+    .research-id { flex: 0 1 auto; }
+    .research-price { margin-left: 24px; }
+}
 
 .research-notheld {
     display: flex;
@@ -1584,8 +1606,9 @@ input:focus {
 .research-range .range-btn { padding: 5px 10px; }
 
 @media (max-width: 768px) {
-    #view-research .card { margin-top: 12px; }
-    .research-price { text-align: left; width: 100%; }
+    #view-research .card { margin-top: 12px; padding: 16px; }
+    #view-research .research-search-card { padding: 14px; }
+    .research-price { text-align: left; width: 100%; align-items: flex-start; }
     .research-chart-wrap { height: 220px; }
 }
 
