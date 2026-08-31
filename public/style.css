@@ -1600,6 +1600,9 @@ input:focus {
     box-shadow: 0 10px 30px var(--shadow, rgba(0, 0, 0, .4)); z-index: 60;
 }
 .kv-help:hover::after, .kv-help:focus-visible::after { opacity: 1; visibility: visible; }
+/* Bulle sous le "i" : utilisee dans les en-tetes de tableau, dont le conteneur
+   defile horizontalement et rognerait une bulle placee au-dessus. */
+.kv-help.tip-below::after { top: calc(100% + 7px); bottom: auto; }
 /* Ancrage lateral (classes posees par App._placeTip) pour rester dans la carte */
 .kv-help.tip-end::after { left: auto; right: -5px; transform: none; }
 .kv-help.tip-start::after { left: -5px; right: auto; transform: none; }
@@ -1746,6 +1749,38 @@ input:focus {
 .kv-tag.ok { color: var(--up); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
 .kv-tag.warn { color: var(--dn); border-color: color-mix(in srgb, var(--dn) 40%, transparent); }
 .kv-tag.mid { color: var(--text-secondary); border-color: var(--l2); }
+
+/* Comparaison sectorielle : tableau qui defile horizontalement sur mobile
+   sans jamais elargir la page (premiere colonne collante pour garder le nom). */
+.peers-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.peers-table { width: 100%; min-width: 520px; border-collapse: collapse; }
+.peers-table th, .peers-table td {
+    padding: 9px 10px; text-align: right; white-space: nowrap;
+    border-bottom: 1px solid var(--l1);
+}
+.peers-table th {
+    color: var(--text-secondary); font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .03em;
+}
+.peers-table th > span { display: inline-flex; align-items: center; gap: 5px; justify-content: flex-end; }
+.peers-table td { font-family: var(--font-mono); font-size: 13px; }
+.peers-table th:first-child, .peers-table td:first-child {
+    position: sticky; left: 0; z-index: 1;
+    text-align: left; background: var(--surf);
+}
+.peers-table tbody tr:last-child td { border-bottom: 0; }
+/* Ligne de la valeur analysee : mise en avant, et ligne mediane en repere */
+.peers-table tr.self td, .peers-table tr.self td:first-child { background: var(--tile); font-weight: 700; }
+.peers-table tr.median td, .peers-table tr.median td:first-child {
+    color: var(--text-secondary); font-style: italic; background: var(--surf);
+}
+.peer-sym { font-family: var(--font-mono); font-weight: 700; }
+.peer-name {
+    display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    font-family: var(--font-ui); font-size: 11px; font-weight: 500; color: var(--text-secondary);
+}
+.peers-table td.better { color: var(--up); }
+.peers-table td.worse { color: var(--dn); }
 
 /* Profil & risques : description de l'activite + sous-sections repliables */
 .qual-body { display: grid; gap: 20px; overflow-x: clip; }

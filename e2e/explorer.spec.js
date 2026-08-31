@@ -291,6 +291,42 @@ test('section Dividende : rendement, distribution et historique par action', asy
     await expect(series.locator('.gs-empty')).toHaveCount(0);
 });
 
+test('section Comparaison sectorielle : tableau des pairs avec médiane du groupe', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchPeersCard');
+    await expect(card).toBeVisible();
+
+    const table = page.locator('#researchPeersTable');
+    // en-tête : Valeur + 5 métriques, chacune avec son aide contextuelle
+    await expect(table.locator('thead th')).toHaveCount(6);
+    await expect(table.locator('thead .kv-help.tip-below')).toHaveCount(5);
+
+    // valeur analysée + 4 comparables + médiane
+    await expect(table.locator('tbody tr')).toHaveCount(6);
+    const self = table.locator('tr.self');
+    await expect(self).toContainText('AAPL');
+    await expect(self).toContainText('31,2 ×');
+
+    await expect(table.locator('tbody tr', { hasText: 'MSFT' })).toContainText('35,0 ×');
+    // ROE absent chez DELL -> tiret, jamais NaN
+    await expect(table.locator('tbody tr', { hasText: 'DELL' })).toContainText('—');
+    await expect(table).not.toContainText('NaN');
+
+    // médiane du groupe sur les 5 valeurs
+    const median = table.locator('tr.median');
+    await expect(median).toContainText('Médiane');
+    await expect(median).toContainText('5 valeurs');
+
+    // seule la ligne analysée est colorée : croissance sous la médiane (8 % vs 11 %),
+    // ROE très au-dessus (150,2 % vs 34,5 %)
+    await expect(self.locator('td.worse')).toHaveCount(1);
+    await expect(self.locator('td.better')).toHaveCount(1);
+    await expect(table.locator('tbody tr:not(.self) td.better, tbody tr:not(.self) td.worse')).toHaveCount(0);
+
+    await expect(page.locator('#researchPeersSrc')).toContainText('4 comparables');
+});
+
 test('section Profil & risques : activité, risques publiés et calendrier', async ({ page }) => {
     await openResearch(page, 'AAPL');
 

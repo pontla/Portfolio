@@ -1148,3 +1148,69 @@ describe('bug corrige : dates NaN dans le flux actualites', () => {
         expect(Utils.formatDateDisplay('Tue, 26 Aug 2025 00:00:00 GMT')).toBe('26/08/2025');
     });
 });
+
+describe('AnalysisService : comparaison sectorielle (phase 10)', () => {
+    const { AnalysisService: S } = app;
+
+    it('_peerMedians ignore les valeurs absentes metrique par metrique', () => {
+        const med = S._peerMedians([
+            { peTTM: 10, roe: 20, netMargin: null },
+            { peTTM: 20, roe: null, netMargin: 5 },
+            { peTTM: 30, roe: 40, netMargin: 15 }
+        ]);
+        expect(med.peTTM).toBe(20);          // impair -> valeur centrale
+        expect(med.roe).toBe(30);            // pair sur 2 valeurs -> moyenne
+        expect(med.netMargin).toBe(10);
+        expect(med.marketCap).toBeNull();    // aucune valeur -> null, pas NaN
+    });
+
+    it('_peerRow normalise un quoteSummary en pourcentages', () => {
+        const r = S._peerRow('MSFT', {
+            name: 'Microsoft', marketCap: 3.1e12, peTrailing: 35,
+            profitMargins: 0.36, revenueGrowth: 0.16, returnOnEquity: 0.39
+        });
+        expect(r).toMatchObject({ symbol: 'MSFT', name: 'Microsoft', peTTM: 35 });
+        expect(r.netMargin).toBeCloseTo(36, 6);
+        expect(r.revenueGrowth).toBeCloseTo(16, 6);
+        expect(r.roe).toBeCloseTo(39, 6);
+    });
+
+    it('buildPeers : la valeur analysee sert de reference et ne declenche aucune requete', async () => {
+        const calls = [];
+        const orig = app.APIService.getQuoteSummary;
+        app.APIService.getQuoteSummary = (s) => {
+            calls.push(s);
+            return Promise.resolve({ name: s, marketCap: 1e11, peTrailing: 20, profitMargins: 0.1, revenueGrowth: 0.05, returnOnEquity: 0.15 });
+        };
+        S._peersCache = {};
+
+        const out = await S.buildPeers({
+            symbol: 'AAPL',
+            identity: { name: 'Apple Inc' },
+            price: { marketCap: 3e12 },
+            valuation: { peTTM: 31.2 },
+            profitability: { netMargin: 25.3, roe: 150.2 },
+            growth: { revenueGrowthYoyPct: 8 },
+            peersSymbols: ['MSFT', 'GOOGL']
+        });
+
+        expect(calls).toEqual(['MSFT', 'GOOGL']);   // aucun appel pour AAPL
+        expect(out.self).toMatchObject({ symbol: 'AAPL', peTTM: 31.2, roe: 150.2, isSelf: true });
+        expect(out.peers.map(p => p.symbol)).toEqual(['MSFT', 'GOOGL']);
+        expect(out.median.peTTM).toBe(20);          // 20, 20, 31.2
+        expect(JSON.stringify(out)).not.toContain('NaN');
+
+        // deuxieme appel : servi par le cache 15 min, aucune requete de plus
+        await S.buildPeers({ symbol: 'AAPL', peersSymbols: ['MSFT', 'GOOGL'] });
+        expect(calls).toEqual(['MSFT', 'GOOGL']);
+
+        app.APIService.getQuoteSummary = orig;
+    });
+
+    it('buildPeers : sans comparables, renvoie une liste vide sans exception', async () => {
+        S._peersCache = {};
+        const out = await S.buildPeers({ symbol: 'XYZ.PA', peersSymbols: [] });
+        expect(out.peers).toEqual([]);
+        expect(out.self.symbol).toBe('XYZ.PA');
+    });
+});

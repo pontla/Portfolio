@@ -72,6 +72,15 @@ const QUOTE_SUMMARY = {
     governance: { overall: 1, audit: 7, board: 1, compensation: 5, shareholderRights: 1 }
 };
 
+// Comparables : seules les metriques du tableau sectoriel varient d'un pair a
+// l'autre, le reste reprend QUOTE_SUMMARY.
+const PEER_SUMMARY = {
+    MSFT: { symbol: 'MSFT', name: 'Microsoft', marketCap: 3.1e12, peTrailing: 35, profitMargins: 0.36, revenueGrowth: 0.16, returnOnEquity: 0.39 },
+    GOOGL: { symbol: 'GOOGL', name: 'Alphabet', marketCap: 2.1e12, peTrailing: 24, profitMargins: 0.28, revenueGrowth: 0.14, returnOnEquity: 0.30 },
+    AMZN: { symbol: 'AMZN', name: 'Amazon', marketCap: 1.9e12, peTrailing: 40, profitMargins: 0.08, revenueGrowth: 0.11, returnOnEquity: 0.20 },
+    DELL: { symbol: 'DELL', name: 'Dell Technologies', marketCap: 8.5e10, peTrailing: 18, profitMargins: 0.04, revenueGrowth: 0.02, returnOnEquity: null }
+};
+
 // Reponses FMP par ressource (tableaux du plus recent au plus ancien, comme l'API).
 const FMP = {
     profile: [{
@@ -197,7 +206,10 @@ export async function bootApp(page) {
         ]);
         if (p.endsWith('/sector')) return json({ sector: 'Technology' });
         if (p.endsWith('/earnings')) return json({ date: '2025-07-31', hour: 'amc', epsEstimate: 1.9, revenueEstimate: 89000000000 });
-        if (p.endsWith('/quoteSummary')) return json(QUOTE_SUMMARY);
+        if (p.endsWith('/quoteSummary')) {
+            const sym = url.searchParams.get('symbol');
+            return json(sym && PEER_SUMMARY[sym] ? { ...QUOTE_SUMMARY, ...PEER_SUMMARY[sym] } : QUOTE_SUMMARY);
+        }
         if (p.endsWith('/fmp')) {
             const r = url.searchParams.get('resource');
             return json(Object.prototype.hasOwnProperty.call(FMP, r) ? FMP[r] : []);

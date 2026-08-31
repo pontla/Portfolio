@@ -843,6 +843,70 @@ const AnalysisService = {
         return data;
     },
 
+    // ---------- Comparaison sectorielle ----------
+    // Une seule requete /quoteSummary par comparable (4 au maximum), deja mise en
+    // cache 1 h cote client et 1 h au bord : consulter plusieurs fois la meme
+    // valeur ne recoute rien. Appelee separement de build() pour ne pas retarder
+    // l'affichage des sections principales.
+    _peersCache: {},
+    async buildPeers(analysis) {
+        if (!analysis || !analysis.symbol) return null;
+        const symbol = analysis.symbol;
+        const now = Date.now();
+        const hit = this._peersCache[symbol];
+        if (hit && (now - hit.ts < 900000)) return hit.data;
+
+        const peers = AnalysisUtils.arr(analysis.peersSymbols);
+        const rows = peers.length
+            ? await Promise.all(peers.map(async (s) => {
+                const qs = await APIService.getQuoteSummary(s).catch(() => null);
+                return qs ? this._peerRow(s, qs) : { symbol: s, name: null, marketCap: null, peTTM: null, netMargin: null, revenueGrowth: null, roe: null };
+            }))
+            : [];
+
+        // La valeur analysee sert de reference : ses metriques viennent de
+        // l'analyse deja construite, pas d'une requete supplementaire.
+        const self = {
+            symbol,
+            name: (analysis.identity && analysis.identity.name) || symbol,
+            marketCap: analysis.price ? analysis.price.marketCap : null,
+            peTTM: analysis.valuation ? analysis.valuation.peTTM : null,
+            netMargin: analysis.profitability ? analysis.profitability.netMargin : null,
+            revenueGrowth: analysis.growth ? analysis.growth.revenueGrowthYoyPct : null,
+            roe: analysis.profitability ? analysis.profitability.roe : null,
+            isSelf: true
+        };
+
+        const data = { self, peers: rows, median: this._peerMedians([self, ...rows]) };
+        this._peersCache[symbol] = { ts: now, data };
+        return data;
+    },
+
+    _peerRow(symbol, qs) {
+        const n = AnalysisUtils.num, pctU = AnalysisUtils.pctU;
+        return {
+            symbol,
+            name: qs.name || symbol,
+            marketCap: n(qs.marketCap),
+            peTTM: n(qs.peTrailing),
+            netMargin: pctU(n(qs.profitMargins)),
+            revenueGrowth: pctU(n(qs.revenueGrowth)),
+            roe: pctU(n(qs.returnOnEquity))
+        };
+    },
+
+    // Mediane par metrique, calculee sur les seules valeurs disponibles : un
+    // comparable sans donnee ne tire pas la reference vers le bas.
+    _peerMedians(rows) {
+        const med = (key) => {
+            const v = rows.map(r => r[key]).filter(x => x != null && isFinite(x)).sort((a, b) => a - b);
+            if (!v.length) return null;
+            const m = Math.floor(v.length / 2);
+            return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+        };
+        return { marketCap: med('marketCap'), peTTM: med('peTTM'), netMargin: med('netMargin'), revenueGrowth: med('revenueGrowth'), roe: med('roe') };
+    },
+
     _normalize(x) {
         const U = AnalysisUtils;
         const n = U.num, pctU = U.pctU;
@@ -5072,6 +5136,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchTechnical(null);
         this.renderResearchDividend(null);
         this.renderResearchQualitative(null);
+        this.renderResearchPeers(null);
         this.researchAnalysis = null;
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
@@ -5084,6 +5149,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             this.renderResearchTechnical(a);
             this.renderResearchDividend(a);
             this.renderResearchQualitative(a);
+            this.renderResearchPeers(a);
             this.applyResearchMaOverlay();
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
@@ -5102,8 +5168,9 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     },
 
     // Petit "i" d'aide reutilisable pour toutes les nouvelles metriques.
-    _kvHelp(tip) {
-        return `<span class="kv-help" tabindex="0" aria-label="${String(tip).replace(/"/g, '&quot;')}" data-tip="${String(tip).replace(/"/g, '&quot;')}">i</span>`;
+    _kvHelp(tip, cls = '') {
+        const safe = String(tip).replace(/"/g, '&quot;');
+        return `<span class="kv-help ${cls}" tabindex="0" aria-label="${safe}" data-tip="${safe}">i</span>`;
     },
 
     renderResearchValuation(a) {
@@ -5757,6 +5824,88 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         );
 
         if (src) src.textContent = annual.length ? 'Yahoo Finance' : 'Historique de versements indisponible';
+    },
+
+    // ---------- Comparaison sectorielle ----------
+    // Sens de lecture explicite par metrique (`dir`), pour pouvoir l'ajuster :
+    //   dir = -1 -> plus bas vaut mieux (PER : moins cher a benefices egaux)
+    //   dir =  1 -> plus haut vaut mieux (marge, croissance, rentabilite)
+    //   dir =  0 -> pas de "mieux" (la taille n'est pas un critere de qualite)
+    // Seule la ligne de la valeur analysee est coloree, et toujours par rapport
+    // a la mediane du groupe : un comparable isole ne fait pas reference.
+    _peerCols() {
+        const mult = (x) => new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(x) + ' ×';
+        const pct = (x) => Utils.formatPercent(x, false);
+        return [
+            { key: 'marketCap', label: 'Capitalisation', dir: 0, fmt: (x) => Utils.formatCompact(x, 'USD'),
+              tip: 'Valeur totale des actions en circulation. Sert à situer la taille des entreprises comparées, pas leur qualité.' },
+            { key: 'peTTM', label: 'PER', dir: -1, fmt: mult,
+              tip: 'Cours rapporté au bénéfice des 12 derniers mois. Plus bas que le groupe : la valeur se paie moins cher — à condition que la rentabilité suive.' },
+            { key: 'netMargin', label: 'Marge nette', dir: 1, fmt: pct,
+              tip: 'Part du chiffre d\'affaires qui reste en bénéfice. Une marge nettement au-dessus du groupe traduit souvent un avantage concurrentiel.' },
+            { key: 'revenueGrowth', label: 'Croissance CA', dir: 1, fmt: (x) => Utils.formatPercent(x),
+              tip: 'Croissance du chiffre d\'affaires sur un an. À comparer au groupe : croître moins vite que son secteur est un signal à creuser.' },
+            { key: 'roe', label: 'ROE', dir: 1, fmt: pct,
+              tip: 'Rentabilité des capitaux propres : ce que l\'entreprise dégage pour 100 € apportés par les actionnaires.' }
+        ];
+    },
+
+    async renderResearchPeers(a) {
+        const card = document.getElementById('researchPeersCard');
+        const table = document.getElementById('researchPeersTable');
+        const src = document.getElementById('researchPeersSrc');
+        if (!card || !table) return;
+        card.hidden = false;
+
+        const loading = (msg) => `<tbody><tr><td class="research-kv-loading">${msg}</td></tr></tbody>`;
+        if (!a) {
+            if (src) src.textContent = '';
+            table.innerHTML = loading('Chargement…');
+            return;
+        }
+
+        const symbol = a.symbol;
+        table.innerHTML = loading('Chargement des comparables…');
+        const d = await AnalysisService.buildPeers(a).catch(e => { console.warn('buildPeers KO', e); return null; });
+        if (this.researchSymbol !== symbol) return;   // course annulee entre-temps
+
+        if (!d || !d.peers.length) {
+            table.innerHTML = loading('Non disponible — comparables sectoriels fournis pour les actions US uniquement.');
+            if (src) src.textContent = '';
+            return;
+        }
+
+        const cols = this._peerCols();
+        const ND = '<span class="research-kv-loading">—</span>';
+        const med = d.median || {};
+
+        const head = '<thead><tr><th>Valeur</th>' +
+            cols.map(c => `<th><span>${c.label} ${this._kvHelp(c.tip, 'tip-below')}</span></th>`).join('') +
+            '</tr></thead>';
+
+        const cells = (r, colored) => cols.map(c => {
+            const v = r[c.key];
+            if (v == null || !isFinite(v)) return `<td>${ND}</td>`;
+            let cls = '';
+            const m = med[c.key];
+            if (colored && c.dir && m != null && isFinite(m) && v !== m) {
+                cls = ((v > m) === (c.dir > 0)) ? ' class="better"' : ' class="worse"';
+            }
+            return `<td${cls}>${c.fmt(v)}</td>`;
+        }).join('');
+
+        const nameCell = (r) =>
+            `<td><span class="peer-sym">${Utils.escapeHtml(r.symbol)}</span>` +
+            `<span class="peer-name">${Utils.escapeHtml(r.name || r.symbol)}</span></td>`;
+
+        const rows =
+            `<tr class="self">${nameCell(d.self)}${cells(d.self, true)}</tr>` +
+            d.peers.map(r => `<tr>${nameCell(r)}${cells(r, false)}</tr>`).join('') +
+            `<tr class="median"><td><span class="peer-sym">Médiane</span>` +
+            `<span class="peer-name">${d.peers.length + 1} valeurs</span></td>${cells(med, false)}</tr>`;
+
+        table.innerHTML = head + `<tbody>${rows}</tbody>`;
+        if (src) src.textContent = `${d.peers.length} comparables · Finnhub + Yahoo Finance`;
     },
 
     // Sous-section de la carte "Profil & risques" : titre + contenu.
