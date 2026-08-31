@@ -178,7 +178,12 @@ window.supabase = {
  * Installe tous les mocks réseau puis ouvre l'app déjà "connectée".
  * @param {import('@playwright/test').Page} page
  */
-export async function bootApp(page) {
+export async function bootApp(page, opts = {}) {
+    // Profils de données utilisés par les vérifications finales (phase 12) :
+    //   'full'   : action US complète (défaut, toutes les sources répondent)
+    //   'sparse' : valeur hors périmètre fondamental (place européenne)
+    //   'nodiv'  : action US qui ne verse aucun dividende
+    const profile = opts.profile || 'full';
     // 1. Remplace le SDK Supabase (CDN) par un stub local.
     await page.route(/@supabase\/supabase-js/, (route) =>
         route.fulfill({ contentType: 'application/javascript', body: SUPABASE_STUB })
@@ -191,7 +196,50 @@ export async function bootApp(page) {
         const json = (body) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
 
         if (p.endsWith('/search')) {
-            return json([{ displaySymbol: 'AAPL', symbol: 'AAPL', description: 'Apple Inc', type: 'Common Stock' }]);
+            const q = (url.searchParams.get('q') || 'AAPL').toUpperCase();
+            return json([{ displaySymbol: q, symbol: q, description: q === 'AAPL' ? 'Apple Inc' : q, type: 'Common Stock' }]);
+        }
+
+        // Hors périmètre Finnhub/FMP : seuls le cours et l'historique répondent.
+        if (profile === 'sparse') {
+            if (p.endsWith('/quote')) return json({ symbol: 'MC.PA', price: 640, currency: 'EUR' });
+            if (p.endsWith('/history')) return json(buildHistory(url.searchParams.get('from'), url.searchParams.get('to')));
+            if (p.endsWith('/quoteSummary')) return json({
+                symbol: 'MC.PA', source: 'yahoo-quoteSummary', name: 'LVMH', currency: 'EUR',
+                exchange: 'Paris', price: 640, previousClose: 635, marketCap: 320000000000,
+                governance: { overall: null, audit: null, board: null, compensation: null, shareholderRights: null }
+            });
+            if (p.endsWith('/fundamentals')) return json(null);
+            if (p.endsWith('/fmp')) return json({ unavailable: true });
+            if (p.endsWith('/peers')) return json([]);
+            if (p.endsWith('/earnings')) return json({ date: null });
+            if (p.endsWith('/dividends')) return json([]);
+            if (p.endsWith('/recommendation')) return json([]);
+            if (p.endsWith('/insider')) return json({ data: [] });
+            if (p.endsWith('/sector')) return json({ sector: null });
+            if (p.endsWith('/websearch')) return json({ results: [] });
+            if (p === '/ai/key') return json({ ok: true, provider: 'anthropic', configured: [] });
+            return json({});
+        }
+
+        // Action US identique au profil complet, mais sans aucun dividende.
+        if (profile === 'nodiv') {
+            if (p.endsWith('/dividends')) return json([]);
+            if (p.endsWith('/quoteSummary')) return json({
+                ...QUOTE_SUMMARY,
+                dividendYield: null, dividendRate: null, payoutRatio: null,
+                fiveYearAvgDividendYield: null, exDividendDate: null
+            });
+            if (p.endsWith('/fundamentals')) return json({ ...FUNDAMENTALS, dividendYield: null });
+            if (p.endsWith('/fmp')) {
+                const r = url.searchParams.get('resource');
+                const data = Object.prototype.hasOwnProperty.call(FMP, r) ? FMP[r] : [];
+                // FMP porte aussi un rendement/payout : sans ça la valeur passerait
+                // pour distributrice alors qu'elle ne verse rien.
+                if (r === 'ratiosTtm') return json(data.map(x => ({ ...x, dividendYieldTTM: null, payoutRatioTTM: null })));
+                if (r === 'ratios') return json(data.map(x => ({ ...x, payoutRatio: null })));
+                return json(data);
+            }
         }
         if (p.endsWith('/fundamentals')) return json(FUNDAMENTALS);
         if (p.endsWith('/quote')) return json({ symbol: 'AAPL', price: 192.5, currency: 'USD' });
