@@ -2,8 +2,11 @@
   "name": "portfolio-tools",
   "private": true,
   "scripts": {
+    "dev": "wrangler dev",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "deploy": "wrangler deploy",
+    "deploy:proxy": "wrangler deploy -c wrangler.proxy.toml"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

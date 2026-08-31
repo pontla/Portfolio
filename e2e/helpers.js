@@ -120,6 +120,17 @@ export async function bootApp(page) {
         return json({});
     });
 
+    // 3. Retire les attributs SRI du HTML : le stub Supabase servi ci-dessus ne peut
+    //    pas satisfaire le hash `integrity` de la vraie lib CDN, le navigateur
+    //    refuserait alors de l'exécuter.
+    await page.route(/localhost:8788\/($|index\.html)/, async (route) => {
+        const res = await route.fetch();
+        const html = (await res.text())
+            .replace(/\s+integrity="[^"]*"/g, '')
+            .replace(/\s+crossorigin="anonymous"/g, '');
+        await route.fulfill({ contentType: 'text/html; charset=utf-8', body: html });
+    });
+
     await page.goto('/');
     await page.locator('#appContainer').waitFor({ state: 'visible' });
     await page.locator('#appContainer:not(.app-loading)').waitFor();
