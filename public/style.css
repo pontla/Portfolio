@@ -1604,7 +1604,7 @@ input:focus {
 .kv-help.tip-end::after { left: auto; right: -5px; transform: none; }
 .kv-help.tip-start::after { left: -5px; right: auto; transform: none; }
 /* La bulle centree ne doit jamais elargir la page : clip horizontal, vertical libre */
-.research-kv-grid, .growth-series, .spark-list { overflow-x: clip; }
+.research-kv-grid, .growth-series, .spark-list, .sentiment-top { overflow-x: clip; }
 
 /* Evolution d'une marge sur 5 ans : courbe miniature + variation en points */
 .spark-list {
@@ -1648,6 +1648,62 @@ input:focus {
 }
 .kv-cmp.above { color: var(--dn); }
 .kv-cmp.below { color: var(--up); }
+.kv-cmp.up { color: var(--up); }
+.kv-cmp.dn { color: var(--dn); }
+
+/* Sentiment de marche : repartition du consensus + echelle d'objectifs de cours */
+.sentiment-top {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px 24px;
+    margin-bottom: 18px; padding-bottom: 16px;
+    border-bottom: 1px solid var(--l1);
+}
+.sent-block { min-width: 0; }
+.sent-title {
+    display: flex; align-items: center; gap: 5px;
+    color: var(--text-secondary); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .03em;
+    margin-bottom: 10px;
+}
+.sent-empty { color: var(--text-secondary); font-size: 12px; }
+
+/* Barre empilee achat fort -> vente forte */
+.cons-bar {
+    display: flex; height: 10px; border-radius: 999px; overflow: hidden;
+    background: var(--tile);
+}
+.cons-seg { height: 100%; }
+.cons-seg.sb { background: var(--up); }
+.cons-seg.b { background: color-mix(in srgb, var(--up) 55%, transparent); }
+.cons-seg.h { background: var(--l2); }
+.cons-seg.s { background: color-mix(in srgb, var(--dn) 55%, transparent); }
+.cons-seg.ss { background: var(--dn); }
+.cons-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px; }
+.cons-leg {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-ui); font-size: 11px; color: var(--text-secondary);
+}
+.cons-leg b { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
+.cons-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+/* Echelle bas / moyen / haut avec reperes du cours actuel et de l'objectif moyen */
+.pt-track {
+    position: relative; height: 10px; margin: 20px 0 8px;
+    border-radius: 999px; background: var(--tile);
+}
+.pt-span {
+    position: absolute; top: 0; height: 100%; border-radius: 999px;
+    background: color-mix(in srgb, var(--acc) 30%, transparent);
+}
+.pt-mark { position: absolute; top: -4px; width: 2px; height: 18px; border-radius: 1px; }
+.pt-mark.cur { background: var(--text-primary); }
+.pt-mark.avg { background: var(--acc); }
+.pt-legend {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+}
+.pt-legend b { color: var(--text-primary); font-weight: 600; }
 
 /* Pastille de lecture rapide d'un ratio (seuils documentes dans App._healthFlag) */
 .kv-tag {

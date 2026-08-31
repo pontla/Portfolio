@@ -4946,6 +4946,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchGrowth(null);
         this.renderResearchHealth(null);
         this.renderResearchProfitability(null);
+        this.renderResearchSentiment(null);
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
             this.researchAnalysis = a;
@@ -4953,6 +4954,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             this.renderResearchGrowth(a);
             this.renderResearchHealth(a);
             this.renderResearchProfitability(a);
+            this.renderResearchSentiment(a);
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
 
@@ -5297,6 +5299,149 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             src.textContent = hasHist
                 ? 'Yahoo Finance · historique de marges FMP'
                 : (a.isUS ? 'Yahoo Finance · historique de marges indisponible' : 'Historique complet : actions US uniquement');
+        }
+    },
+
+    // Repartition des recommandations analystes en barre empilee + legende chiffree.
+    _consensusBar(c) {
+        const defs = [
+            ['sb', 'Achat fort', 'strongBuy'], ['b', 'Achat', 'buy'], ['h', 'Conserver', 'hold'],
+            ['s', 'Vente', 'sell'], ['ss', 'Vente forte', 'strongSell']
+        ];
+        const vals = defs.map(([cls, lab, key]) => ({ cls, lab, n: Number(c && c[key]) || 0 }));
+        const total = vals.reduce((s, v) => s + v.n, 0);
+        const head = `<div class="sent-title">Recommandations des analystes ${this._kvHelp('Nombre d\'analystes derrière chaque recommandation. Un consensus très majoritairement à l\'achat est souvent déjà intégré dans le cours.')}</div>`;
+        if (!total) return `<div class="sent-block">${head}<div class="sent-empty">Non disponible</div></div>`;
+        const bar = vals.map(v => v.n
+            ? `<span class="cons-seg ${v.cls}" style="width:${(v.n / total * 100).toFixed(1)}%" title="${v.lab} : ${v.n}"></span>`
+            : '').join('');
+        const legend = vals.filter(v => v.n).map(v =>
+            `<span class="cons-leg"><span class="cons-dot cons-seg ${v.cls}"></span>${v.lab} <b>${v.n}</b></span>`).join('');
+        return `<div class="sent-block">${head}<div class="cons-bar">${bar}</div>` +
+            `<div class="cons-legend">${legend}</div></div>`;
+    },
+
+    // Echelle objectif bas / moyen / haut, avec le cours actuel positionne dessus.
+    _ptScale(s, price, cur) {
+        const head = `<div class="sent-title">Objectif de cours à 12 mois ${this._kvHelp('Fourchette des objectifs publiés par les analystes. Le repère clair est le cours actuel, le repère cyan l\'objectif moyen.')}</div>`;
+        const lo = s.targetLow, hi = s.targetHigh, avg = s.targetMean;
+        if (lo == null || hi == null || hi <= lo) {
+            return `<div class="sent-block">${head}<div class="sent-empty">Non disponible</div></div>`;
+        }
+        const min = Math.min(lo, price != null ? price : lo);
+        const max = Math.max(hi, price != null ? price : hi);
+        const span = (max - min) || 1;
+        const pos = (v) => ((v - min) / span * 100);
+        const money = (v) => Utils.formatCurrency(v, cur);
+        const marks =
+            `<span class="pt-span" style="left:${pos(lo).toFixed(1)}%;width:${(pos(hi) - pos(lo)).toFixed(1)}%"></span>` +
+            (price != null ? `<span class="pt-mark cur" style="left:${pos(price).toFixed(1)}%" title="Cours actuel ${money(price)}"></span>` : '') +
+            (avg != null ? `<span class="pt-mark avg" style="left:${pos(avg).toFixed(1)}%" title="Objectif moyen ${money(avg)}"></span>` : '');
+        return `<div class="sent-block">${head}<div class="pt-track">${marks}</div>` +
+            `<div class="pt-legend"><span>Bas <b>${money(lo)}</b></span>` +
+            `<span>Moyen <b>${avg == null ? '—' : money(avg)}</b></span>` +
+            `<span>Haut <b>${money(hi)}</b></span></div></div>`;
+    },
+
+    renderResearchSentiment(a) {
+        const card = document.getElementById('researchSentimentCard');
+        const grid = document.getElementById('researchSentimentGrid');
+        const top = document.getElementById('researchSentimentTop');
+        const src = document.getElementById('researchSentimentSrc');
+        if (!card || !grid || !top) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            grid.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            top.innerHTML = '';
+            return;
+        }
+
+        const s = a.sentiment || {};
+        const price = (a.price && a.price.current) != null ? a.price.current : null;
+        const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
+        const ND = 'Non disponible';
+        const money = (x) => (x == null || !isFinite(x)) ? null : Utils.formatCurrency(x, cur);
+        const pct = (x) => (x == null || !isFinite(x)) ? null : Utils.formatPercent(x, false);
+        const num1 = (x) => (x == null || !isFinite(x))
+            ? null
+            : new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(x);
+
+        const kv = (label, valueStr, tip, extra = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${extra}</div>`;
+
+        // Consensus : libelle Yahoo si present, sinon deduit de la note moyenne (1 = achat fort, 5 = vente forte).
+        const keyMap = {
+            strong_buy: 'Achat fort', buy: 'Achat', hold: 'Conserver',
+            underperform: 'Sous-performance', sell: 'Vente', strong_sell: 'Vente forte'
+        };
+        const m = s.recommendationMean;
+        let consLabel = keyMap[s.recommendationKey] || null;
+        if (!consLabel && m != null) {
+            consLabel = m <= 1.5 ? 'Achat fort' : (m <= 2.5 ? 'Achat' : (m <= 3.5 ? 'Conserver' : (m <= 4.5 ? 'Vente' : 'Vente forte')));
+        }
+        let consTag = '';
+        if (m != null) {
+            const cls = m <= 2.5 ? 'ok' : (m <= 3.5 ? 'mid' : 'warn');
+            consTag = `<span class="kv-tag ${cls}">${cls === 'ok' ? 'favorable' : (cls === 'mid' ? 'neutre' : 'défavorable')}</span>`;
+        }
+        if (consLabel && s.analystCount != null) consLabel += ` (${s.analystCount} analystes)`;
+
+        // Potentiel = ecart entre l'objectif moyen et le cours actuel.
+        const upside = (s.targetMean != null && price) ? (s.targetMean - price) / price * 100 : null;
+        const upsideTag = upside == null ? ''
+            : `<span class="kv-cmp ${upside >= 0 ? 'up' : 'dn'}">potentiel ${Utils.formatPercent(upside)}</span>`;
+
+        const shortPct = s.shortPercentOfFloat;
+        const shortTag = (shortPct == null) ? ''
+            : `<span class="kv-tag ${shortPct < 5 ? 'ok' : (shortPct <= 10 ? 'mid' : 'warn')}">` +
+              `${shortPct < 5 ? 'faible' : (shortPct <= 10 ? 'modérée' : 'élevée')}</span>`;
+
+        const ins = s.insider;
+        let insStr = null, insTag = '';
+        if (ins && (ins.bought || ins.sold)) {
+            insStr = `${Utils.formatCompact(ins.net)} titres`;
+            insTag = `<span class="kv-cmp ${ins.net >= 0 ? 'up' : 'dn'}">` +
+                `${Utils.formatCompact(ins.bought)} achetés / ${Utils.formatCompact(ins.sold)} vendus</span>`;
+        }
+
+        top.innerHTML = this._consensusBar(s.consensus) + this._ptScale(s, price, cur);
+
+        grid.innerHTML =
+            kv('Consensus analystes', consLabel,
+                'Recommandation majoritaire des analystes qui suivent la valeur. Indicatif : le consensus est souvent en retard sur le marché.',
+                consTag) +
+            kv('Note moyenne', m == null ? null : `${num1(m)} / 5`,
+                'Moyenne des recommandations sur une échelle de 1 (achat fort) à 5 (vente forte). Sous 2,5 le consensus est acheteur.') +
+            kv('Objectif moyen', money(s.targetMean),
+                'Moyenne des objectifs de cours à 12 mois. À relativiser : les objectifs sont révisés après coup, rarement avant.',
+                upsideTag) +
+            kv('Objectif médian', money(s.targetMedian),
+                'Objectif du milieu de la fourchette : moins sensible qu\'une moyenne aux prévisions extrêmes.') +
+            kv('Fourchette d\'objectifs', (s.targetLow == null || s.targetHigh == null) ? null : `${money(s.targetLow)} – ${money(s.targetHigh)}`,
+                'Objectif le plus bas et le plus haut publiés. Un écart très large signale un désaccord profond sur la valeur.') +
+            kv('Révisions d\'objectif', s.ptRevisions == null ? null : s.ptRevisions,
+                'Sens des révisions d\'objectifs sur les 3 derniers mois. Non fourni par les sources gratuites utilisées ici.') +
+            kv('Détention institutionnelle', pct(s.institutionalOwnership),
+                'Part du capital détenue par les fonds et investisseurs professionnels. Très élevée : les mouvements de flux peuvent amplifier les variations.') +
+            kv('Détention initiés', pct(s.insiderOwnership),
+                'Part du capital détenue par les dirigeants et administrateurs. Une part significative aligne leurs intérêts sur ceux des actionnaires.') +
+            kv('Transactions d\'initiés', insStr,
+                'Solde net des achats et ventes déclarés par les dirigeants sur les 6 derniers mois. Des ventes sont fréquentes (rémunération en actions) ; les achats sont plus significatifs.',
+                insTag) +
+            kv('Vente à découvert', pct(shortPct),
+                'Part du flottant vendue à découvert : les parieurs à la baisse. Au-dessus de 10 %, le pessimisme est marqué (et un rebond peut être violent).',
+                shortTag) +
+            kv('Jours de rachat', s.shortRatio == null ? null : `${num1(s.shortRatio)} j`,
+                'Nombre de séances nécessaires aux vendeurs à découvert pour racheter leurs positions au volume habituel. Élevé : risque de "short squeeze".');
+
+        if (src) {
+            const hasReco = !!(s.consensus || s.recommendationKey || s.targetMean != null);
+            src.textContent = hasReco
+                ? 'Yahoo Finance · consensus Finnhub'
+                : (a.isUS ? 'Consensus analystes indisponible' : 'Consensus analystes : actions US uniquement');
         }
     },
 

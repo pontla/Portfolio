@@ -190,6 +190,46 @@ test('section Rentabilité : ROIC/ROA/marges et sparklines 5 ans', async ({ page
     await expect(sparks.locator('.spark-delta').first()).toContainText('pts');
 });
 
+test('section Sentiment de marché : consensus, objectifs de cours et positionnement', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchSentimentCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchSentimentGrid');
+    await expect(grid.locator('.research-kv')).toHaveCount(11);
+    await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
+
+    // consensus Yahoo "buy" + 38 analystes, note 2,0/5 -> pastille favorable
+    await expect(grid).toContainText('Achat (38 analystes)');
+    await expect(grid).toContainText('2,0 / 5');
+    await expect(grid.locator('.kv-tag.ok').first()).toBeVisible();
+
+    // objectif moyen 220 vs cours 192,5 -> potentiel +14,29 %
+    await expect(grid).toContainText('$220,00');
+    await expect(grid.locator('.kv-cmp.up').first()).toContainText('+14,29 %');
+
+    // champs sans source gratuite : affichés explicitement en "Non disponible"
+    await expect(grid).toContainText('Révisions d\'objectif');
+    await expect(grid).toContainText('Transactions d\'initiés');
+    await expect(grid.locator('.research-kv', { hasText: 'Révisions' })).toContainText('Non disponible');
+    await expect(grid.locator('.research-kv', { hasText: 'Transactions' })).toContainText('Non disponible');
+
+    // vente à découvert 0,8 % du flottant -> faible
+    await expect(grid).toContainText('0,80 %');
+    await expect(grid).toContainText('faible');
+
+    // barre de consensus (37 avis) + échelle d'objectifs 170 / 220 / 260
+    const top = page.locator('#researchSentimentTop');
+    await expect(top.locator('.cons-seg:not(.cons-dot)')).toHaveCount(4);   // strongSell = 0 -> pas de segment
+    await expect(top.locator('.cons-legend .cons-leg')).toHaveCount(4);
+    await expect(top.locator('.sent-empty')).toHaveCount(0);
+    await expect(top.locator('.pt-track .pt-mark.cur')).toBeVisible();
+    await expect(top.locator('.pt-track .pt-mark.avg')).toBeVisible();
+    await expect(top.locator('.pt-legend')).toContainText('$170,00');
+    await expect(top.locator('.pt-legend')).toContainText('$260,00');
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(
