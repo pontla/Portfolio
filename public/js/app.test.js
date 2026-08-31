@@ -147,7 +147,7 @@ function loadApp() {
     const wrapped = SOURCE +
         '\n;globalThis.__APP__ = { CONFIG, AI_PROVIDERS, AuthService, Utils, APIService, PortfolioService, App, jwtIssuedAt, isJwtTimingError };\n';
     new vm.Script(wrapped, { filename: 'app.js' }).runInContext(sandbox);
-    return { ...sandbox.__APP__, localStorage, store };
+    return { ...sandbox.__APP__, localStorage, store, document: doc, sandbox };
 }
 
 // On charge une seule fois : le code teste est sans effet de bord au chargement.
@@ -583,6 +583,139 @@ describe('PortfolioService.calculatePortfolio', () => {
         const s = svc.calculatePortfolio('USD');
         expect(s.holdings).toEqual([]);
         expect(s.realizedPnL).toBeCloseTo(60); // (130 - 100) * 2
+    });
+});
+
+describe('App.renderResearchChart - fenetre de dates & options du graphe', () => {
+    let captured, lastChartConfig;
+
+    function setup(range, { holdings = [], researchSymbol = 'AAPL', canvas = true } = {}) {
+        captured = undefined;
+        lastChartConfig = null;
+        app.App.chartState = { researchRange: range, currency: 'EUR' };
+        app.App.researchSymbol = researchSymbol;
+        app.App.researchChart = null;
+        app.App.service = { calculatePortfolio: () => ({ holdings }) };
+        app.App.chartInk = () => ({ tick: '#111', grid: '#222' });
+        app.APIService.getDailyHistory = (sym, start, end, avg, cur) => {
+            captured = { sym, start, end, avg, cur };
+            return Promise.resolve({ '2026-01-02': 10, '2026-01-03': 12 });
+        };
+        app.sandbox.Chart = class {
+            constructor(ctx, config) { lastChartConfig = config; }
+            update() {} destroy() {}
+        };
+        app.document.getElementById = (id) =>
+            (canvas && id === 'researchChart' ? { getContext: () => ({}) } : null);
+    }
+
+    it("MAX : date de debut = 50 ans avant aujourd'hui (meme mois/jour)", async () => {
+        setup('MAX');
+        const ref = new Date();
+        await app.App.renderResearchChart('AAPL');
+        const exp = new Date(ref); exp.setFullYear(exp.getFullYear() - 50);
+        expect(captured.start.getFullYear()).toBe(exp.getFullYear());
+        expect(captured.start.getMonth()).toBe(exp.getMonth());
+        expect(captured.start.getDate()).toBe(exp.getDate());
+    });
+
+    it('1Y : date de debut = 12 mois avant', async () => {
+        setup('1Y');
+        const ref = new Date();
+        await app.App.renderResearchChart('AAPL');
+        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 12);
+        expect(captured.start.getFullYear()).toBe(exp.getFullYear());
+        expect(captured.start.getMonth()).toBe(exp.getMonth());
+        expect(captured.start.getDate()).toBe(exp.getDate());
+    });
+
+    it('1M : date de debut = 1 mois avant', async () => {
+        setup('1M');
+        const ref = new Date();
+        await app.App.renderResearchChart('AAPL');
+        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 1);
+        expect(captured.start.getFullYear()).toBe(exp.getFullYear());
+        expect(captured.start.getMonth()).toBe(exp.getMonth());
+        expect(captured.start.getDate()).toBe(exp.getDate());
+    });
+
+    it('5Y : date de debut = 60 mois avant', async () => {
+        setup('5Y');
+        const ref = new Date();
+        await app.App.renderResearchChart('AAPL');
+        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 60);
+        expect(captured.start.getFullYear()).toBe(exp.getFullYear());
+        expect(captured.start.getMonth()).toBe(exp.getMonth());
+        expect(captured.start.getDate()).toBe(exp.getDate());
+    });
+
+    it('plage inconnue : repli sur 12 mois', async () => {
+        setup('ZZZ');
+        const ref = new Date();
+        await app.App.renderResearchChart('AAPL');
+        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 12);
+        expect(captured.start.getFullYear()).toBe(exp.getFullYear());
+        expect(captured.start.getMonth()).toBe(exp.getMonth());
+        expect(captured.start.getDate()).toBe(exp.getDate());
+    });
+
+    it("date de fin = aujourd'hui", async () => {
+        setup('MAX');
+        const ref = new Date();
+        await app.App.renderResearchChart('AAPL');
+        expect(captured.end.getFullYear()).toBe(ref.getFullYear());
+        expect(captured.end.getMonth()).toBe(ref.getMonth());
+        expect(captured.end.getDate()).toBe(ref.getDate());
+    });
+
+    it('transmet avgPrice / currentPrice du holding correspondant', async () => {
+        setup('1Y', { holdings: [{ symbol: 'AAPL', avgPrice: 42, currentPrice: 55 }] });
+        await app.App.renderResearchChart('AAPL');
+        expect(captured.avg).toBe(42);
+        expect(captured.cur).toBe(55);
+    });
+
+    it('sans holding correspondant : avg / current = undefined', async () => {
+        setup('1Y', { holdings: [{ symbol: 'MSFT', avgPrice: 1, currentPrice: 2 }] });
+        await app.App.renderResearchChart('AAPL');
+        expect(captured.avg).toBeUndefined();
+        expect(captured.cur).toBeUndefined();
+    });
+
+    it('options : interaction et tooltip en mode index', async () => {
+        setup('1Y');
+        await app.App.renderResearchChart('AAPL');
+        expect(lastChartConfig.options.interaction).toEqual({ mode: 'index', axis: 'x', intersect: false });
+        expect(lastChartConfig.options.plugins.tooltip.mode).toBe('index');
+        expect(lastChartConfig.options.plugins.tooltip.intersect).toBe(false);
+    });
+
+    it('canvas absent : aucun appel reseau', async () => {
+        setup('1Y', { canvas: false });
+        await app.App.renderResearchChart('AAPL');
+        expect(captured).toBeUndefined();
+    });
+
+    it('symbole obsolete apres fetch : pas de creation de graphe', async () => {
+        setup('1Y', { researchSymbol: 'OTHER' });
+        await app.App.renderResearchChart('AAPL');
+        expect(captured).toBeDefined();
+        expect(lastChartConfig).toBeNull();
+    });
+
+    it('graphe existant : mise a jour des donnees sans recreation', async () => {
+        setup('1Y');
+        const existing = {
+            data: { labels: [], datasets: [{}] },
+            options: { plugins: { tooltip: { callbacks: {} } }, scales: { y: { ticks: {} } } },
+            update() { this._updated = true; },
+        };
+        app.App.researchChart = existing;
+        await app.App.renderResearchChart('AAPL');
+        expect(lastChartConfig).toBeNull();
+        expect(existing._updated).toBe(true);
+        expect(existing.data.datasets[0].data).toEqual([10, 12]);
+        expect(existing.data.labels).toHaveLength(2);
     });
 });
 
