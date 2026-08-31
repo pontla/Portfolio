@@ -255,6 +255,7 @@ const Utils = {
     formatDateDisplay: (dateStr) => {
         if (!dateStr) return '';
         const d = Utils.parseDate(dateStr);
+        if (!d || isNaN(d.getTime())) return '';
         const day = String(d.getDate()).padStart(2, '0');
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const year = d.getFullYear();
@@ -669,6 +670,49 @@ const APIService = {
         }
     },
 
+    // --- Sources fondamentales etendues (phases 2-11) ---
+    // Cache TTL en memoire par type de donnee : fondamentaux trimestriels = 24 h,
+    // donnees "riches" Yahoo = 1 h, peers = 7 j. En cas d'echec reseau on renvoie
+    // la derniere valeur connue si elle existe, sinon null (jamais d'exception).
+    _ttlCache: {},
+    async _getCached(bucket, key, ttlMs, path) {
+        const now = Date.now();
+        const store = (this._ttlCache[bucket] = this._ttlCache[bucket] || {});
+        const hit = store[key];
+        if (hit && (now - hit.ts < ttlMs)) return hit.data;
+        try {
+            const res = await fetch(`${CONFIG.PROXY_BASE_URL}${path}`);
+            if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
+            const data = await res.json();
+            store[key] = { ts: now, data };
+            return data;
+        } catch (e) {
+            console.warn(`API ${bucket} error [${key}]`, e);
+            return hit ? hit.data : null;
+        }
+    },
+
+    getQuoteSummary(symbol) {
+        return this._getCached('quoteSummary', symbol, 3600000,
+            `/quoteSummary?symbol=${encodeURIComponent(symbol)}`);
+    },
+    getFmp(resource, symbol) {
+        return this._getCached('fmp', `${resource}:${symbol}`, 86400000,
+            `/fmp?resource=${encodeURIComponent(resource)}&symbol=${encodeURIComponent(symbol)}`);
+    },
+    getRecommendation(symbol) {
+        return this._getCached('reco', symbol, 86400000,
+            `/recommendation?symbol=${encodeURIComponent(symbol)}`);
+    },
+    getInsiderTransactions(symbol) {
+        return this._getCached('insider', symbol, 86400000,
+            `/insider?symbol=${encodeURIComponent(symbol)}`);
+    },
+    getPeers(symbol) {
+        return this._getCached('peers', symbol, 604800000,
+            `/peers?symbol=${encodeURIComponent(symbol)}`);
+    },
+
     generateRealisticDailyHistory(symbol, startDate, endDate, startPrice, endPrice) {
         const dailyMap = {};
         const sDate = Utils.parseDate(startDate);
@@ -710,6 +754,320 @@ const APIService = {
         }
 
         return dailyMap;
+    }
+};
+
+// --- ANALYSE VALEUR : agregation multi-sources -> objet StockAnalysis unique ---
+//
+// Conventions de l'objet normalise (les composants UI ne connaissent que ca) :
+//  - proportions (marges, ROE/ROA/ROIC, rendement, croissance, payout,
+//    detention, short) => UNITES POURCENT (12.8 = 12,8 %), compatibles
+//    Utils.formatPercent().
+//  - multiples (P/E, PEG, EV/EBITDA, P/B, P/S, D/E, current/quick ratio,
+//    interest coverage, netDebt/EBITDA) => nombre brut.
+//  - montants => devise de reporting, valeur brute.
+//  - toute donnee absente => null (jamais NaN, jamais undefined).
+const AnalysisUtils = {
+    num: (v) => (typeof v === 'number' && isFinite(v)) ? v : null,
+    // fraction (0.128) -> pourcent (12.8)
+    pctU: (v) => (typeof v === 'number' && isFinite(v)) ? v * 100 : null,
+    arr: (v) => (Array.isArray(v) ? v : []),
+    avg: (list) => {
+        const x = list.filter(n => typeof n === 'number' && isFinite(n));
+        return x.length ? x.reduce((a, b) => a + b, 0) / x.length : null;
+    },
+    // CAGR en pourcent entre la 1re et la derniere valeur d'une serie.
+    cagrPct: (first, last, years) =>
+        (first > 0 && last > 0 && years > 0) ? (Math.pow(last / first, 1 / years) - 1) * 100 : null,
+    // Tendance d'une serie ordonnee ancien -> recent.
+    trend: (vals) => {
+        const x = vals.filter(n => typeof n === 'number' && isFinite(n));
+        if (x.length < 2) return null;
+        const chg = (x[x.length - 1] - x[0]) / Math.abs(x[0] || 1);
+        if (chg > 0.05) return 'croissant';
+        if (chg < -0.05) return 'décroissant';
+        return 'stable';
+    },
+    year: (row) => (row && (row.calendarYear || row.date || '')).toString().slice(0, 4) || null
+};
+
+const AnalysisService = {
+    _cache: {},
+
+    // Agrege toutes les sources pour un ticker et renvoie un StockAnalysis.
+    // Cache 15 min sur l'agregat complet (les sous-appels ont leur propre TTL).
+    async build(symbol) {
+        symbol = (symbol || '').trim().toUpperCase();
+        if (!symbol) return null;
+        const now = Date.now();
+        const hit = this._cache[symbol];
+        if (hit && (now - hit.ts < 900000)) return hit.data;
+
+        const nonUS = symbol.includes('.') || symbol.startsWith('$') || symbol.endsWith('-USD');
+        const errors = [];
+        const guard = (p, label) => Promise.resolve(p).catch(e => {
+            console.warn(`AnalysisService: ${label} KO`, e);
+            errors.push(label);
+            return null;
+        });
+
+        const histStart = new Date(); histStart.setMonth(histStart.getMonth() - 15);
+        const histEnd = new Date();
+
+        const [
+            fund, qs, ratios, income, cashflow, keyMetricsTtm, ratiosTtm,
+            estimatesFmp, profileFmp, reco, insider, peersRaw, earn, history, dividends
+        ] = await Promise.all([
+            guard(APIService.getFundamentals(symbol), 'fundamentals'),
+            guard(APIService.getQuoteSummary(symbol), 'quoteSummary'),
+            guard(APIService.getFmp('ratios', symbol), 'fmp:ratios'),
+            guard(APIService.getFmp('income', symbol), 'fmp:income'),
+            guard(APIService.getFmp('cashflow', symbol), 'fmp:cashflow'),
+            guard(APIService.getFmp('keyMetricsTtm', symbol), 'fmp:keyMetricsTtm'),
+            guard(APIService.getFmp('ratiosTtm', symbol), 'fmp:ratiosTtm'),
+            guard(APIService.getFmp('estimates', symbol), 'fmp:estimates'),
+            guard(APIService.getFmp('profile', symbol), 'fmp:profile'),
+            nonUS ? null : guard(APIService.getRecommendation(symbol), 'recommendation'),
+            nonUS ? null : guard(APIService.getInsiderTransactions(symbol), 'insider'),
+            guard(APIService.getPeers(symbol), 'peers'),
+            guard(APIService.getEarnings(symbol), 'earnings'),
+            guard(APIService.getDailyHistory(symbol, histStart, histEnd), 'history'),
+            guard(APIService.getDividends(symbol, '2000-01-01', Utils.getDateString(histEnd)), 'dividends')
+        ]);
+
+        const data = this._normalize({
+            symbol, nonUS, fund, qs, ratios, income, cashflow, keyMetricsTtm, ratiosTtm,
+            estimatesFmp, profileFmp, reco, insider, peersRaw, earn, history, dividends, errors
+        });
+        this._cache[symbol] = { ts: now, data };
+        return data;
+    },
+
+    _normalize(x) {
+        const U = AnalysisUtils;
+        const n = U.num, pctU = U.pctU;
+        const qs = x.qs || {};
+        const fund = x.fund || {};
+
+        // FMP : tableaux annuels renvoyes du plus recent au plus ancien -> on
+        // remet ancien -> recent pour les series temporelles.
+        const ratiosAsc = U.arr(x.ratios).slice().reverse();
+        const incomeAsc = U.arr(x.income).slice().reverse();
+        const cashAsc = U.arr(x.cashflow).slice().reverse();
+        const kmTtm = U.arr(x.keyMetricsTtm)[0] || {};
+        const rTtm = U.arr(x.ratiosTtm)[0] || {};
+        const profFmp = U.arr(x.profileFmp)[0] || {};
+        const estAsc = U.arr(x.estimatesFmp).slice().reverse();
+        const latestRatio = ratiosAsc[ratiosAsc.length - 1] || {};
+        const fmpUnavailable = !!(x.ratios && x.ratios.unavailable) && !!(x.income && x.income.unavailable);
+
+        const price = n(qs.price) ?? n(fund.price);
+        const previousClose = n(qs.previousClose) ?? n(fund.previousClose);
+        const marketCap = n(qs.marketCap) ?? n(fund.marketCap) ?? n(profFmp.mktCap);
+        const currency = qs.currency || fund.currency || 'USD';
+
+        // ---------- Identite ----------
+        const identity = {
+            name: qs.name || fund.name || profFmp.companyName || x.symbol,
+            currency,
+            exchange: qs.exchange || fund.exchange || profFmp.exchangeShortName || null,
+            sector: profFmp.sector || qs.sector || null,
+            industry: qs.industry || fund.industry || profFmp.industry || null,
+            country: qs.country || fund.country || profFmp.country || null,
+            ipo: fund.ipo || profFmp.ipoDate || null,
+            website: qs.website || fund.weburl || profFmp.website || null,
+            description: qs.longBusinessSummary || profFmp.description || null,
+            employees: n(qs.fullTimeEmployees) ?? n(profFmp.fullTimeEmployees),
+            logo: fund.logo || profFmp.image || null
+        };
+
+        // ---------- Prix / niveaux ----------
+        const priceBlock = {
+            current: price,
+            previousClose,
+            change: (price != null && previousClose != null) ? price - previousClose : null,
+            changePct: (price != null && previousClose) ? (price - previousClose) / previousClose * 100 : null,
+            fiftyTwoWeekHigh: n(qs.fiftyTwoWeekHigh) ?? n(fund.fiftyTwoWeekHigh),
+            fiftyTwoWeekLow: n(qs.fiftyTwoWeekLow) ?? n(fund.fiftyTwoWeekLow),
+            fiftyDayAverage: n(qs.fiftyDayAverage),
+            twoHundredDayAverage: n(qs.twoHundredDayAverage),
+            volume: n(fund.volume),
+            marketCap,
+            currency
+        };
+
+        // ---------- Valorisation ----------
+        const fcfLatest = cashAsc.length ? n(cashAsc[cashAsc.length - 1].freeCashFlow) : null;
+        const valuation = {
+            peTTM: n(fund.peTTM) ?? n(qs.peTrailing) ?? n(rTtm.peRatioTTM),
+            peForward: n(qs.peForward),
+            peg: n(qs.pegRatio) ?? n(rTtm.pegRatioTTM),
+            pb: n(fund.pbAnnual) ?? n(qs.priceToBook) ?? n(rTtm.priceToBookRatioTTM),
+            ps: n(fund.psTTM) ?? n(qs.priceToSales) ?? n(rTtm.priceToSalesRatioTTM),
+            evEbitda: n(qs.enterpriseToEbitda) ?? n(kmTtm.enterpriseValueOverEBITDATTM) ?? n(rTtm.enterpriseValueMultipleTTM),
+            evRevenue: n(qs.enterpriseToRevenue) ?? n(kmTtm.evToSalesTTM),
+            fcfYield: pctU(n(kmTtm.freeCashFlowYieldTTM)) ?? ((fcfLatest != null && marketCap) ? fcfLatest / marketCap * 100 : null),
+            hist5y: {
+                pe: U.avg(ratiosAsc.map(r => n(r.priceEarningsRatio))),
+                pb: U.avg(ratiosAsc.map(r => n(r.priceToBookRatio))),
+                ps: U.avg(ratiosAsc.map(r => n(r.priceToSalesRatio))),
+                evEbitda: U.avg(ratiosAsc.map(r => n(r.enterpriseValueMultiple)))
+            }
+        };
+
+        // ---------- Croissance ----------
+        const revSeries = incomeAsc.map(r => ({ year: U.year(r), value: n(r.revenue) }));
+        const epsSeries = incomeAsc.map(r => ({ year: U.year(r), value: n(r.eps) ?? n(r.epsdiluted) }));
+        const revVals = revSeries.map(p => p.value).filter(v => v != null);
+        const epsVals = epsSeries.map(p => p.value).filter(v => v != null);
+        const growth = {
+            revenueAnnual: revSeries,
+            epsAnnual: epsSeries,
+            revenueCagrPct: revVals.length >= 2 ? U.cagrPct(revVals[0], revVals[revVals.length - 1], revVals.length - 1) : null,
+            epsCagrPct: epsVals.length >= 2 ? U.cagrPct(epsVals[0], epsVals[epsVals.length - 1], epsVals.length - 1) : null,
+            revenueGrowthYoyPct: pctU(n(qs.revenueGrowth)) ?? n(fund.revenueGrowthTTM),
+            epsGrowthYoyPct: pctU(n(qs.earningsGrowth)),
+            estimates: estAsc.map(e => ({
+                year: (e.date || '').toString().slice(0, 4),
+                revenueAvg: n(e.estimatedRevenueAvg),
+                epsAvg: n(e.estimatedEpsAvg),
+                analysts: n(e.numberAnalystsEstimatedEps) ?? n(e.numberAnalystEstimatedEps) ?? n(e.numberAnalystEstimatedRevenue)
+            })),
+            estimatesShortTerm: U.arr(qs.estimates),   // Yahoo : 0q/+1q/0y/+1y
+            analystCount: n(qs.numberOfAnalystOpinions),
+            guidance: null   // Non disponible via les APIs gratuites retenues
+        };
+
+        // ---------- Sante financiere ----------
+        const fcfHist = cashAsc.map(r => ({ year: U.year(r), value: n(r.freeCashFlow) }));
+        const yahooDE = n(qs.debtToEquity);   // Yahoo exprime en % -> /100
+        const health = {
+            netDebtToEbitda: n(latestRatio.netDebtToEBITDA) ?? n(kmTtm.netDebtToEBITDATTM),
+            debtToEquity: n(latestRatio.debtEquityRatio) ?? n(rTtm.debtEquityRatioTTM) ?? (yahooDE != null ? yahooDE / 100 : null),
+            currentRatio: n(latestRatio.currentRatio) ?? n(qs.currentRatio) ?? n(rTtm.currentRatioTTM),
+            quickRatio: n(latestRatio.quickRatio) ?? n(qs.quickRatio) ?? n(rTtm.quickRatioTTM),
+            interestCoverage: n(latestRatio.interestCoverage) ?? n(rTtm.interestCoverageTTM) ?? n(kmTtm.interestCoverageTTM),
+            fcfHistory: fcfHist,
+            fcfTrend: U.trend(fcfHist.map(p => p.value)),
+            totalCash: n(qs.totalCash),
+            totalDebt: n(qs.totalDebt)
+        };
+
+        // ---------- Rentabilite ----------
+        const marginHistory = {
+            gross: ratiosAsc.map(r => ({ year: U.year(r), value: pctU(n(r.grossProfitMargin)) })),
+            operating: ratiosAsc.map(r => ({ year: U.year(r), value: pctU(n(r.operatingProfitMargin)) })),
+            net: ratiosAsc.map(r => ({ year: U.year(r), value: pctU(n(r.netProfitMargin)) }))
+        };
+        const lastOf = (s) => (s.length ? s[s.length - 1].value : null);
+        const profitability = {
+            roe: n(fund.roeTTM) ?? pctU(n(qs.returnOnEquity)) ?? pctU(n(rTtm.returnOnEquityTTM)),
+            roa: pctU(n(qs.returnOnAssets)) ?? pctU(n(rTtm.returnOnAssetsTTM)),
+            roic: pctU(n(kmTtm.roicTTM)) ?? pctU(n(kmTtm.returnOnInvestedCapitalTTM)),
+            grossMargin: pctU(n(qs.grossMargins)) ?? lastOf(marginHistory.gross),
+            operatingMargin: pctU(n(qs.operatingMargins)) ?? lastOf(marginHistory.operating),
+            netMargin: n(fund.netMarginTTM) ?? pctU(n(qs.profitMargins)) ?? lastOf(marginHistory.net),
+            marginHistory
+        };
+
+        // ---------- Sentiment de marche & positionnement ----------
+        const recoRow = U.arr(x.reco)[0] || null;
+        const consensus = recoRow
+            ? { strongBuy: recoRow.strongBuy ?? null, buy: recoRow.buy ?? null, hold: recoRow.hold ?? null, sell: recoRow.sell ?? null, strongSell: recoRow.strongSell ?? null }
+            : (qs.recommendationTrend && Object.values(qs.recommendationTrend).some(v => v != null) ? qs.recommendationTrend : null);
+        const insiderList = (x.insider && Array.isArray(x.insider.data)) ? x.insider.data : [];
+        let insBought = 0, insSold = 0;
+        insiderList.forEach(t => { const c = n(t.change) || 0; if (c > 0) insBought += c; else insSold += Math.abs(c); });
+        const sentiment = {
+            consensus,
+            recommendationKey: qs.recommendationKey || null,
+            recommendationMean: n(qs.recommendationMean),
+            targetMean: n(qs.targetMeanPrice),
+            targetLow: n(qs.targetLowPrice),
+            targetHigh: n(qs.targetHighPrice),
+            targetMedian: n(qs.targetMedianPrice),
+            analystCount: n(qs.numberOfAnalystOpinions),
+            ptRevisions: null,   // Non disponible
+            institutionalOwnership: pctU(n(qs.heldPercentInstitutions)),
+            insiderOwnership: pctU(n(qs.heldPercentInsiders)),
+            insider: insiderList.length
+                ? { windowDays: 180, bought: insBought || 0, sold: insSold || 0, net: insBought - insSold, count: insiderList.length }
+                : null,
+            shortPercentOfFloat: pctU(n(qs.shortPercentOfFloat)),
+            shortRatio: n(qs.shortRatio)
+        };
+
+        // ---------- Dividende ----------
+        const dividend = this._dividendBlock(U.arr(x.dividends), {
+            yieldPct: n(fund.dividendYield) ?? pctU(n(qs.dividendYield)) ?? pctU(n(rTtm.dividendYieldTTM)),
+            payoutRatio: n(qs.payoutRatio) ?? n(rTtm.payoutRatioTTM) ?? n(latestRatio.payoutRatio),
+            ratePerShare: n(qs.dividendRate)
+        });
+
+        return {
+            symbol: x.symbol,
+            asOf: Utils.getDateString(new Date()),
+            isUS: !x.nonUS,
+            identity,
+            price: priceBlock,
+            valuation,
+            growth,
+            health,
+            profitability,
+            sentiment,
+            dividend,
+            peersSymbols: this._peerSymbols(x.peersRaw, x.symbol),
+            priceHistory: x.history || {},   // brut, series utilisees en phase 7
+            earnings: x.earn || null,
+            technical: null,   // calcule en phase 7
+            score: null,       // calcule en phase 11
+            meta: {
+                errors: x.errors,
+                fmpUnavailable,
+                sources: {
+                    quote: qs.source ? 'yahoo' : (fund.price != null ? 'yahoo' : null),
+                    ratios: fund.fundamentalsSource || null,
+                    statements: U.arr(x.ratios).length ? 'fmp' : null,
+                    analysts: (U.arr(x.reco).length ? 'finnhub' : (qs.numberOfAnalystOpinions != null ? 'yahoo' : null))
+                }
+            }
+        };
+    },
+
+    _dividendBlock(divList, base) {
+        const paysDividend = divList.length > 0 || (base.yieldPct != null && base.yieldPct > 0);
+        const byYear = {};
+        divList.forEach(d => {
+            const y = (d.date || '').slice(0, 4);
+            if (y) byYear[y] = (byYear[y] || 0) + (Number(d.amountPerShare) || 0);
+        });
+        const years = Object.keys(byYear).sort();
+        const fullYears = years.slice(0, -1);   // l'annee courante est souvent incomplete
+        let streak = 0;
+        for (let i = fullYears.length - 1; i > 0; i--) {
+            if (byYear[fullYears[i]] > byYear[fullYears[i - 1]] * 1.001) streak++;
+            else break;
+        }
+        return {
+            paysDividend,
+            yieldPct: base.yieldPct,
+            ratePerShare: base.ratePerShare,
+            payoutRatio: base.payoutRatio,           // fraction (0.42) — cf. formatage en phase 8
+            growthStreakYears: paysDividend ? streak : 0,
+            annualPerShare: years.map(y => ({ year: y, value: byYear[y] })),
+            lastPayment: divList.length ? divList[divList.length - 1] : null
+        };
+    },
+
+    _peerSymbols(peersRaw, symbol) {
+        let list = [];
+        if (Array.isArray(peersRaw)) {
+            if (typeof peersRaw[0] === 'string') list = peersRaw;
+            else if (peersRaw[0] && Array.isArray(peersRaw[0].peersList)) list = peersRaw[0].peersList;
+        } else if (peersRaw && Array.isArray(peersRaw.peersList)) {
+            list = peersRaw.peersList;
+        }
+        return list.filter(s => s && s !== symbol).slice(0, 4);
     }
 };
 
@@ -4728,7 +5086,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             const results = await APIService.webSearch(`${symbol} ${name} action bourse`);
             if (this.researchSymbol !== symbol || !results || !results.length) return;
             list.innerHTML = results.slice(0, 4).map(r => {
-                const d = r.publishedDate ? Utils.formatDateDisplay(r.publishedDate.slice(0, 10)) : '';
+                const d = r.publishedDate ? Utils.formatDateDisplay(r.publishedDate) : '';
                 let host = '';
                 try { host = new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) {}
                 return `<li><a href="${r.url}" target="_blank" rel="noopener noreferrer">${r.title || host}</a><span class="rn-meta">${[host, d].filter(Boolean).join(' · ')}</span></li>`;

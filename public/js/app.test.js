@@ -150,7 +150,7 @@ function loadApp(supabaseOverrides = {}) {
 
     vm.createContext(sandbox);
     const wrapped = SOURCE +
-        '\n;globalThis.__APP__ = { CONFIG, AI_PROVIDERS, AuthService, Utils, APIService, PortfolioService, App, jwtIssuedAt, isJwtTimingError };\n';
+        '\n;globalThis.__APP__ = { CONFIG, AI_PROVIDERS, AuthService, Utils, APIService, AnalysisUtils, AnalysisService, PortfolioService, App, jwtIssuedAt, isJwtTimingError };\n';
     new vm.Script(wrapped, { filename: 'app.js' }).runInContext(sandbox);
     return { ...sandbox.__APP__, localStorage, store, document: doc, sandbox };
 }
@@ -866,5 +866,173 @@ describe('PortfolioService - config IA liée au compte', () => {
             expect(typeof AI_PROVIDERS[p].call).toBe('undefined');
             expect(typeof AI_PROVIDERS[p].label).toBe('string');
         }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 1 — couche de donnees d'analyse de valeur (AnalysisService / AnalysisUtils)
+// ---------------------------------------------------------------------------
+
+describe('AnalysisUtils', () => {
+    const { AnalysisUtils: A } = app;
+
+    it('num : ne garde que les nombres finis', () => {
+        expect(A.num(3.2)).toBe(3.2);
+        expect(A.num(NaN)).toBeNull();
+        expect(A.num(Infinity)).toBeNull();
+        expect(A.num('5')).toBeNull();
+        expect(A.num(null)).toBeNull();
+    });
+
+    it('pctU : fraction -> unite pourcent', () => {
+        expect(A.pctU(0.128)).toBeCloseTo(12.8, 6);
+        expect(A.pctU(null)).toBeNull();
+    });
+
+    it('avg : moyenne en ignorant les trous', () => {
+        expect(A.avg([2, 4, null, 6, NaN])).toBe(4);
+        expect(A.avg([])).toBeNull();
+    });
+
+    it('cagrPct : taux annualise en pourcent', () => {
+        expect(A.cagrPct(100, 200, 1)).toBeCloseTo(100, 6);
+        expect(A.cagrPct(100, 100, 4)).toBeCloseTo(0, 6);
+        expect(A.cagrPct(0, 200, 3)).toBeNull();
+    });
+
+    it('trend : classe une serie ancien -> recent', () => {
+        expect(A.trend([10, 12, 15, 20])).toBe('croissant');
+        expect(A.trend([20, 15, 10])).toBe('décroissant');
+        expect(A.trend([10, 10.1, 9.9, 10])).toBe('stable');
+        expect(A.trend([5])).toBeNull();
+    });
+});
+
+describe('AnalysisService._normalize', () => {
+    const { AnalysisService: S } = app;
+
+    it('fusionne quoteSummary + FMP dans un StockAnalysis normalise', () => {
+        const out = S._normalize({
+            symbol: 'MSFT',
+            nonUS: false,
+            errors: [],
+            fund: { price: 420, previousClose: 415, peTTM: 35, roeTTM: 38.1, netMarginTTM: 34, dividendYield: 0.72, fundamentalsSource: 'finnhub' },
+            qs: {
+                source: 'yahoo-quoteSummary', name: 'Microsoft', currency: 'USD',
+                price: 420.5, previousClose: 415, forwardPE: undefined, peForward: 32,
+                pegRatio: 2.1, enterpriseToEbitda: 24, grossMargins: 0.68, operatingMargins: 0.44,
+                profitMargins: 0.35, revenueGrowth: 0.16, earningsGrowth: 0.20,
+                heldPercentInstitutions: 0.73, shortPercentOfFloat: 0.006,
+                numberOfAnalystOpinions: 45, targetMeanPrice: 480, targetLowPrice: 400, targetHighPrice: 550,
+                dividendYield: 0.0072, payoutRatio: 0.25, debtToEquity: 30,
+                recommendationTrend: { strongBuy: 20, buy: 15, hold: 8, sell: 1, strongSell: 0 }
+            },
+            ratios: [
+                { calendarYear: '2023', priceEarningsRatio: 34, priceToBookRatio: 12, priceToSalesRatio: 11, enterpriseValueMultiple: 23, grossProfitMargin: 0.69, operatingProfitMargin: 0.45, netProfitMargin: 0.36, currentRatio: 1.8, quickRatio: 1.7, debtEquityRatio: 0.35, interestCoverage: 45 },
+                { calendarYear: '2022', priceEarningsRatio: 30, priceToBookRatio: 11, priceToSalesRatio: 10, enterpriseValueMultiple: 21, grossProfitMargin: 0.68, operatingProfitMargin: 0.42, netProfitMargin: 0.37 }
+            ],
+            income: [
+                { calendarYear: '2023', revenue: 211000, eps: 9.7 },
+                { calendarYear: '2022', revenue: 198000, eps: 9.2 },
+                { calendarYear: '2021', revenue: 168000, eps: 8.0 }
+            ],
+            cashflow: [
+                { calendarYear: '2023', freeCashFlow: 59000 },
+                { calendarYear: '2022', freeCashFlow: 65000 },
+                { calendarYear: '2021', freeCashFlow: 56000 }
+            ],
+            keyMetricsTtm: [{ roicTTM: 0.29, freeCashFlowYieldTTM: 0.025, enterpriseValueOverEBITDATTM: 24.5 }],
+            ratiosTtm: [{ peRatioTTM: 35.5, returnOnAssetsTTM: 0.18 }],
+            estimatesFmp: [
+                { date: '2025-06-30', estimatedRevenueAvg: 250000, estimatedEpsAvg: 12.1, numberAnalystsEstimatedEps: 30 }
+            ],
+            profileFmp: [{ sector: 'Technology', industry: 'Software', description: 'MSFT desc', website: 'https://microsoft.com' }],
+            reco: [{ strongBuy: 22, buy: 14, hold: 7, sell: 1, strongSell: 0, period: '2025-01-01' }],
+            insider: { data: [{ change: 1000 }, { change: -400 }] },
+            peersRaw: ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META'],
+            earn: { date: '2025-07-24' },
+            history: { '2025-01-02': 410, '2025-01-03': 415 },
+            dividends: [
+                { date: '2021-03-01', amountPerShare: 0.56 }, { date: '2021-06-01', amountPerShare: 0.56 },
+                { date: '2022-03-01', amountPerShare: 0.62 }, { date: '2022-06-01', amountPerShare: 0.62 },
+                { date: '2023-03-01', amountPerShare: 0.68 }, { date: '2023-06-01', amountPerShare: 0.68 },
+                { date: '2024-03-01', amountPerShare: 0.75 }
+            ]
+        });
+
+        expect(out.symbol).toBe('MSFT');
+        expect(out.identity.name).toBe('Microsoft');
+        expect(out.identity.sector).toBe('Technology');
+        expect(out.price.current).toBe(420.5);
+        expect(out.price.changePct).toBeCloseTo((420.5 - 415) / 415 * 100, 4);
+
+        // valorisation : forward P/E de Yahoo, moyenne 5 ans depuis FMP
+        expect(out.valuation.peForward).toBe(32);
+        expect(out.valuation.hist5y.pe).toBe(32);          // (34 + 30) / 2
+        expect(out.valuation.evEbitda).toBe(24);
+
+        // croissance : CAGR CA sur 2 pas (168000 -> 211000)
+        expect(out.growth.revenueAnnual.map(p => p.year)).toEqual(['2021', '2022', '2023']);
+        expect(out.growth.revenueCagrPct).toBeCloseTo((Math.pow(211000 / 168000, 1 / 2) - 1) * 100, 4);
+        expect(out.growth.estimates[0].analysts).toBe(30);
+        expect(out.growth.guidance).toBeNull();
+
+        // sante financiere : dette/EBITDA absent -> null, D/E depuis FMP
+        expect(out.health.debtToEquity).toBe(0.35);
+        expect(out.health.fcfTrend).toBe('croissant');     // 56000 -> 59000
+
+        // rentabilite : marges en unites pourcent
+        expect(out.profitability.grossMargin).toBeCloseTo(68, 6);
+        expect(out.profitability.roic).toBeCloseTo(29, 6);
+        expect(out.profitability.marginHistory.net.map(p => p.value)).toEqual([37, 36]);
+
+        // sentiment : consensus Finnhub prioritaire, detention instit. en pourcent
+        expect(out.sentiment.consensus.strongBuy).toBe(22);
+        expect(out.sentiment.institutionalOwnership).toBeCloseTo(73, 6);
+        expect(out.sentiment.shortPercentOfFloat).toBeCloseTo(0.6, 6);
+        expect(out.sentiment.insider.net).toBe(600);
+        expect(out.sentiment.ptRevisions).toBeNull();
+
+        // dividende : verse, 3 hausses consecutives (2021<2022<2023), 2024 exclue
+        expect(out.dividend.paysDividend).toBe(true);
+        expect(out.dividend.growthStreakYears).toBe(2);
+
+        // peers : sans le ticker lui-meme, max 4
+        expect(out.peersSymbols).toEqual(['AAPL', 'GOOGL', 'AMZN', 'META']);
+
+        // champs calcules dans des phases ulterieures
+        expect(out.technical).toBeNull();
+        expect(out.score).toBeNull();
+        expect(out.meta.errors).toEqual([]);
+    });
+
+    it('donnees manquantes -> null partout, aucun NaN, pas d exception', () => {
+        const out = S._normalize({
+            symbol: 'XYZ', nonUS: true, errors: ['fmp:ratios'],
+            fund: null, qs: null, ratios: { unavailable: true }, income: { unavailable: true },
+            cashflow: null, keyMetricsTtm: null, ratiosTtm: null, estimatesFmp: null,
+            profileFmp: null, reco: null, insider: null, peersRaw: null, earn: null,
+            history: null, dividends: null
+        });
+        expect(out.valuation.peTTM).toBeNull();
+        expect(out.valuation.hist5y.pe).toBeNull();
+        expect(out.growth.revenueAnnual).toEqual([]);
+        expect(out.profitability.roe).toBeNull();
+        expect(out.sentiment.consensus).toBeNull();
+        expect(out.dividend.paysDividend).toBe(false);
+        expect(out.peersSymbols).toEqual([]);
+        expect(out.meta.fmpUnavailable).toBe(true);
+        expect(JSON.stringify(out)).not.toContain('NaN');
+    });
+});
+
+describe('bug corrige : dates NaN dans le flux actualites', () => {
+    const { Utils } = app;
+    it('formatDateDisplay renvoie "" pour une date non parseable', () => {
+        expect(Utils.formatDateDisplay('Tue, 26 Au')).toBe('');
+        expect(Utils.formatDateDisplay('pas une date')).toBe('');
+    });
+    it('formatDateDisplay accepte un format RFC-2822 complet (Tavily)', () => {
+        expect(Utils.formatDateDisplay('Tue, 26 Aug 2025 00:00:00 GMT')).toBe('26/08/2025');
     });
 });

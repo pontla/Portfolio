@@ -14,6 +14,9 @@
  *   GET /sector?symbol=SYM -> { sector }  (via Finnhub, secret FINNHUB_API_KEY requis)
  *   GET /earnings?symbol=SYM -> { date, hour, epsEstimate, revenueEstimate } | { date: null } (Finnhub, actions US uniquement)
  *   GET /fundamentals?symbol=SYM -> { price, currency, 52W hi/lo, volume, name, exchange (Yahoo) + PER, BPA, rendement, beta, ROE... (Finnhub, actions US) }
+ *   GET /quoteSummary?symbol=SYM -> objet normalise Yahoo v10 (P/E fwd, PEG, EV/EBITDA, consensus & objectifs analystes, marges, description, detention instit., short interest)
+ *   GET /fmp?symbol=SYM&resource=R -> Financial Modeling Prep (secret FMP_API_KEY). R : profile|ratios|ratiosTtm|keyMetricsTtm|income|cashflow|estimates|peers|dcf
+ *   GET /recommendation|/insider|/peers ?symbol=SYM -> Finnhub (secret FINNHUB_API_KEY, actions US uniquement)
  *   GET /websearch?q=QUERY -> { results: [{ title, url, content, publishedDate }] } (Tavily, secret TAVILY_API_KEY requis)
  *   POST /ai/key            { provider, key }  (Bearer JWT Supabase) -> chiffre + stocke la cle IA de l'utilisateur (KV), jamais renvoyee
  *   DELETE /ai/key?provider=P                  (Bearer JWT Supabase) -> supprime la cle stockee
@@ -331,6 +334,215 @@ async function handleSearch(query) {
     return jsonResponse(results, 200, 3600); // cache 1h
 }
 
+/* ======================= Sources fondamentales etendues (phases 2-11) =======================
+ * /quoteSummary?symbol=SYM  -> Yahoo v10 quoteSummary normalise (P/E fwd, PEG, EV/EBITDA,
+ *                              consensus analystes, objectifs de cours, marges, description,
+ *                              detention institutionnelle, short interest). Sans cle.
+ * /fmp?symbol=SYM&resource=R -> Financial Modeling Prep (secret FMP_API_KEY). `resource`
+ *                              whitelistee : profile|ratios|ratiosTtm|keyMetricsTtm|income|
+ *                              cashflow|estimates|peers|dcf. Historique ~5 ans.
+ * /recommendation|/insider|/peers ?symbol=SYM -> Finnhub (secret FINNHUB_API_KEY, actions US).
+ */
+
+const isNonUsSymbol = (s) => s.includes('.') || s.startsWith('$') || s.endsWith('-USD');
+
+// Crumb + cookie Yahoo, requis par quoteSummary depuis 2024. Mis en cache au
+// niveau de l'isolate (~1 h).
+let _yahooAuth = null;
+async function getYahooAuth(force = false) {
+    if (!force && _yahooAuth && Date.now() - _yahooAuth.ts < 3600_000) return _yahooAuth;
+    let cookie = '';
+    try {
+        const r = await fetch('https://fc.yahoo.com/', { headers: YAHOO_HEADERS });
+        const jar = (typeof r.headers.getSetCookie === 'function' && r.headers.getSetCookie())
+            || [r.headers.get('set-cookie')].filter(Boolean);
+        cookie = jar.map(c => c.split(';')[0]).join('; ');
+    } catch (e) { /* pas de cookie -> on tente sans */ }
+    let crumb = '';
+    try {
+        const r = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+            headers: { ...YAHOO_HEADERS, ...(cookie ? { Cookie: cookie } : {}) }
+        });
+        if (r.ok) crumb = (await r.text()).trim();
+    } catch (e) { /* crumb best-effort */ }
+    _yahooAuth = { cookie, crumb, ts: Date.now() };
+    return _yahooAuth;
+}
+
+// Yahoo enveloppe les nombres dans { raw, fmt } ; parfois valeur nue.
+const rawNum = (v) => {
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    if (v && typeof v === 'object' && typeof v.raw === 'number') return isFinite(v.raw) ? v.raw : null;
+    return null;
+};
+
+async function fetchQuoteSummary(symbol) {
+    const modules = 'defaultKeyStatistics,financialData,summaryDetail,recommendationTrend,earningsTrend,price,assetProfile';
+    const base = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+    const run = async (withAuth) => {
+        const headers = { ...YAHOO_HEADERS };
+        let u = base;
+        if (withAuth) {
+            const a = await getYahooAuth();
+            if (a.cookie) headers.Cookie = a.cookie;
+            if (a.crumb) u += `&crumb=${encodeURIComponent(a.crumb)}`;
+        }
+        return fetch(u, { headers });
+    };
+    let res = await run(false);
+    if (res.status === 401 || res.status === 403) {
+        await getYahooAuth(true);
+        res = await run(true);
+    }
+    if (!res.ok) throw new Error(`Yahoo quoteSummary HTTP ${res.status}`);
+    const data = await res.json();
+    const r = data && data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0];
+    if (!r) throw new Error('quoteSummary vide');
+    return r;
+}
+
+function normalizeQuoteSummary(symbol, r) {
+    const dks = r.defaultKeyStatistics || {};
+    const fd = r.financialData || {};
+    const sd = r.summaryDetail || {};
+    const pr = r.price || {};
+    const ap = r.assetProfile || {};
+    const t0 = ((r.recommendationTrend && r.recommendationTrend.trend) || [])[0] || {};
+    const estimates = ((r.earningsTrend && r.earningsTrend.trend) || [])
+        .filter(x => ['0q', '+1q', '0y', '+1y'].includes(x.period))
+        .map(x => ({
+            period: x.period,
+            endDate: x.endDate || null,
+            epsAvg: rawNum(x.earningsEstimate && x.earningsEstimate.avg),
+            revenueAvg: rawNum(x.revenueEstimate && x.revenueEstimate.avg),
+            analysts: rawNum(x.earningsEstimate && x.earningsEstimate.numberOfAnalysts)
+        }));
+
+    return {
+        symbol,
+        source: 'yahoo-quoteSummary',
+        name: pr.longName || pr.shortName || null,
+        currency: pr.currency || fd.financialCurrency || 'USD',
+        exchange: pr.exchangeName || null,
+        price: rawNum(pr.regularMarketPrice) ?? rawNum(fd.currentPrice),
+        previousClose: rawNum(pr.regularMarketPreviousClose) ?? rawNum(sd.previousClose),
+        marketCap: rawNum(pr.marketCap) ?? rawNum(sd.marketCap),
+        peTrailing: rawNum(sd.trailingPE),
+        peForward: rawNum(dks.forwardPE) ?? rawNum(sd.forwardPE),
+        pegRatio: rawNum(dks.pegRatio),
+        priceToBook: rawNum(dks.priceToBook),
+        priceToSales: rawNum(sd.priceToSalesTrailing12Months),
+        enterpriseValue: rawNum(dks.enterpriseValue),
+        enterpriseToEbitda: rawNum(dks.enterpriseToEbitda),
+        enterpriseToRevenue: rawNum(dks.enterpriseToRevenue),
+        trailingEps: rawNum(dks.trailingEps),
+        forwardEps: rawNum(dks.forwardEps),
+        ebitda: rawNum(fd.ebitda),
+        freeCashflow: rawNum(fd.freeCashflow),
+        operatingCashflow: rawNum(fd.operatingCashflow),
+        totalCash: rawNum(fd.totalCash),
+        totalDebt: rawNum(fd.totalDebt),
+        currentRatio: rawNum(fd.currentRatio),
+        quickRatio: rawNum(fd.quickRatio),
+        debtToEquity: rawNum(fd.debtToEquity),          // exprime en % (150 = 1,5x)
+        returnOnEquity: rawNum(fd.returnOnEquity),       // fraction
+        returnOnAssets: rawNum(fd.returnOnAssets),       // fraction
+        grossMargins: rawNum(fd.grossMargins),           // fraction
+        operatingMargins: rawNum(fd.operatingMargins),   // fraction
+        profitMargins: rawNum(fd.profitMargins) ?? rawNum(dks.profitMargins),
+        revenueGrowth: rawNum(fd.revenueGrowth),         // fraction YoY
+        earningsGrowth: rawNum(fd.earningsGrowth),       // fraction YoY
+        totalRevenue: rawNum(fd.totalRevenue),
+        dividendYield: rawNum(sd.dividendYield) ?? rawNum(sd.trailingAnnualDividendYield), // fraction
+        dividendRate: rawNum(sd.dividendRate),
+        payoutRatio: rawNum(sd.payoutRatio),             // fraction
+        fiveYearAvgDividendYield: rawNum(sd.fiveYearAvgDividendYield),
+        beta: rawNum(sd.beta) ?? rawNum(dks.beta),
+        fiftyTwoWeekHigh: rawNum(sd.fiftyTwoWeekHigh),
+        fiftyTwoWeekLow: rawNum(sd.fiftyTwoWeekLow),
+        fiftyDayAverage: rawNum(sd.fiftyDayAverage),
+        twoHundredDayAverage: rawNum(sd.twoHundredDayAverage),
+        sharesOutstanding: rawNum(dks.sharesOutstanding),
+        floatShares: rawNum(dks.floatShares),
+        sharesShort: rawNum(dks.sharesShort),
+        shortRatio: rawNum(dks.shortRatio),
+        shortPercentOfFloat: rawNum(dks.shortPercentOfFloat), // fraction
+        heldPercentInstitutions: rawNum(dks.heldPercentInstitutions), // fraction
+        heldPercentInsiders: rawNum(dks.heldPercentInsiders),         // fraction
+        targetMeanPrice: rawNum(fd.targetMeanPrice),
+        targetLowPrice: rawNum(fd.targetLowPrice),
+        targetHighPrice: rawNum(fd.targetHighPrice),
+        targetMedianPrice: rawNum(fd.targetMedianPrice),
+        recommendationMean: rawNum(fd.recommendationMean),
+        recommendationKey: fd.recommendationKey || null,
+        numberOfAnalystOpinions: rawNum(fd.numberOfAnalystOpinions),
+        recommendationTrend: {
+            strongBuy: t0.strongBuy ?? null, buy: t0.buy ?? null, hold: t0.hold ?? null,
+            sell: t0.sell ?? null, strongSell: t0.strongSell ?? null
+        },
+        estimates,
+        sector: ap.sector || null,
+        industry: ap.industry || null,
+        country: ap.country || null,
+        website: ap.website || null,
+        fullTimeEmployees: ap.fullTimeEmployees ?? null,
+        longBusinessSummary: ap.longBusinessSummary || null
+    };
+}
+
+async function handleQuoteSummary(symbol) {
+    const r = await fetchQuoteSummary(symbol);
+    return jsonResponse(normalizeQuoteSummary(symbol, r), 200, 3600); // cache 1h
+}
+
+// Ressources FMP autorisees -> segment de chemin API v3.
+const FMP_RESOURCES = {
+    profile: (s) => `profile/${s}`,
+    ratios: (s) => `ratios/${s}?period=annual&limit=6`,
+    ratiosTtm: (s) => `ratios-ttm/${s}`,
+    keyMetricsTtm: (s) => `key-metrics-ttm/${s}`,
+    income: (s) => `income-statement/${s}?period=annual&limit=6`,
+    cashflow: (s) => `cash-flow-statement/${s}?period=annual&limit=6`,
+    estimates: (s) => `analyst-estimates/${s}?period=annual&limit=4`,
+    peers: (s) => `stock_peers?symbol=${s}`,
+    dcf: (s) => `discounted-cash-flow/${s}`
+};
+
+async function handleFmp(resource, symbol, apiKey) {
+    if (!apiKey) throw new Error('FMP_API_KEY non configuree');
+    const build = FMP_RESOURCES[resource];
+    if (!build) return jsonResponse({ error: 'ressource FMP inconnue' }, 400);
+    const pathPart = build(encodeURIComponent(symbol.toUpperCase()));
+    const sep = pathPart.includes('?') ? '&' : '?';
+    const res = await fetch(`https://financialmodelingprep.com/api/v3/${pathPart}${sep}apikey=${apiKey}`);
+    if (!res.ok) throw new Error(`FMP HTTP ${res.status}`);
+    const data = await res.json();
+    // FMP renvoie {"Error Message": "..."} avec un statut 200 quand le plan gratuit
+    // ne couvre pas la ressource -> on le signale sans casser l'agregation.
+    if (data && !Array.isArray(data) && data['Error Message']) {
+        return jsonResponse({ unavailable: true, message: data['Error Message'] }, 200, 3600);
+    }
+    return jsonResponse(data, 200, 86400); // donnees trimestrielles -> cache 24h
+}
+
+async function handleFinnhubExtra(kind, symbol, apiKey) {
+    if (!apiKey) throw new Error('FINNHUB_API_KEY non configuree');
+    if (isNonUsSymbol(symbol)) return jsonResponse({ unavailable: true, data: null }, 200, 86400);
+    const sym = encodeURIComponent(symbol);
+    let path, cache;
+    if (kind === 'recommendation') { path = `stock/recommendation?symbol=${sym}`; cache = 86400; }
+    else if (kind === 'peers') { path = `stock/peers?symbol=${sym}`; cache = 604800; }
+    else {
+        const to = new Date().toISOString().slice(0, 10);
+        const from = new Date(Date.now() - 180 * 86400_000).toISOString().slice(0, 10);
+        path = `stock/insider-transactions?symbol=${sym}&from=${from}&to=${to}`;
+        cache = 86400;
+    }
+    const res = await fetch(`https://finnhub.io/api/v1/${path}&token=${apiKey}`);
+    if (!res.ok) throw new Error(`Finnhub HTTP ${res.status}`);
+    return jsonResponse(await res.json(), 200, cache);
+}
+
 /* ======================= RESUME IA (cles jamais exposees au navigateur) =======================
  * La cle API du fournisseur IA de l'utilisateur est stockee chiffree (AES-GCM) dans
  * WEBSEARCH_KV sous `aikey:<userId>:<provider>`. Le navigateur n'envoie sa cle qu'une
@@ -613,13 +825,32 @@ async function route(request, url, env) {
         return await handleSearch(q);
     }
 
+    if (url.pathname === '/quoteSummary') {
+        const symbol = url.searchParams.get('symbol');
+        if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
+        return await handleQuoteSummary(symbol);
+    }
+
+    if (url.pathname === '/fmp') {
+        const symbol = url.searchParams.get('symbol');
+        const resource = url.searchParams.get('resource');
+        if (!symbol || !resource) return jsonResponse({ error: 'symbol, resource requis' }, 400);
+        return await handleFmp(resource, symbol, env.FMP_API_KEY);
+    }
+
+    if (url.pathname === '/recommendation' || url.pathname === '/insider' || url.pathname === '/peers') {
+        const symbol = url.searchParams.get('symbol');
+        if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
+        return await handleFinnhubExtra(url.pathname.slice(1), symbol, env.FINNHUB_API_KEY);
+    }
+
     if (url.pathname === '/websearch') {
         const q = url.searchParams.get('q');
         if (!q) return jsonResponse({ error: 'q requis' }, 400);
         return await handleWebSearch(q, env.TAVILY_API_KEY, env.WEBSEARCH_KV);
     }
 
-    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/search?q=', '/websearch?q=', 'POST /ai/key', 'DELETE /ai/key?provider=', 'POST /ai/insights'] });
+    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/quoteSummary?symbol=', '/fmp?symbol=&resource=', '/recommendation?symbol=', '/insider?symbol=', '/peers?symbol=', '/search?q=', '/websearch?q=', 'POST /ai/key', 'DELETE /ai/key?provider=', 'POST /ai/insights'] });
 }
 
 export default {

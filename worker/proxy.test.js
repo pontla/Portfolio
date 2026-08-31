@@ -449,3 +449,103 @@ describe('/websearch', () => {
         expect(kv.put).toHaveBeenCalledWith('q:aapl', JSON.stringify([]), { expirationTtl: 1800 });
     });
 });
+
+describe('/quoteSummary', () => {
+    it('renvoie 400 si symbol manquant', async () => {
+        const res = await call('/quoteSummary');
+        expect(res.status).toBe(400);
+    });
+
+    it('normalise la reponse Yahoo v10 (raw extrait, champs a plat)', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse({
+            quoteSummary: {
+                result: [{
+                    price: { longName: 'Microsoft', currency: 'USD', regularMarketPrice: { raw: 420.5 }, regularMarketPreviousClose: { raw: 415 }, marketCap: { raw: 3.1e12 } },
+                    defaultKeyStatistics: { forwardPE: { raw: 32 }, pegRatio: { raw: 2.1 }, enterpriseToEbitda: { raw: 24 }, heldPercentInstitutions: { raw: 0.73 }, shortPercentOfFloat: { raw: 0.006 } },
+                    financialData: { targetMeanPrice: { raw: 480 }, numberOfAnalystOpinions: { raw: 45 }, grossMargins: { raw: 0.68 }, recommendationKey: 'buy' },
+                    summaryDetail: { dividendYield: { raw: 0.0072 }, payoutRatio: { raw: 0.25 }, fiftyTwoWeekHigh: { raw: 470 } },
+                    recommendationTrend: { trend: [{ period: '0m', strongBuy: 20, buy: 15, hold: 8, sell: 1, strongSell: 0 }] },
+                    earningsTrend: { trend: [{ period: '+1q', endDate: '2025-09-30', earningsEstimate: { avg: { raw: 3.1 }, numberOfAnalysts: { raw: 30 } }, revenueEstimate: { avg: { raw: 64000 } } }] },
+                    assetProfile: { sector: 'Technology', industry: 'Software', country: 'United States', website: 'https://microsoft.com', longBusinessSummary: 'MSFT.' }
+                }]
+            }
+        }));
+        const res = await call('/quoteSummary?symbol=MSFT');
+        const body = await res.json();
+        expect(res.status).toBe(200);
+        expect(body).toMatchObject({
+            symbol: 'MSFT', source: 'yahoo-quoteSummary', name: 'Microsoft',
+            price: 420.5, previousClose: 415, peForward: 32, pegRatio: 2.1,
+            enterpriseToEbitda: 24, heldPercentInstitutions: 0.73, shortPercentOfFloat: 0.006,
+            targetMeanPrice: 480, numberOfAnalystOpinions: 45, grossMargins: 0.68,
+            payoutRatio: 0.25, sector: 'Technology', recommendationKey: 'buy'
+        });
+        expect(body.recommendationTrend).toEqual({ strongBuy: 20, buy: 15, hold: 8, sell: 1, strongSell: 0 });
+        expect(body.estimates[0]).toMatchObject({ period: '+1q', epsAvg: 3.1, revenueAvg: 64000, analysts: 30 });
+        expect(res.headers.get('Cache-Control')).toMatch(/s-maxage=3600/);
+    });
+
+    it('renvoie 502 si Yahoo repond en erreur', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse({}, false, 500));
+        const res = await call('/quoteSummary?symbol=MSFT');
+        expect(res.status).toBe(502);
+    });
+});
+
+describe('/fmp', () => {
+    it('renvoie 400 si resource ou symbol manquant', async () => {
+        expect((await call('/fmp?symbol=MSFT')).status).toBe(400);
+        expect((await call('/fmp?resource=ratios')).status).toBe(400);
+    });
+
+    it('renvoie 400 pour une ressource hors whitelist', async () => {
+        const res = await call('/fmp?symbol=MSFT&resource=../secrets', { FMP_API_KEY: 'k' });
+        expect(res.status).toBe(400);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('appelle le bon endpoint FMP et met en cache 24h', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse([{ calendarYear: '2023', priceEarningsRatio: 34 }]));
+        const res = await call('/fmp?symbol=msft&resource=ratios', { FMP_API_KEY: 'secret' });
+        expect(res.status).toBe(200);
+        const url = fetchMock.mock.calls[0][0];
+        expect(url).toContain('https://financialmodelingprep.com/api/v3/ratios/MSFT?period=annual&limit=6');
+        expect(url).toContain('&apikey=secret');
+        expect(res.headers.get('Cache-Control')).toMatch(/s-maxage=86400/);
+    });
+
+    it('signale une ressource non couverte par le plan (Error Message -> unavailable)', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse({ 'Error Message': 'Exclusive Endpoint' }));
+        const res = await call('/fmp?symbol=MSFT&resource=dcf', { FMP_API_KEY: 'secret' });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ unavailable: true });
+    });
+
+    it('renvoie 502 sans FMP_API_KEY', async () => {
+        const res = await call('/fmp?symbol=MSFT&resource=ratios');
+        expect(res.status).toBe(502);
+        expect((await res.json()).error).toMatch(/FMP_API_KEY/);
+    });
+});
+
+describe('/recommendation /insider /peers (Finnhub)', () => {
+    it('renvoie 502 sans FINNHUB_API_KEY', async () => {
+        const res = await call('/recommendation?symbol=AAPL');
+        expect(res.status).toBe(502);
+    });
+
+    it('court-circuite les tickers non-US avec unavailable', async () => {
+        const res = await call('/peers?symbol=MC.PA', { FINNHUB_API_KEY: 'key' });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ unavailable: true, data: null });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('transmet la reponse Finnhub pour /recommendation', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse([{ strongBuy: 22, buy: 14, hold: 7, sell: 1, strongSell: 0, period: '2025-01-01' }]));
+        const res = await call('/recommendation?symbol=AAPL', { FINNHUB_API_KEY: 'key' });
+        expect(res.status).toBe(200);
+        expect(fetchMock.mock.calls[0][0]).toContain('finnhub.io/api/v1/stock/recommendation?symbol=AAPL&token=key');
+        expect((await res.json())[0].strongBuy).toBe(22);
+    });
+});
