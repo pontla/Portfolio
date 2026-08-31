@@ -52,6 +52,7 @@ const QUOTE_SUMMARY = {
     grossMargins: 0.46, operatingMargins: 0.30, profitMargins: 0.25,
     revenueGrowth: 0.08, earningsGrowth: 0.11,
     dividendYield: 0.005, dividendRate: 0.96, payoutRatio: 0.15, fiveYearAvgDividendYield: 0.62,
+    exDividendDate: '2025-08-11',
     beta: 1.24, fiftyTwoWeekHigh: 210, fiftyTwoWeekLow: 150,
     fiftyDayAverage: 195, twoHundredDayAverage: 185,
     regularMarketVolume: 64000000, averageVolume: 58000000, averageVolume10Days: 61000000,
@@ -67,7 +68,8 @@ const QUOTE_SUMMARY = {
     ],
     sector: 'Technology', industry: 'Consumer Electronics', country: 'United States',
     website: 'https://www.apple.com', fullTimeEmployees: 161000,
-    longBusinessSummary: 'Apple Inc. conçoit, fabrique et commercialise des smartphones, ordinateurs et services.'
+    longBusinessSummary: 'Apple Inc. conçoit, fabrique et commercialise des smartphones, ordinateurs et services.',
+    governance: { overall: 1, audit: 7, board: 1, compensation: 5, shareholderRights: 1 }
 };
 
 // Reponses FMP par ressource (tableaux du plus recent au plus ancien, comme l'API).
@@ -194,7 +196,7 @@ export async function bootApp(page) {
             { date: '2024-05-10', amountPerShare: 0.25 }
         ]);
         if (p.endsWith('/sector')) return json({ sector: 'Technology' });
-        if (p.endsWith('/earnings')) return json({ date: '2025-07-31', hour: 'amc' });
+        if (p.endsWith('/earnings')) return json({ date: '2025-07-31', hour: 'amc', epsEstimate: 1.9, revenueEstimate: 89000000000 });
         if (p.endsWith('/quoteSummary')) return json(QUOTE_SUMMARY);
         if (p.endsWith('/fmp')) {
             const r = url.searchParams.get('resource');

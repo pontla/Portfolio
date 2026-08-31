@@ -925,6 +925,8 @@ describe('AnalysisService._normalize', () => {
                 heldPercentInstitutions: 0.73, shortPercentOfFloat: 0.006,
                 numberOfAnalystOpinions: 45, targetMeanPrice: 480, targetLowPrice: 400, targetHighPrice: 550,
                 dividendYield: 0.0072, payoutRatio: 0.25, debtToEquity: 30,
+                exDividendDate: '2025-08-14', beta: 0.92,
+                governance: { overall: 1, audit: 4, board: 1, compensation: 8, shareholderRights: 1 },
                 recommendationTrend: { strongBuy: 20, buy: 15, hold: 8, sell: 1, strongSell: 0 }
             },
             ratios: [
@@ -996,6 +998,12 @@ describe('AnalysisService._normalize', () => {
         // dividende : verse, 3 hausses consecutives (2021<2022<2023), 2024 exclue
         expect(out.dividend.paysDividend).toBe(true);
         expect(out.dividend.growthStreakYears).toBe(2);
+        expect(out.dividend.exDate).toBe('2025-08-14');
+
+        // risques : uniquement ce que l'API publie (beta + scores de gouvernance)
+        expect(out.risks.beta).toBe(0.92);
+        expect(out.risks.hasGovernance).toBe(true);
+        expect(out.risks.governance.compensation).toBe(8);
 
         // peers : sans le ticker lui-meme, max 4
         expect(out.peersSymbols).toEqual(['AAPL', 'GOOGL', 'AMZN', 'META']);
@@ -1021,6 +1029,10 @@ describe('AnalysisService._normalize', () => {
         expect(out.profitability.roe).toBeNull();
         expect(out.sentiment.consensus).toBeNull();
         expect(out.dividend.paysDividend).toBe(false);
+        expect(out.dividend.exDate).toBeNull();
+        // aucune donnee de risque publiee -> sous-section laissee de cote au rendu
+        expect(out.risks.beta).toBeNull();
+        expect(out.risks.hasGovernance).toBe(false);
         expect(out.peersSymbols).toEqual([]);
         expect(out.meta.fmpUnavailable).toBe(true);
         expect(JSON.stringify(out)).not.toContain('NaN');

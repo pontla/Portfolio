@@ -1747,6 +1747,25 @@ input:focus {
 .kv-tag.warn { color: var(--dn); border-color: color-mix(in srgb, var(--dn) 40%, transparent); }
 .kv-tag.mid { color: var(--text-secondary); border-color: var(--l2); }
 
+/* Profil & risques : description de l'activite + sous-sections repliables */
+.qual-body { display: grid; gap: 20px; overflow-x: clip; }
+.qual-sec { min-width: 0; }
+.qual-text {
+    color: var(--text-primary); font-size: 13px; line-height: 1.55;
+    margin: 0; white-space: pre-line;
+}
+/* Repliee par defaut : 5 lignes, deployee au clic sur .qual-more */
+.qual-text.clamp {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5;
+    overflow: hidden;
+}
+.qual-more {
+    margin-top: 8px; padding: 0;
+    background: none; border: 0; cursor: pointer;
+    color: var(--acc); font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+}
+.qual-more:hover { text-decoration: underline; }
+
 /* Historiques annuels en barres (croissance CA / BPA) */
 .growth-series {
     display: grid;

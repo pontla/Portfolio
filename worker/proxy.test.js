@@ -463,10 +463,10 @@ describe('/quoteSummary', () => {
                     price: { longName: 'Microsoft', currency: 'USD', regularMarketPrice: { raw: 420.5 }, regularMarketPreviousClose: { raw: 415 }, marketCap: { raw: 3.1e12 } },
                     defaultKeyStatistics: { forwardPE: { raw: 32 }, pegRatio: { raw: 2.1 }, enterpriseToEbitda: { raw: 24 }, heldPercentInstitutions: { raw: 0.73 }, shortPercentOfFloat: { raw: 0.006 } },
                     financialData: { targetMeanPrice: { raw: 480 }, numberOfAnalystOpinions: { raw: 45 }, grossMargins: { raw: 0.68 }, recommendationKey: 'buy' },
-                    summaryDetail: { dividendYield: { raw: 0.0072 }, payoutRatio: { raw: 0.25 }, fiftyTwoWeekHigh: { raw: 470 }, averageVolume: { raw: 22000000 } },
+                    summaryDetail: { dividendYield: { raw: 0.0072 }, payoutRatio: { raw: 0.25 }, fiftyTwoWeekHigh: { raw: 470 }, averageVolume: { raw: 22000000 }, exDividendDate: { raw: 1755129600 } },
                     recommendationTrend: { trend: [{ period: '0m', strongBuy: 20, buy: 15, hold: 8, sell: 1, strongSell: 0 }] },
                     earningsTrend: { trend: [{ period: '+1q', endDate: '2025-09-30', earningsEstimate: { avg: { raw: 3.1 }, numberOfAnalysts: { raw: 30 } }, revenueEstimate: { avg: { raw: 64000 } } }] },
-                    assetProfile: { sector: 'Technology', industry: 'Software', country: 'United States', website: 'https://microsoft.com', longBusinessSummary: 'MSFT.' }
+                    assetProfile: { sector: 'Technology', industry: 'Software', country: 'United States', website: 'https://microsoft.com', longBusinessSummary: 'MSFT.', overallRisk: 1, auditRisk: 4, boardRisk: 1, compensationRisk: 8, shareHolderRightsRisk: 1 }
                 }]
             }
         }));
@@ -479,7 +479,9 @@ describe('/quoteSummary', () => {
             enterpriseToEbitda: 24, heldPercentInstitutions: 0.73, shortPercentOfFloat: 0.006,
             targetMeanPrice: 480, numberOfAnalystOpinions: 45, grossMargins: 0.68,
             payoutRatio: 0.25, sector: 'Technology', recommendationKey: 'buy',
-            averageVolume: 22000000
+            averageVolume: 22000000,
+            exDividendDate: '2025-08-14',
+            governance: { overall: 1, audit: 4, board: 1, compensation: 8, shareholderRights: 1 }
         });
         expect(body.recommendationTrend).toEqual({ strongBuy: 20, buy: 15, hold: 8, sell: 1, strongSell: 0 });
         expect(body.estimates[0]).toMatchObject({ period: '+1q', epsAvg: 3.1, revenueAvg: 64000, analysts: 30 });

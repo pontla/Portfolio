@@ -1003,8 +1003,25 @@ const AnalysisService = {
             yieldPct: n(fund.dividendYield) ?? pctU(n(qs.dividendYield)) ?? pctU(n(rTtm.dividendYieldTTM)),
             payoutRatio: n(qs.payoutRatio) ?? n(rTtm.payoutRatioTTM) ?? n(latestRatio.payoutRatio),
             ratePerShare: n(qs.dividendRate),
-            avgYield5y: n(qs.fiveYearAvgDividendYield)   // Yahoo : deja en unites de %
+            avgYield5y: n(qs.fiveYearAvgDividendYield),  // Yahoo : deja en unites de %
+            exDate: qs.exDividendDate || null
         });
+
+        // ---------- Qualitatif / risques ----------
+        // Rien n'est redige ici : la description vient telle quelle de l'emetteur
+        // (Yahoo assetProfile ou FMP) et les risques se limitent aux scores
+        // reellement publies par l'API. Si l'API ne fournit rien, le rendu laisse
+        // la sous-section de cote plutot que d'inventer un contenu.
+        const gov = qs.governance || {};
+        const governance = {
+            overall: n(gov.overall), audit: n(gov.audit), board: n(gov.board),
+            compensation: n(gov.compensation), shareholderRights: n(gov.shareholderRights)
+        };
+        const risks = {
+            beta: n(qs.beta) ?? n(fund.beta),
+            governance,
+            hasGovernance: Object.keys(governance).some(k => governance[k] != null)
+        };
 
         return {
             symbol: x.symbol,
@@ -1018,6 +1035,7 @@ const AnalysisService = {
             profitability,
             sentiment,
             dividend,
+            risks,
             peersSymbols: this._peerSymbols(x.peersRaw, x.symbol),
             priceHistory: x.history || {},   // brut, series utilisees en phase 7
             earnings: x.earn || null,
@@ -1058,7 +1076,8 @@ const AnalysisService = {
             payoutRatio: base.payoutRatio,           // fraction (0.42) — cf. formatage en phase 8
             growthStreakYears: paysDividend ? streak : 0,
             annualPerShare: years.map(y => ({ year: y, value: byYear[y] })),
-            lastPayment: divList.length ? divList[divList.length - 1] : null
+            lastPayment: divList.length ? divList[divList.length - 1] : null,
+            exDate: base.exDate ?? null   // prochain (ou dernier) detachement connu
         };
     },
 
@@ -5009,9 +5028,10 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         document.getElementById('researchLogo').src = this.getLogoUrl(symbol);
         document.getElementById('researchLogo').style.visibility = '';
 
-        const [fund, earn, name] = await Promise.all([
+        // Le calendrier de resultats n'est plus appele ici : AnalysisService le
+        // recupere deja pour la carte "Profil & risques" (une requete de moins).
+        const [fund, name] = await Promise.all([
             APIService.getFundamentals(symbol),
-            APIService.getEarnings(symbol).catch(() => null),
             (this.assetNameCache[symbol] !== undefined ? Promise.resolve(this.assetNameCache[symbol]) : this.fetchAssetName(symbol))
         ]);
         this.assetNameCache[symbol] = name;
@@ -5036,7 +5056,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
 
         this.renderResearchPosition(symbol, cur, price);
         this.renderResearchKey(fund, cur, price);
-        this.renderResearchAbout(fund, earn);
+        this.renderResearchAbout(fund);
         await this.renderResearchChart(symbol);
         this.renderResearchNews(symbol, displayName);
         this.renderResearchQuick();
@@ -5051,6 +5071,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchSentiment(null);
         this.renderResearchTechnical(null);
         this.renderResearchDividend(null);
+        this.renderResearchQualitative(null);
         this.researchAnalysis = null;
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
@@ -5062,6 +5083,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             this.renderResearchSentiment(a);
             this.renderResearchTechnical(a);
             this.renderResearchDividend(a);
+            this.renderResearchQualitative(a);
             this.applyResearchMaOverlay();
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
@@ -5737,6 +5759,133 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         if (src) src.textContent = annual.length ? 'Yahoo Finance' : 'Historique de versements indisponible';
     },
 
+    // Sous-section de la carte "Profil & risques" : titre + contenu.
+    _qualSec(title, tip, inner) {
+        return `<div class="qual-sec"><div class="sent-title">${title} ${this._kvHelp(tip)}</div>${inner}</div>`;
+    },
+
+    // Carte qualitative. Regle de la phase : on n'ecrit aucune analyse maison.
+    // La description est reprise telle quelle de l'emetteur, les risques se
+    // limitent aux scores publies par l'API — si elle n'en fournit pas, la
+    // sous-section "Risques" n'est tout simplement pas affichee.
+    renderResearchQualitative(a) {
+        const card = document.getElementById('researchQualCard');
+        const body = document.getElementById('researchQualBody');
+        const src = document.getElementById('researchQualSrc');
+        if (!card || !body) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            body.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            return;
+        }
+
+        const ND = 'Non disponible';
+        const idn = a.identity || {};
+        const r = a.risks || {};
+        const kv = (label, valueStr, tip, extra = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${extra}</div>`;
+        const secs = [];
+
+        // ----- Activite : texte de l'emetteur, jamais reformule -----
+        if (idn.description) {
+            const long = idn.description.length > 420;
+            secs.push(this._qualSec('Activité',
+                'Description de l\'activité publiée par l\'émetteur et reprise telle quelle par la source de données. Ce n\'est pas une analyse.',
+                `<p class="qual-text${long ? ' clamp' : ''}" id="researchQualText">${Utils.escapeHtml(idn.description)}</p>` +
+                (long ? '<button type="button" class="qual-more" id="researchQualMore">Lire la suite</button>' : '') +
+                (idn.employees == null ? '' :
+                    `<div class="research-kv-grid" style="margin-top:16px">${kv('Effectif',
+                        Utils.formatCompact(idn.employees) + ' salariés',
+                        'Nombre de salariés à temps plein déclaré par l\'entreprise. Utile pour situer sa taille au-delà de la capitalisation.')}</div>`)
+            ));
+        }
+
+        // ----- Risques -----
+        // Beta : 1 = amplitude du marche. Seuils explicites et ajustables :
+        // < 0,8 defensif, 0,8-1,2 dans la moyenne, > 1,2 plus volatil.
+        const beta = (r.beta == null || !isFinite(r.beta)) ? null : r.beta;
+        const betaTag = beta == null ? ''
+            : `<span class="kv-tag ${beta > 1.2 ? 'warn' : (beta < 0.8 ? 'ok' : 'mid')}">` +
+              `${beta > 1.2 ? 'plus volatil' : (beta < 0.8 ? 'défensif' : 'proche du marché')}</span>`;
+
+        // Scores de gouvernance Yahoo : echelle 1 a 10, 1 = risque le plus faible.
+        // Seuils explicites et ajustables : <= 3 faible, <= 6 modere, > 6 eleve.
+        const govKv = (label, score, tip) => {
+            const s = (score == null || !isFinite(score)) ? null : score;
+            const tag = s == null ? ''
+                : `<span class="kv-tag ${s > 6 ? 'warn' : (s > 3 ? 'mid' : 'ok')}">` +
+                  `${s > 6 ? 'élevé' : (s > 3 ? 'modéré' : 'faible')}</span>`;
+            return kv(label, s == null ? null : `${s} / 10`, tip, tag);
+        };
+
+        if (beta != null || r.hasGovernance) {
+            let rows = '';
+            if (beta != null) {
+                rows += kv('Volatilité (bêta)',
+                    new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(beta),
+                    'Amplitude des variations du titre par rapport au marché. 1 = même amplitude ; au-dessus, le titre bouge plus fort dans les deux sens.',
+                    betaTag);
+            }
+            if (r.hasGovernance) {
+                const g = r.governance || {};
+                rows +=
+                    govKv('Gouvernance (global)', g.overall,
+                        'Score de risque de gouvernance publié par la source de données, de 1 (risque le plus faible) à 10 (le plus élevé).') +
+                    govKv('Audit', g.audit,
+                        'Risque lié aux pratiques comptables et au contrôle des comptes, de 1 (faible) à 10 (élevé).') +
+                    govKv('Conseil d\'administration', g.board,
+                        'Risque lié à la composition et à l\'indépendance du conseil, de 1 (faible) à 10 (élevé).') +
+                    govKv('Rémunération des dirigeants', g.compensation,
+                        'Risque lié à l\'alignement des rémunérations des dirigeants avec l\'intérêt des actionnaires, de 1 (faible) à 10 (élevé).') +
+                    govKv('Droits des actionnaires', g.shareholderRights,
+                        'Risque lié au pouvoir réel des actionnaires minoritaires (droits de vote, protections statutaires), de 1 (faible) à 10 (élevé).');
+            }
+            secs.push(this._qualSec('Risques',
+                'Uniquement les indicateurs de risque publiés par les sources de données. Aucun risque n\'est rédigé ni déduit ici ; les points non couverts par l\'API sont simplement absents.',
+                `<div class="research-kv-grid">${rows}</div>`));
+        }
+
+        // ----- Calendrier des catalyseurs -----
+        const e = a.earnings || {};
+        const hourLabel = { bmo: 'avant ouverture', amc: 'après clôture', dmh: 'en séance' }[e.hour] || null;
+        const cur = (a.price && a.price.currency) || idn.currency || 'USD';
+        const q0 = AnalysisUtils.arr(a.growth && a.growth.estimatesShortTerm).find(x => x.period === '0q');
+        const exDate = a.dividend && a.dividend.exDate;
+
+        secs.push(this._qualSec('Calendrier',
+            'Prochaines échéances connues susceptibles de faire bouger le cours. Les dates viennent du calendrier des publications, disponible pour les actions américaines uniquement.',
+            '<div class="research-kv-grid">' +
+            kv('Prochains résultats', !e.date ? null : Utils.formatDateDisplay(e.date),
+                'Date de la prochaine publication de résultats trimestriels.',
+                hourLabel ? `<span class="kv-cmp">${hourLabel}</span>` : '') +
+            kv('BPA attendu', (e.epsEstimate == null) ? null : Utils.formatCurrency(e.epsEstimate, cur),
+                'Bénéfice par action attendu en moyenne par les analystes pour ce trimestre. Un écart à la publication déclenche souvent une forte réaction du cours.') +
+            kv('CA attendu', (e.revenueEstimate == null) ? null : Utils.formatCompact(e.revenueEstimate, cur),
+                'Chiffre d\'affaires attendu en moyenne par les analystes pour ce trimestre.') +
+            kv('Fin du trimestre en cours', (q0 && q0.endDate) ? Utils.formatDateDisplay(q0.endDate) : null,
+                'Date de clôture du trimestre dont les résultats seront publiés ensuite.') +
+            kv('Détachement du dividende', !exDate ? null : Utils.formatDateDisplay(exDate),
+                'Date à partir de laquelle le titre s\'échange sans le prochain dividende. Acheter après cette date n\'y donne pas droit.') +
+            '</div>'));
+
+        body.innerHTML = secs.join('');
+
+        const more = document.getElementById('researchQualMore');
+        if (more) {
+            more.addEventListener('click', () => {
+                const p = document.getElementById('researchQualText');
+                if (!p) return;
+                const open = p.classList.toggle('clamp');
+                more.textContent = open ? 'Lire la suite' : 'Réduire';
+            });
+        }
+
+        if (src) src.textContent = idn.description ? 'Profil : émetteur · Risques : Yahoo Finance' : 'Description indisponible';
+    },
+
     // Trace MM 50 / MM 200 par-dessus la courbe de cours existante. Les moyennes
     // viennent de l'analyse (15 mois d'historique) : rien n'est re-telecharge, et
     // les points hors de cette fenetre restent vides plutot qu'approximes.
@@ -5841,7 +5990,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         }
     },
 
-    renderResearchAbout(fund, earn) {
+    renderResearchAbout(fund) {
         const card = document.getElementById('researchAboutCard');
         const grid = document.getElementById('researchAboutGrid');
         const rows = [];
@@ -5849,7 +5998,6 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         if (fund && fund.industry) kv('Secteur', fund.industry);
         if (fund && fund.country) kv('Pays', fund.country);
         if (fund && fund.ipo) kv('Introduction en bourse', Utils.formatDateDisplay(fund.ipo));
-        if (earn && earn.date) kv('Prochains résultats', Utils.formatDateDisplay(earn.date) + (earn.hour ? ` (${earn.hour})` : ''));
         if (fund && fund.weburl) {
             let host = fund.weburl;
             try { host = new URL(fund.weburl).hostname.replace(/^www\./, ''); } catch (e) {}

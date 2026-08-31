@@ -291,6 +291,41 @@ test('section Dividende : rendement, distribution et historique par action', asy
     await expect(series.locator('.gs-empty')).toHaveCount(0);
 });
 
+test('section Profil & risques : activité, risques publiés et calendrier', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchQualCard');
+    await expect(card).toBeVisible();
+
+    const body = page.locator('#researchQualBody');
+    const secs = body.locator('.qual-sec');
+    await expect(secs).toHaveCount(3);   // Activité + Risques + Calendrier
+
+    // Activité : texte de l'émetteur repris tel quel
+    await expect(body).toContainText('Activité');
+    await expect(body.locator('.qual-text')).toContainText('Apple Inc. conçoit, fabrique et commercialise');
+    await expect(body).toContainText('161 k salariés');
+
+    // Risques : bêta 1,24 -> plus volatil ; gouvernance 1..10 avec pastilles
+    const risk = secs.filter({ hasText: 'Risques' });
+    await expect(risk.locator('.research-kv', { hasText: 'Volatilité (bêta)' })).toContainText('1,24');
+    await expect(risk.locator('.research-kv', { hasText: 'Volatilité (bêta)' }).locator('.kv-tag')).toHaveText('plus volatil');
+    await expect(risk.locator('.research-kv', { hasText: 'Gouvernance (global)' })).toContainText('1 / 10');
+    await expect(risk.locator('.research-kv', { hasText: 'Audit' }).locator('.kv-tag')).toHaveText('élevé');
+    await expect(risk.locator('.research-kv', { hasText: 'Rémunération des dirigeants' }).locator('.kv-tag')).toHaveText('modéré');
+
+    // Calendrier : la date de résultats a quitté "À propos" pour cette section
+    await expect(page.locator('#researchAboutGrid')).not.toContainText('Prochains résultats');
+    const cal = secs.filter({ hasText: 'Calendrier' });
+    await expect(cal.locator('.research-kv', { hasText: 'Prochains résultats' })).toContainText('après clôture');
+    await expect(cal.locator('.research-kv', { hasText: 'BPA attendu' })).toContainText('$1,90');
+    await expect(cal.locator('.research-kv', { hasText: 'CA attendu' })).toContainText('$89 Md');
+    await expect(cal.locator('.research-kv', { hasText: 'Détachement du dividende' })).not.toContainText('Non disponible');
+
+    // chaque métrique porte son aide contextuelle
+    await expect(body.locator('.kv-help').first()).toHaveAttribute('data-tip', /.+/);
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(

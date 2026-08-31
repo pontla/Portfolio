@@ -408,6 +408,7 @@ function normalizeQuoteSummary(symbol, r) {
     const pr = r.price || {};
     const ap = r.assetProfile || {};
     const t0 = ((r.recommendationTrend && r.recommendationTrend.trend) || [])[0] || {};
+    const exTs = rawNum(sd.exDividendDate);
     const estimates = ((r.earningsTrend && r.earningsTrend.trend) || [])
         .filter(x => ['0q', '+1q', '0y', '+1y'].includes(x.period))
         .map(x => ({
@@ -457,6 +458,7 @@ function normalizeQuoteSummary(symbol, r) {
         dividendRate: rawNum(sd.dividendRate),
         payoutRatio: rawNum(sd.payoutRatio),             // fraction
         fiveYearAvgDividendYield: rawNum(sd.fiveYearAvgDividendYield),
+        exDividendDate: exTs ? new Date(exTs * 1000).toISOString().slice(0, 10) : null,
         beta: rawNum(sd.beta) ?? rawNum(dks.beta),
         fiftyTwoWeekHigh: rawNum(sd.fiftyTwoWeekHigh),
         fiftyTwoWeekLow: rawNum(sd.fiftyTwoWeekLow),
@@ -489,7 +491,17 @@ function normalizeQuoteSummary(symbol, r) {
         country: ap.country || null,
         website: ap.website || null,
         fullTimeEmployees: ap.fullTimeEmployees ?? null,
-        longBusinessSummary: ap.longBusinessSummary || null
+        longBusinessSummary: ap.longBusinessSummary || null,
+        // Scores de gouvernance Yahoo (module assetProfile, deja recupere) :
+        // echelle 1 a 10, 1 = risque le plus faible. Absents pour beaucoup
+        // d'emetteurs -> null, jamais de valeur inventee cote client.
+        governance: {
+            overall: rawNum(ap.overallRisk),
+            audit: rawNum(ap.auditRisk),
+            board: rawNum(ap.boardRisk),
+            compensation: rawNum(ap.compensationRisk),
+            shareholderRights: rawNum(ap.shareHolderRightsRisk)
+        }
     };
 }
 
