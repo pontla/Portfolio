@@ -2838,7 +2838,7 @@ const App = {
 
             const assetCell = e.target.closest('.holding-asset-cell');
             if (assetCell) {
-                this.openAssetChart(assetCell.dataset.symbol);
+                this.goToResearch(assetCell.dataset.symbol);
             }
 
             const sellBtn = e.target.closest('.quick-sell-btn');
@@ -4473,6 +4473,15 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                 if (si && this.researchSymbol) { si.value = this.researchSymbol; si.dispatchEvent(new Event('blur')); }
             }, 60);
         };
+    },
+
+    // Depuis une position détenue -> ouvre l'onglet Explorer sur cette valeur.
+    goToResearch(symbol) {
+        symbol = (symbol || '').trim().toUpperCase();
+        if (!symbol) return;
+        this.researchSymbol = symbol;
+        document.querySelector('.tab-btn[data-tab="research"]')?.click();
+        this.runResearch(symbol);
     },
 
     onResearchTabShown() {

@@ -84,6 +84,19 @@ test('le graphe expose un tooltip au survol (mode index)', async ({ page }) => {
     expect(tip).toBe('index');
 });
 
+test('cliquer sur une position détenue ouvre l’Explorer sur cette valeur', async ({ page }) => {
+    await page.locator('button[data-tab="holdings"]:visible').first().click();
+    await page.locator('#view-holdings').waitFor({ state: 'visible' });
+
+    await page.locator('.holding-asset-cell[data-symbol="AAPL"]:visible').first().click();
+
+    await expect(page.locator('#view-research')).toBeVisible();
+    await expect(page.locator('#researchContent')).toBeVisible();
+    await expect(page.locator('#researchSymbol')).toHaveText('AAPL');
+    await expect(page.locator('#researchName')).toHaveText(/Apple/);
+    await expect(page.locator('#researchChart')).toBeVisible();
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(
