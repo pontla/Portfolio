@@ -230,6 +230,40 @@ test('section Sentiment de marché : consensus, objectifs de cours et positionne
     await expect(top.locator('.pt-legend')).toContainText('$260,00');
 });
 
+test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchTechCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchTechGrid');
+    await expect(grid.locator('.research-kv')).toHaveCount(9);
+    await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
+    await expect(grid).toContainText('Moyenne mobile 50 j');
+    await expect(grid).toContainText('Moyenne mobile 200 j');
+    await expect(grid).toContainText('RSI 14');
+
+    // série synthétique haussière -> cours > MM50 > MM200
+    await expect(grid.locator('.research-kv', { hasText: 'Tendance' })).toContainText('haussière');
+    // volume 64 M vs moyenne 58 M -> 1,1 ×
+    await expect(grid).toContainText('1,1 ×');
+    await expect(grid).toContainText('activité normale');
+
+    // jauge RSI + légende des moyennes mobiles
+    const top = page.locator('#researchTechTop');
+    await expect(top.locator('.gauge-track.rsi .gauge-mark')).toBeVisible();
+    await expect(top.locator('.ma-legend .ma-leg')).toHaveCount(2);
+    await expect(top.locator('.sent-empty')).toHaveCount(0);
+
+    // le graphe de cours porte désormais 3 séries : cours + MM 50 + MM 200
+    const labels = await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label));
+    expect(labels.slice(1)).toEqual(['MM 50', 'MM 200']);
+    const filled = await page.evaluate(
+        () => App.researchChart.data.datasets[2].data.filter(v => v != null).length
+    );
+    expect(filled).toBeGreaterThan(50);
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(

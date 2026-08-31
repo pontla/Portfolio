@@ -891,7 +891,8 @@ const AnalysisService = {
             fiftyTwoWeekLow: n(qs.fiftyTwoWeekLow) ?? n(fund.fiftyTwoWeekLow),
             fiftyDayAverage: n(qs.fiftyDayAverage),
             twoHundredDayAverage: n(qs.twoHundredDayAverage),
-            volume: n(fund.volume),
+            volume: n(fund.volume) ?? n(qs.regularMarketVolume),
+            averageVolume: n(qs.averageVolume),
             marketCap,
             currency
         };
@@ -1019,7 +1020,7 @@ const AnalysisService = {
             peersSymbols: this._peerSymbols(x.peersRaw, x.symbol),
             priceHistory: x.history || {},   // brut, series utilisees en phase 7
             earnings: x.earn || null,
-            technical: null,   // calcule en phase 7
+            technical: this._technicalBlock(x.history, priceBlock, qs),
             score: null,       // calcule en phase 11
             meta: {
                 errors: x.errors,
@@ -1056,6 +1057,105 @@ const AnalysisService = {
             growthStreakYears: paysDividend ? streak : 0,
             annualPerShare: years.map(y => ({ year: y, value: byYear[y] })),
             lastPayment: divList.length ? divList[divList.length - 1] : null
+        };
+    },
+
+    // ---------- Analyse technique ----------
+    // Tout est calcule en JS a partir de la serie de cloture deja telechargee
+    // (15 mois glissants) : aucune requete supplementaire.
+    // Conventions : `null` si la profondeur d'historique est insuffisante,
+    // pourcentages en unites de % (12.8 = 12,8 %).
+
+    // Moyenne mobile simple : renvoie une serie de meme longueur, null avant la
+    // periode de chauffe (index < n-1).
+    _sma(values, n) {
+        const out = new Array(values.length).fill(null);
+        let sum = 0;
+        for (let i = 0; i < values.length; i++) {
+            sum += values[i];
+            if (i >= n) sum -= values[i - n];
+            if (i >= n - 1) out[i] = sum / n;
+        }
+        return out;
+    },
+
+    // RSI 14 (lissage de Wilder) : 0 = survente extreme, 100 = surachat extreme.
+    _rsi(values, n = 14) {
+        if (values.length <= n) return null;
+        let gain = 0, loss = 0;
+        for (let i = 1; i <= n; i++) {
+            const d = values[i] - values[i - 1];
+            if (d >= 0) gain += d; else loss -= d;
+        }
+        gain /= n; loss /= n;
+        for (let i = n + 1; i < values.length; i++) {
+            const d = values[i] - values[i - 1];
+            gain = (gain * (n - 1) + Math.max(d, 0)) / n;
+            loss = (loss * (n - 1) + Math.max(-d, 0)) / n;
+        }
+        if (loss === 0) return gain === 0 ? 50 : 100;
+        return 100 - 100 / (1 + gain / loss);
+    },
+
+    _technicalBlock(history, price, qs) {
+        const n = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
+        const dates = Object.keys(history || {}).sort()
+            .filter(d => n(Number(history[d])) != null);
+        const closes = dates.map(d => Number(history[d]));
+        if (closes.length < 30) return null;
+
+        const last = closes[closes.length - 1];
+        const ma50s = this._sma(closes, 50);
+        const ma200s = this._sma(closes, 200);
+        const ma50 = ma50s[ma50s.length - 1];
+        const ma200 = ma200s[ma200s.length - 1];
+
+        // Croisement le plus recent des deux moyennes mobiles.
+        // "golden cross" = MA50 repasse au-dessus de MA200 (signal haussier),
+        // "death cross" = l'inverse. On remonte l'historique disponible.
+        let cross = null, crossDate = null, crossDaysAgo = null;
+        for (let i = closes.length - 1; i > 0; i--) {
+            const a = ma50s[i], b = ma200s[i], pa = ma50s[i - 1], pb = ma200s[i - 1];
+            if (a == null || b == null || pa == null || pb == null) break;
+            if ((pa - pb) <= 0 && (a - b) > 0) { cross = 'golden'; crossDate = dates[i]; crossDaysAgo = closes.length - 1 - i; break; }
+            if ((pa - pb) >= 0 && (a - b) < 0) { cross = 'death'; crossDate = dates[i]; crossDaysAgo = closes.length - 1 - i; break; }
+        }
+
+        // Tendance : alignement cours / MA50 / MA200, la lecture la plus courante.
+        let trend = 'neutre';
+        if (ma50 != null && ma200 != null) {
+            if (last > ma50 && ma50 > ma200) trend = 'haussière';
+            else if (last < ma50 && ma50 < ma200) trend = 'baissière';
+        }
+
+        const rsi = this._rsi(closes, 14);
+        const window52 = closes.slice(-252);
+        const high52 = (price && price.fiftyTwoWeekHigh != null) ? price.fiftyTwoWeekHigh : Math.max(...window52);
+        const low52 = (price && price.fiftyTwoWeekLow != null) ? price.fiftyTwoWeekLow : Math.min(...window52);
+        const range52 = (high52 != null && low52 != null && high52 > low52)
+            ? (last - low52) / (high52 - low52) * 100
+            : null;
+
+        const volume = n(qs && qs.regularMarketVolume) ?? (price ? n(price.volume) : null);
+        const avgVolume = n(qs && qs.averageVolume);
+
+        return {
+            lastClose: last,
+            points: closes.length,
+            ma50, ma200,
+            priceVsMa50: ma50 == null ? null : (last - ma50) / ma50 * 100,
+            priceVsMa200: ma200 == null ? null : (last - ma200) / ma200 * 100,
+            maSeries: { dates, ma50: ma50s, ma200: ma200s },
+            cross, crossDate, crossDaysAgo,
+            trend,
+            rsi14: rsi,
+            rsiZone: rsi == null ? null : (rsi < 30 ? 'survente' : (rsi > 70 ? 'surachat' : 'neutre')),
+            high52, low52,
+            pctFromHigh52: high52 ? (last - high52) / high52 * 100 : null,
+            pctFromLow52: low52 ? (last - low52) / low52 * 100 : null,
+            rangePosition52: range52,
+            volume, avgVolume,
+            volumeRatio: (volume != null && avgVolume) ? volume / avgVolume : null
         };
     },
 
@@ -4947,6 +5047,8 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchHealth(null);
         this.renderResearchProfitability(null);
         this.renderResearchSentiment(null);
+        this.renderResearchTechnical(null);
+        this.researchAnalysis = null;
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
             this.researchAnalysis = a;
@@ -4955,6 +5057,8 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             this.renderResearchHealth(a);
             this.renderResearchProfitability(a);
             this.renderResearchSentiment(a);
+            this.renderResearchTechnical(a);
+            this.applyResearchMaOverlay();
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
 
@@ -5445,6 +5549,145 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         }
     },
 
+    // Jauge horizontale bornee (RSI, position dans un range) : trait = valeur courante.
+    _gauge(title, tip, value, min, max, legend, cls = '') {
+        const head = `<div class="sent-title">${title} ${this._kvHelp(tip)}</div>`;
+        if (value == null || !isFinite(value)) {
+            return `<div class="sent-block">${head}<div class="sent-empty">Non disponible</div></div>`;
+        }
+        const p = Math.max(0, Math.min(100, (value - min) / (max - min) * 100));
+        return `<div class="sent-block">${head}` +
+            `<div class="gauge-track ${cls}"><span class="gauge-mark" style="left:${p.toFixed(1)}%"></span></div>` +
+            `<div class="gauge-legend">${legend}</div></div>`;
+    },
+
+    renderResearchTechnical(a) {
+        const card = document.getElementById('researchTechCard');
+        const grid = document.getElementById('researchTechGrid');
+        const top = document.getElementById('researchTechTop');
+        const src = document.getElementById('researchTechSrc');
+        if (!card || !grid || !top) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            grid.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            top.innerHTML = '';
+            return;
+        }
+
+        const t = a.technical;
+        const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
+        const ND = 'Non disponible';
+
+        if (!t) {
+            top.innerHTML = '';
+            grid.innerHTML = `<div class="research-kv"><span class="v">${ND}</span></div>`;
+            if (src) src.textContent = 'Historique de cours insuffisant';
+            return;
+        }
+
+        const money = (x) => (x == null || !isFinite(x)) ? null : Utils.formatCurrency(x, cur);
+        const pct = (x) => (x == null || !isFinite(x)) ? null : Utils.formatPercent(x);
+        const num1 = (x) => (x == null || !isFinite(x))
+            ? null
+            : new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(x);
+
+        const kv = (label, valueStr, tip, extra = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${extra}</div>`;
+        const gap = (x) => x == null ? '' : `<span class="kv-cmp ${x >= 0 ? 'up' : 'dn'}">cours ${Utils.formatPercent(x)}</span>`;
+
+        // Bloc gauche : rappel de l'overlay trace sur le graphe de cours.
+        const maLegend =
+            `<div class="sent-block"><div class="sent-title">Moyennes mobiles ${this._kvHelp('Cours moyen des 50 et 200 dernières séances, tracés sur le graphe ci-dessus. Le cours au-dessus des deux moyennes traduit une dynamique haussière.')}</div>` +
+            `<div class="ma-legend">` +
+            `<span class="ma-leg"><span class="ma-line"></span>MM 50 <b>${money(t.ma50) || '—'}</b></span>` +
+            `<span class="ma-leg"><span class="ma-line ma200"></span>MM 200 <b>${money(t.ma200) || '—'}</b></span>` +
+            `</div></div>`;
+
+        top.innerHTML = maLegend + this._gauge(
+            'RSI 14 séances',
+            'Indicateur de momentum entre 0 et 100. Sous 30 le titre est dit survendu, au-dessus de 70 suracheté. À lire comme un excès de court terme, jamais comme un signal isolé.',
+            t.rsi14, 0, 100,
+            `<span>Survente <b>30</b></span><span><b>${num1(t.rsi14) || '—'}</b></span><span>Surachat <b>70</b></span>`,
+            'rsi'
+        );
+
+        const trendTag = { 'haussière': 'ok', 'baissière': 'warn', neutre: 'mid' }[t.trend] || 'mid';
+        const crossTxt = t.cross
+            ? `${t.cross === 'golden' ? 'Golden cross' : 'Death cross'} · ${Utils.formatDateDisplay(t.crossDate)}`
+            : null;
+        const crossTag = t.cross
+            ? `<span class="kv-tag ${t.cross === 'golden' ? 'ok' : 'warn'}">il y a ${t.crossDaysAgo} séances</span>`
+            : '';
+        const rsiTag = t.rsiZone
+            ? `<span class="kv-tag ${t.rsiZone === 'neutre' ? 'mid' : (t.rsiZone === 'survente' ? 'ok' : 'warn')}">${t.rsiZone}</span>`
+            : '';
+        const volTag = t.volumeRatio == null ? ''
+            : `<span class="kv-tag ${t.volumeRatio >= 1.5 ? 'warn' : 'mid'}">${t.volumeRatio >= 1.5 ? 'activité inhabituelle' : 'activité normale'}</span>`;
+
+        grid.innerHTML =
+            kv('Tendance', t.trend,
+                'Lecture de l\'alignement cours / MM 50 / MM 200. Haussière si le cours est au-dessus des deux moyennes et la MM 50 au-dessus de la MM 200.',
+                `<span class="kv-tag ${trendTag}">${t.trend}</span>`) +
+            kv('Moyenne mobile 50 j', money(t.ma50),
+                'Cours moyen des 50 dernières séances : référence de tendance court/moyen terme.',
+                gap(t.priceVsMa50)) +
+            kv('Moyenne mobile 200 j', money(t.ma200),
+                'Cours moyen des 200 dernières séances : référence de tendance long terme, très suivie par les gérants.',
+                gap(t.priceVsMa200)) +
+            kv('Dernier croisement', crossTxt,
+                'Golden cross : la MM 50 repasse au-dessus de la MM 200 (lu comme haussier). Death cross : l\'inverse. Signal retardé par construction.',
+                crossTag) +
+            kv('RSI 14', num1(t.rsi14),
+                'Force relative sur 14 séances. Sous 30 : excès de baisse possible ; au-dessus de 70 : excès de hausse.',
+                rsiTag) +
+            kv('Position 52 semaines', t.rangePosition52 == null ? null : Utils.formatPercent(t.rangePosition52, false),
+                'Où se situe le cours entre son plus bas et son plus haut des 52 dernières semaines. 0 % = au plus bas, 100 % = au plus haut.') +
+            kv('Écart au plus haut 52 sem.', pct(t.pctFromHigh52),
+                'Distance qui sépare le cours de son plus haut annuel. Un écart important n\'est pas une décote : il peut refléter une dégradation réelle.') +
+            kv('Écart au plus bas 52 sem.', pct(t.pctFromLow52),
+                'Distance qui sépare le cours de son plus bas annuel.') +
+            kv('Volume vs moyenne', t.volumeRatio == null ? null : `${num1(t.volumeRatio)} ×`,
+                'Volume du jour rapporté au volume moyen. Au-delà de 1,5 ×, un événement mobilise le marché sur la valeur.',
+                volTag);
+
+        if (src) src.textContent = `Calculé sur ${t.points} séances de cotation`;
+    },
+
+    // Trace MM 50 / MM 200 par-dessus la courbe de cours existante. Les moyennes
+    // viennent de l'analyse (15 mois d'historique) : rien n'est re-telecharge, et
+    // les points hors de cette fenetre restent vides plutot qu'approximes.
+    applyResearchMaOverlay() {
+        const chart = this.researchChart;
+        if (!chart || !chart.data || !Array.isArray(chart.data.datasets) || !chart.data.datasets.length) return;
+        const t = this.researchAnalysis && this.researchAnalysis.technical;
+        const dates = this.researchChartDates || [];
+        const ink = this.chartInk();
+
+        const extra = [];
+        if (t && t.maSeries && dates.length) {
+            const idx = {};
+            t.maSeries.dates.forEach((d, i) => { idx[d] = i; });
+            const pick = (serie) => dates.map(d => (idx[d] === undefined ? null : serie[idx[d]]));
+            const add = (label, serie, color, dash) => {
+                const data = pick(serie);
+                if (!data.some(v => v != null)) return;
+                extra.push({
+                    label, data, borderColor: color, backgroundColor: 'transparent',
+                    borderWidth: 1.4, borderDash: dash, fill: false, tension: 0,
+                    pointRadius: 0, pointHoverRadius: 0, spanGaps: false
+                });
+            };
+            add('MM 50', t.maSeries.ma50, ink.acc, []);
+            add('MM 200', t.maSeries.ma200, ink.tick, [5, 4]);
+        }
+
+        chart.data.datasets = [chart.data.datasets[0], ...extra];
+        chart.update();
+    },
+
     renderResearchPosition(symbol, cur, price) {
         const card = document.getElementById('researchPositionCard');
         const notHeld = document.getElementById('researchNotHeld');
@@ -5537,6 +5780,14 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         grid.innerHTML = rows.join('');
     },
 
+    // Libelle du tooltip du graphe de cours : la serie principale reste nue,
+    // les moyennes mobiles sont prefixees par leur nom.
+    _researchTip(ctx, cur) {
+        if (ctx.parsed.y == null) return null;
+        const v = Utils.formatCurrency(ctx.parsed.y, cur);
+        return ctx.datasetIndex ? `${ctx.dataset.label} : ${v}` : v;
+    },
+
     async renderResearchChart(symbol) {
         const canvas = document.getElementById('researchChart');
         if (!canvas) return;
@@ -5554,6 +5805,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         const history = await APIService.getDailyHistory(symbol, start, end, h && h.avgPrice, h && h.currentPrice);
         if (this.researchSymbol !== symbol) return;
         const dates = Object.keys(history).sort();
+        this.researchChartDates = dates;   // dates brutes : alignement de l'overlay MM
         const labels = dates.map(d => Utils.formatDateDisplay(d));
         const values = dates.map(d => history[d]);
         const rising = values.length && values[values.length - 1] >= values[0];
@@ -5565,9 +5817,9 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             this.researchChart.data.datasets[0].data = values;
             this.researchChart.data.datasets[0].borderColor = lineColor;
             this.researchChart.data.datasets[0].label = symbol;
-            this.researchChart.options.plugins.tooltip.callbacks.label = (ctx) => Utils.formatCurrency(ctx.parsed.y, cur);
+            this.researchChart.options.plugins.tooltip.callbacks.label = (ctx) => this._researchTip(ctx, cur);
             this.researchChart.options.scales.y.ticks.callback = (v) => Utils.formatCurrency(v, cur);
-            this.researchChart.update();
+            this.applyResearchMaOverlay();   // re-aligne les MM sur la nouvelle plage
             return;
         }
 
@@ -5580,7 +5832,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                 interaction: { mode: 'index', axis: 'x', intersect: false },
                 plugins: {
                     legend: { display: false },
-                    tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => Utils.formatCurrency(ctx.parsed.y, cur) } }
+                    tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => this._researchTip(ctx, cur) } }
                 },
                 scales: {
                     x: { grid: { display: false }, border: { display: false }, ticks: { color: ink.tick, font: { size: 11 }, maxTicksLimit: 7 } },
@@ -5588,6 +5840,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                 }
             }
         });
+        this.applyResearchMaOverlay();
     },
 
     async renderResearchNews(symbol, name) {

@@ -54,6 +54,7 @@ const QUOTE_SUMMARY = {
     dividendYield: 0.005, dividendRate: 0.96, payoutRatio: 0.15,
     beta: 1.24, fiftyTwoWeekHigh: 210, fiftyTwoWeekLow: 150,
     fiftyDayAverage: 195, twoHundredDayAverage: 185,
+    regularMarketVolume: 64000000, averageVolume: 58000000, averageVolume10Days: 61000000,
     sharesOutstanding: 15500000000, floatShares: 15400000000,
     sharesShort: 120000000, shortRatio: 1.5, shortPercentOfFloat: 0.008,
     heldPercentInstitutions: 0.61, heldPercentInsiders: 0.0007,
@@ -110,7 +111,10 @@ function buildHistory(fromStr, toStr) {
     const from = new Date(fromStr);
     const to = new Date(toStr);
     let price = 80;
-    for (const d = new Date(from); d <= to; d.setDate(d.getDate() + 7)) {
+    // Pas quotidien sur les fenêtres courtes (moyennes mobiles / RSI calculables),
+    // hebdomadaire au-delà de ~3 ans pour ne pas générer des milliers de points.
+    const step = (to - from) / 86400000 > 1200 ? 7 : 1;
+    for (const d = new Date(from); d <= to; d.setDate(d.getDate() + step)) {
         price += Math.sin(d.getTime() / 6e9) * 4 + 1.5;
         out[d.toISOString().slice(0, 10)] = Math.round(price * 100) / 100;
     }

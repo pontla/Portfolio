@@ -1705,6 +1705,36 @@ input:focus {
 }
 .pt-legend b { color: var(--text-primary); font-weight: 600; }
 
+/* Jauges techniques : RSI 14 et position dans le range 52 semaines */
+.gauge-track {
+    position: relative; height: 10px; margin: 20px 0 8px;
+    border-radius: 999px; background: var(--tile);
+}
+/* Zones RSI : < 30 survente (vert), > 70 surachat (rouge) */
+.gauge-track.rsi {
+    background: linear-gradient(to right,
+        color-mix(in srgb, var(--up) 40%, transparent) 0 30%,
+        var(--tile) 30% 70%,
+        color-mix(in srgb, var(--dn) 40%, transparent) 70% 100%);
+}
+.gauge-fill { position: absolute; top: 0; left: 0; height: 100%; border-radius: 999px; background: color-mix(in srgb, var(--acc) 30%, transparent); }
+.gauge-mark { position: absolute; top: -4px; width: 2px; height: 18px; border-radius: 1px; background: var(--text-primary); }
+.gauge-legend {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+}
+.gauge-legend b { color: var(--text-primary); font-weight: 600; }
+
+/* Legende de l'overlay moyennes mobiles trace sur le graphe de cours */
+.ma-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+.ma-leg {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-ui); font-size: 11px; color: var(--text-secondary);
+}
+.ma-leg b { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
+.ma-line { width: 16px; height: 0; flex: none; border-top: 2px solid var(--acc); }
+.ma-line.ma200 { border-top-style: dashed; border-top-color: var(--text-secondary); }
+
 /* Pastille de lecture rapide d'un ratio (seuils documentes dans App._healthFlag) */
 .kv-tag {
     margin-top: 2px; align-self: flex-start;

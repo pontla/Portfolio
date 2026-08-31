@@ -1000,8 +1000,9 @@ describe('AnalysisService._normalize', () => {
         // peers : sans le ticker lui-meme, max 4
         expect(out.peersSymbols).toEqual(['AAPL', 'GOOGL', 'AMZN', 'META']);
 
-        // champs calcules dans des phases ulterieures
+        // 2 seules seances d'historique -> pas d'analyse technique possible
         expect(out.technical).toBeNull();
+        // champ calcule en phase 11
         expect(out.score).toBeNull();
         expect(out.meta.errors).toEqual([]);
     });
@@ -1023,6 +1024,74 @@ describe('AnalysisService._normalize', () => {
         expect(out.peersSymbols).toEqual([]);
         expect(out.meta.fmpUnavailable).toBe(true);
         expect(JSON.stringify(out)).not.toContain('NaN');
+    });
+});
+
+describe('AnalysisService : analyse technique (phase 7)', () => {
+    const { AnalysisService: S } = app;
+
+    it('_sma : moyenne mobile simple, null pendant la periode de chauffe', () => {
+        const out = S._sma([1, 2, 3, 4, 5], 3);
+        expect(out[0]).toBeNull();
+        expect(out[1]).toBeNull();
+        expect(out[2]).toBeCloseTo(2, 10);
+        expect(out[4]).toBeCloseTo(4, 10);
+    });
+
+    it('_rsi : 100 quand la serie ne fait que monter, null si trop courte', () => {
+        const up = Array.from({ length: 30 }, (_, i) => 100 + i);
+        expect(S._rsi(up, 14)).toBe(100);
+        const down = Array.from({ length: 30 }, (_, i) => 200 - i);
+        expect(S._rsi(down, 14)).toBeCloseTo(0, 6);
+        expect(S._rsi([1, 2, 3], 14)).toBeNull();
+    });
+
+    it('_technicalBlock : MM, RSI, position 52 semaines et ratio de volume', () => {
+        // 300 seances lineairement haussieres : 100 -> 399
+        const history = {};
+        const start = new Date('2024-01-01T00:00:00Z');
+        for (let i = 0; i < 300; i++) {
+            const d = new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10);
+            history[d] = 100 + i;
+        }
+        const t = S._technicalBlock(history,
+            { fiftyTwoWeekHigh: 399, fiftyTwoWeekLow: 100, volume: null },
+            { regularMarketVolume: 12e6, averageVolume: 8e6 });
+
+        expect(t.points).toBe(300);
+        expect(t.lastClose).toBe(399);
+        expect(t.ma50).toBeCloseTo(374.5, 6);     // moyenne de 350..399
+        expect(t.ma200).toBeCloseTo(299.5, 6);    // moyenne de 200..399
+        expect(t.trend).toBe('haussière');
+        expect(t.cross).toBeNull();               // aucun croisement sur une serie monotone
+        expect(t.rsi14).toBe(100);
+        expect(t.rsiZone).toBe('surachat');
+        expect(t.rangePosition52).toBeCloseTo(100, 6);
+        expect(t.pctFromHigh52).toBeCloseTo(0, 6);
+        expect(t.volumeRatio).toBeCloseTo(1.5, 6);
+        expect(t.maSeries.dates.length).toBe(300);
+        expect(JSON.stringify(t)).not.toContain('NaN');
+    });
+
+    it('_technicalBlock : detecte un golden cross apres un retournement', () => {
+        // 260 seances en baisse puis 120 en hausse : la MM50 repasse au-dessus de la MM200
+        const history = {};
+        const start = new Date('2023-01-01T00:00:00Z');
+        const vals = [];
+        for (let i = 0; i < 260; i++) vals.push(400 - i);
+        for (let i = 0; i < 120; i++) vals.push(140 + i * 3);
+        vals.forEach((v, i) => {
+            history[new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10)] = v;
+        });
+        const t = S._technicalBlock(history, {}, {});
+        expect(t.cross).toBe('golden');
+        expect(t.crossDaysAgo).toBeGreaterThan(0);
+        expect(t.crossDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('_technicalBlock : historique trop court -> null (pas de NaN)', () => {
+        expect(S._technicalBlock({ '2025-01-02': 10, '2025-01-03': 11 }, {}, {})).toBeNull();
+        expect(S._technicalBlock(null, {}, {})).toBeNull();
     });
 });
 
