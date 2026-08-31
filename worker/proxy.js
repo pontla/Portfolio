@@ -466,29 +466,40 @@ async function decryptSecret(env, b64) {
     return new TextDecoder().decode(pt);
 }
 
-async function listConfiguredProviders(env, userId) {
-    if (!env.WEBSEARCH_KV) return [];
-    const list = await env.WEBSEARCH_KV.list({ prefix: `aikey:${userId}:` });
-    return list.keys.map(k => k.name.split(':').pop());
+// Appel PostgREST avec le JWT de l'appelant (RLS s'applique).
+function supabaseRest(env, request, method, path, body) {
+    const headers = {
+        apikey: env.SUPABASE_ANON_KEY,
+        Authorization: request.headers.get('Authorization'),
+        'Content-Type': 'application/json'
+    };
+    if (method === 'POST') headers.Prefer = 'resolution=merge-duplicates,return=representation';
+    return fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
 }
 
-// Reporte l'etat non secret (fournisseurs configures + selection) dans user_settings,
-// pour que le navigateur le lise via RLS. Best-effort.
-async function syncAiConfigToSupabase(request, env, userId, configured, selectedProvider) {
-    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return;
-    const body = { user_id: userId, ai_providers_configured: configured };
-    if (selectedProvider) body.ai_provider = selectedProvider;
-    else if (!configured.length) body.ai_provider = null;
-    await fetch(`${env.SUPABASE_URL}/rest/v1/user_settings`, {
-        method: 'POST',
-        headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: request.headers.get('Authorization'),
-            'Content-Type': 'application/json',
-            Prefer: 'resolution=merge-duplicates'
-        },
-        body: JSON.stringify(body)
-    }).catch(() => { /* best-effort */ });
+// Source de verite du marqueur "quels fournisseurs ont une cle" = la ligne
+// user_settings (et non un list() KV, dont la coherence est differee).
+async function readConfiguredProviders(env, request, userId) {
+    const res = await supabaseRest(env, request, 'GET',
+        `/user_settings?user_id=eq.${userId}&select=ai_providers_configured`);
+    if (!res.ok) return [];
+    const rows = await res.json().catch(() => []);
+    return (rows[0] && rows[0].ai_providers_configured) || [];
+}
+
+async function writeAiConfig(request, env, userId, body) {
+    const res = await supabaseRest(env, request, 'POST', '/user_settings',
+        { user_id: userId, updated_at: new Date().toISOString(), ...body });
+    if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        const err = new Error(`Enregistrement du compte echoue (HTTP ${res.status}) ${detail.slice(0, 300)}`);
+        err.statusCode = 502;
+        throw err;
+    }
 }
 
 async function enforceUserAiQuota(env, userId) {
@@ -511,8 +522,9 @@ async function handleAiKeySet(request, env) {
     if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
     if (typeof key !== 'string' || key.trim().length < 8) return jsonResponse({ error: 'Cle API invalide' }, 400);
     await env.WEBSEARCH_KV.put(`aikey:${userId}:${provider}`, await encryptSecret(env, key.trim()));
-    const configured = await listConfiguredProviders(env, userId);
-    await syncAiConfigToSupabase(request, env, userId, configured, provider);
+    const current = await readConfiguredProviders(env, request, userId);
+    const configured = [...new Set([...current, provider])];
+    await writeAiConfig(request, env, userId, { ai_provider: provider, ai_providers_configured: configured });
     return jsonResponse({ ok: true, provider, configured });
 }
 
@@ -521,8 +533,11 @@ async function handleAiKeyDelete(request, env, url) {
     const provider = url.searchParams.get('provider');
     if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
     if (env.WEBSEARCH_KV) await env.WEBSEARCH_KV.delete(`aikey:${userId}:${provider}`);
-    const configured = await listConfiguredProviders(env, userId);
-    await syncAiConfigToSupabase(request, env, userId, configured, null);
+    const current = await readConfiguredProviders(env, request, userId);
+    const configured = current.filter(p => p !== provider);
+    const body = { ai_providers_configured: configured };
+    if (!configured.length) body.ai_provider = null;
+    await writeAiConfig(request, env, userId, body);
     return jsonResponse({ ok: true, configured });
 }
 

@@ -240,6 +240,25 @@ describe('/ai/* : cles IA jamais exposees au navigateur', () => {
         });
         expect(res.status).toBe(401);
     });
+
+    it('POST /ai/key : 502 explicite si l ecriture user_settings echoue (RLS / schema)', async () => {
+        const env = AI_ENV();
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', (_u, opts) => (opts.method === 'GET'
+                ? { ok: true, json: async () => ([]) }
+                : { ok: false, status: 400, text: async () => '{"code":"42703","message":"column ... does not exist"}' })]
+        ]));
+
+        const res = await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        const data = await res.json();
+
+        expect(res.status).toBe(502);
+        expect(data.error).toMatch(/42703|HTTP 400/);
+    });
 });
 
 describe('/quote', () => {
