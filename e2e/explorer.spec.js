@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { bootApp, openResearch } from './helpers.js';
+import { bootApp, openResearch, runDeepAnalysis } from './helpers.js';
 
 test.beforeEach(async ({ page }) => {
     await bootApp(page);
@@ -420,4 +420,28 @@ test('mobile : la carte d’en-tête reste lisible et sans scroll horizontal', a
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth
     );
     expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('analyse approfondie : aucun appel FMP avant le clic sur le bouton', async ({ page }) => {
+    const fmpCalls = [];
+    await page.route('**/fmp?**', (route) => {
+        fmpCalls.push(route.request().url());
+        return route.continue();
+    });
+
+    await openResearch(page, 'AAPL', { deep: false });
+
+    // Sections rapides servies, analyse approfondie en attente d'une action.
+    await expect(page.locator('#researchKeyGrid .research-kv').first()).toBeVisible();
+    await expect(page.locator('#researchDeepCard')).toBeVisible();
+    await expect(page.locator('#researchScoreCard')).toBeHidden();
+    await expect(page.locator('#researchValuationCard')).toBeHidden();
+    expect(fmpCalls).toHaveLength(0);
+
+    await runDeepAnalysis(page);
+
+    await expect(page.locator('#researchScoreCard')).toBeVisible();
+    await expect(page.locator('#researchValuationCard')).toBeVisible();
+    await expect(page.locator('#researchDeepCard')).toBeHidden();
+    expect(fmpCalls.length).toBeGreaterThan(0);
 });

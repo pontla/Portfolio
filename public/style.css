@@ -1563,6 +1563,28 @@ input:focus {
 }
 .research-notheld[hidden] { display: none; }
 
+.research-deep {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+.research-deep-txt h3 { margin: 0 0 4px; font-size: 15px; }
+.research-deep-txt p {
+    margin: 0;
+    max-width: 52ch;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.45;
+}
+.research-deep .btn-primary { flex: 0 0 auto; }
+.research-deep .btn-primary:disabled { opacity: .6; cursor: default; }
+@media (max-width: 600px) {
+    .research-deep { flex-direction: column; align-items: stretch; }
+    .research-deep .btn-primary { width: 100%; }
+}
+
 .research-chart-wrap { position: relative; height: 260px; }
 
 .research-kv-grid {

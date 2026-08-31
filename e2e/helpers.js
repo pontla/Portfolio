@@ -288,7 +288,7 @@ export async function bootApp(page, opts = {}) {
 }
 
 /** Ouvre l'onglet Explorer et lance l'analyse d'un symbole via la recherche. */
-export async function openResearch(page, symbol = 'AAPL') {
+export async function openResearch(page, symbol = 'AAPL', { deep = true } = {}) {
     await page.locator('button[data-tab="research"]:visible').first().click();
     await page.locator('#view-research').waitFor({ state: 'visible' });
 
@@ -300,4 +300,16 @@ export async function openResearch(page, symbol = 'AAPL') {
 
     await page.locator('#researchContent').waitFor({ state: 'visible' });
     await page.locator('#researchSymbol').filter({ hasText: symbol }).waitFor();
+
+    // L'analyse approfondie (et ses appels FMP) est desormais a la demande :
+    // la majorite des tests en a besoin, d'ou le clic par defaut.
+    if (deep) await runDeepAnalysis(page);
+}
+
+/** Clique sur "Lancer l'analyse approfondie" si la carte d'appel est affichee. */
+export async function runDeepAnalysis(page) {
+    const card = page.locator('#researchDeepCard');
+    if (!(await card.isVisible())) return;
+    await page.locator('#researchDeepBtn').click();
+    await card.waitFor({ state: 'hidden' });
 }

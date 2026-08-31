@@ -794,6 +794,13 @@ const AnalysisUtils = {
 const AnalysisService = {
     _cache: {},
 
+    // Analyse deja en cache et encore fraiche, sinon null : permet a l'UI de
+    // reafficher une analyse sans reconsommer le quota FMP.
+    cached(symbol) {
+        const hit = this._cache[(symbol || '').trim().toUpperCase()];
+        return (hit && (Date.now() - hit.ts < 900000)) ? hit.data : null;
+    },
+
     // Agrege toutes les sources pour un ticker et renvoie un StockAnalysis.
     // Cache 15 min sur l'agregat complet (les sous-appels ont leur propre TTL).
     async build(symbol) {
@@ -5149,6 +5156,9 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             });
         });
 
+        const deepBtn = document.getElementById('researchDeepBtn');
+        if (deepBtn) deepBtn.onclick = () => this.runDeepAnalysis();
+
         const addBtn = document.getElementById('researchAddBtn');
         if (addBtn) addBtn.onclick = () => {
             (document.getElementById('addTransactionBtn') || document.getElementById('addTransactionFab'))?.click();
@@ -5248,8 +5258,25 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchQuick();
         lucide.createIcons();
 
-        // Analyse approfondie (phases 2+) : chargee en arriere-plan pour ne pas
-        // retarder l'affichage des sections rapides ci-dessus.
+        // Analyse approfondie (phases 2+) : elle consomme le quota FMP (250
+        // requetes/jour), donc elle n'est plus declenchee automatiquement.
+        // L'utilisateur la lance via le bouton dedie ; si elle est deja en
+        // cache pour ce symbole, on la reaffiche sans nouvelle requete.
+        this.clearResearchAnalysis();
+        const cachedAnalysis = AnalysisService.cached(symbol);
+        if (cachedAnalysis) this.applyResearchAnalysis(symbol, cachedAnalysis);
+        else this.showResearchDeepCta();
+    },
+
+    // Cartes alimentees uniquement par l'analyse approfondie.
+    DEEP_CARD_IDS: ['researchScoreCard', 'researchValuationCard', 'researchGrowthCard',
+        'researchHealthCard', 'researchProfitCard', 'researchSentimentCard', 'researchTechCard',
+        'researchDivCard', 'researchPeersCard', 'researchQualCard'],
+
+    // Remet les cartes d'analyse approfondie a vide et les masque : tant que
+    // l'analyse n'est pas lancee, elles n'ont rien a montrer.
+    clearResearchAnalysis() {
+        this.researchAnalysis = null;
         this.renderResearchScore(null);
         this.renderResearchValuation(null);
         this.renderResearchGrowth(null);
@@ -5260,22 +5287,76 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchDividend(null);
         this.renderResearchQualitative(null);
         this.renderResearchPeers(null);
-        this.researchAnalysis = null;
-        AnalysisService.build(symbol).then(a => {
-            if (this.researchSymbol !== symbol || !a) return;
-            this.researchAnalysis = a;
-            this.renderResearchScore(a);
-            this.renderResearchValuation(a);
-            this.renderResearchGrowth(a);
-            this.renderResearchHealth(a);
-            this.renderResearchProfitability(a);
-            this.renderResearchSentiment(a);
-            this.renderResearchTechnical(a);
-            this.renderResearchDividend(a);
-            this.renderResearchQualitative(a);
-            this.renderResearchPeers(a);
-            this.applyResearchMaOverlay();
-        }).catch(e => console.warn('AnalysisService.build KO', e));
+        for (const id of this.DEEP_CARD_IDS) {
+            const el = document.getElementById(id);
+            if (el) el.hidden = true;
+        }
+    },
+
+    applyResearchAnalysis(symbol, a) {
+        if (this.researchSymbol !== symbol || !a) return;
+        this.researchAnalysis = a;
+        this.renderResearchScore(a);
+        this.renderResearchValuation(a);
+        this.renderResearchGrowth(a);
+        this.renderResearchHealth(a);
+        this.renderResearchProfitability(a);
+        this.renderResearchSentiment(a);
+        this.renderResearchTechnical(a);
+        this.renderResearchDividend(a);
+        this.renderResearchQualitative(a);
+        this.renderResearchPeers(a);
+        this.applyResearchMaOverlay();
+        this.hideResearchDeepCta();
+    },
+
+    showResearchDeepCta() {
+        const card = document.getElementById('researchDeepCard');
+        const btn = document.getElementById('researchDeepBtn');
+        if (!card || !btn) return;
+        card.hidden = false;
+        btn.disabled = false;
+        btn.textContent = "Lancer l'analyse approfondie";
+    },
+
+    hideResearchDeepCta() {
+        const card = document.getElementById('researchDeepCard');
+        if (card) card.hidden = true;
+    },
+
+    // Declenchee uniquement par le bouton : c'est le seul point d'entree qui
+    // consomme le quota FMP.
+    async runDeepAnalysis() {
+        const symbol = this.researchSymbol;
+        if (!symbol || this.deepAnalysisRunning) return;
+        const btn = document.getElementById('researchDeepBtn');
+        const msg = document.getElementById('researchDeepMsg');
+        this.deepAnalysisRunning = true;
+        if (btn) { btn.disabled = true; btn.textContent = 'Analyse en cours…'; }
+        try {
+            // Etat "Chargement…" des cartes pendant la requete.
+            this.renderResearchScore(null);
+            this.renderResearchValuation(null);
+            this.renderResearchGrowth(null);
+            this.renderResearchHealth(null);
+            this.renderResearchProfitability(null);
+            this.renderResearchSentiment(null);
+            this.renderResearchTechnical(null);
+            this.renderResearchDividend(null);
+            const a = await AnalysisService.build(symbol);
+            if (this.researchSymbol !== symbol) return;
+            if (a) { this.applyResearchAnalysis(symbol, a); lucide.createIcons(); }
+            else if (msg) msg.textContent = 'Analyse indisponible pour cette valeur.';
+        } catch (e) {
+            console.warn('AnalysisService.build KO', e);
+            if (msg) msg.textContent = 'Analyse indisponible : erreur de récupération des données.';
+        } finally {
+            this.deepAnalysisRunning = false;
+            if (btn && !document.getElementById('researchDeepCard')?.hidden) {
+                btn.disabled = false;
+                btn.textContent = 'Réessayer';
+            }
+        }
     },
 
     // Ancre la bulle a gauche ou a droite du "i" si la version centree sortirait de la carte.
