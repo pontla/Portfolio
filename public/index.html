@@ -107,8 +107,8 @@
             </div>
             <div class="feature-card">
                 <i data-lucide="lock"></i>
-                <h3>Vos clés IA restent chez vous</h3>
-                <p>Les clés d'API des modèles IA ne sont stockées que dans votre navigateur, jamais sur nos serveurs.</p>
+                <h3>Vos clés IA sont chiffrées</h3>
+                <p>Votre clé d'API IA est chiffrée côté serveur, ne sert qu'à générer vos résumés et n'est jamais renvoyée au navigateur ni partagée.</p>
             </div>
         </section>
 
@@ -817,9 +817,9 @@
                 <input type="file" id="importCsvInput" accept=".csv,text/csv" style="display:none;">
 
                 <p style="font-size:13px; color:#666; margin:20px 0 10px 0;">
-                    Résumé IA (optionnel) — choisis ton fournisseur, ta clé reste dans ton navigateur
-                    (localStorage), jamais envoyée à un serveur autre que celui du fournisseur choisi.
-                    Aucun fournisseur = résumé factuel sans IA.
+                    Résumé IA (optionnel) — choisis ton fournisseur et saisis ta clé une fois.
+                    Elle est chiffrée côté serveur, liée à ton compte (donc dispo sur tous tes
+                    appareils) et n'est jamais réaffichée. Aucun fournisseur = résumé factuel sans IA.
                 </p>
                 <div class="form-group" style="margin-bottom:10px;">
                     <select id="aiProviderSelect" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
@@ -946,7 +946,7 @@
     </div>
 
     <!-- App Logic -->
-    <script src="js/app.js?v=99"></script>
+    <script src="js/app.js?v=100"></script>
 </body>
 
 </html>

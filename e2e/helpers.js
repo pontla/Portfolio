@@ -120,6 +120,8 @@ export async function bootApp(page) {
         if (p.endsWith('/sector')) return json({ sector: 'Technology' });
         if (p.endsWith('/earnings')) return json({});
         if (p.endsWith('/websearch')) return json({ results: [] });
+        if (p === '/ai/key') return json({ ok: true, provider: 'anthropic', configured: ['anthropic'] });
+        if (p === '/ai/insights') return json({ text: '{"summary":"ok","portfolio":[]}' });
         return json({});
     });
 

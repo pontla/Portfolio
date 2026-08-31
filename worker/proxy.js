@@ -15,6 +15,12 @@
  *   GET /earnings?symbol=SYM -> { date, hour, epsEstimate, revenueEstimate } | { date: null } (Finnhub, actions US uniquement)
  *   GET /fundamentals?symbol=SYM -> { price, currency, 52W hi/lo, volume, name, exchange (Yahoo) + PER, BPA, rendement, beta, ROE... (Finnhub, actions US) }
  *   GET /websearch?q=QUERY -> { results: [{ title, url, content, publishedDate }] } (Tavily, secret TAVILY_API_KEY requis)
+ *   POST /ai/key            { provider, key }  (Bearer JWT Supabase) -> chiffre + stocke la cle IA de l'utilisateur (KV), jamais renvoyee
+ *   DELETE /ai/key?provider=P                  (Bearer JWT Supabase) -> supprime la cle stockee
+ *   POST /ai/insights       { provider, prompt, liveSearch }  (Bearer JWT Supabase) -> { text }  (appel au fournisseur cote worker)
+ *
+ * Vars publiques (wrangler.proxy.toml [vars]) : SUPABASE_URL, SUPABASE_ANON_KEY.
+ * Secret requis pour /ai/* : AI_ENC_KEY (32 octets base64) -> `wrangler secret put AI_ENC_KEY -c wrangler.proxy.toml`.
  */
 
 const YAHOO_HEADERS = {
@@ -46,8 +52,8 @@ function corsHeaders(origin = '*') {
     return {
         'Access-Control-Allow-Origin': origin || '*',
         'Vary': 'Origin',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     };
 }
 
@@ -325,7 +331,227 @@ async function handleSearch(query) {
     return jsonResponse(results, 200, 3600); // cache 1h
 }
 
-async function route(url, env) {
+/* ======================= RESUME IA (cles jamais exposees au navigateur) =======================
+ * La cle API du fournisseur IA de l'utilisateur est stockee chiffree (AES-GCM) dans
+ * WEBSEARCH_KV sous `aikey:<userId>:<provider>`. Le navigateur n'envoie sa cle qu'une
+ * fois (POST /ai/key) et ne la recupere jamais. /ai/insights execute l'appel au
+ * fournisseur cote worker. L'identite vient du JWT Supabase (verifie via /auth/v1/user).
+ */
+
+async function httpErr(name, res) {
+    let detail = '';
+    try { detail = (await res.text()).slice(0, 200); } catch (e) { /* corps illisible */ }
+    const err = new Error(`${name} API HTTP ${res.status}${detail ? ' : ' + detail : ''}`);
+    err.statusCode = 502;
+    return err;
+}
+
+const AI_PROVIDERS = {
+    anthropic: {
+        async call(apiKey, prompt, liveSearch) {
+            const body = { model: 'claude-sonnet-4-5', max_tokens: 4096, messages: [{ role: 'user', content: prompt }] };
+            if (liveSearch) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }];
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) throw await httpErr('Anthropic', res);
+            const data = await res.json();
+            return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+        }
+    },
+    openai: {
+        async call(apiKey, prompt, liveSearch) {
+            const body = { model: 'gpt-4.1', input: prompt };
+            if (liveSearch) body.tools = [{ type: 'web_search_preview' }];
+            const res = await fetch('https://api.openai.com/v1/responses', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) throw await httpErr('OpenAI', res);
+            const data = await res.json();
+            const msg = (data.output || []).find(o => o.type === 'message');
+            const block = msg && (msg.content || []).find(c => c.type === 'output_text');
+            return (block && block.text) || '';
+        }
+    },
+    gemini: {
+        async call(apiKey, prompt) {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${encodeURIComponent(apiKey)}`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            if (!res.ok) throw await httpErr('Gemini', res);
+            const data = await res.json();
+            const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+            return parts.map(p => p.text || '').join('\n').trim();
+        }
+    },
+    grok: {
+        async call(apiKey, prompt, liveSearch) {
+            const res = await fetch('https://api.x.ai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: 'grok-4-latest',
+                    messages: [{ role: 'user', content: prompt }],
+                    search_parameters: { mode: liveSearch ? 'auto' : 'off' }
+                })
+            });
+            if (!res.ok) throw await httpErr('Grok', res);
+            const data = await res.json();
+            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+        }
+    },
+    groq: {
+        async call(apiKey, prompt) {
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.3
+                })
+            });
+            if (!res.ok) throw await httpErr('Groq', res);
+            const data = await res.json();
+            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+        }
+    }
+};
+
+function authError(msg) {
+    const err = new Error(msg);
+    err.statusCode = 401;
+    return err;
+}
+
+async function verifySupabaseJwt(request, env) {
+    const auth = request.headers.get('Authorization') || '';
+    if (!auth.startsWith('Bearer ') || !env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+        throw authError('Authentification requise');
+    }
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: auth }
+    });
+    if (!res.ok) throw authError('Session invalide');
+    const user = await res.json().catch(() => null);
+    if (!user || !user.id) throw authError('Session invalide');
+    return user.id;
+}
+
+async function importEncKey(env) {
+    const raw = Uint8Array.from(atob(env.AI_ENC_KEY), c => c.charCodeAt(0));
+    return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptSecret(env, text) {
+    const key = await importEncKey(env);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+    const blob = new Uint8Array(iv.length + ct.length);
+    blob.set(iv);
+    blob.set(ct, iv.length);
+    return btoa(String.fromCharCode(...blob));
+}
+
+async function decryptSecret(env, b64) {
+    const key = await importEncKey(env);
+    const blob = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12) }, key, blob.slice(12));
+    return new TextDecoder().decode(pt);
+}
+
+async function listConfiguredProviders(env, userId) {
+    if (!env.WEBSEARCH_KV) return [];
+    const list = await env.WEBSEARCH_KV.list({ prefix: `aikey:${userId}:` });
+    return list.keys.map(k => k.name.split(':').pop());
+}
+
+// Reporte l'etat non secret (fournisseurs configures + selection) dans user_settings,
+// pour que le navigateur le lise via RLS. Best-effort.
+async function syncAiConfigToSupabase(request, env, userId, configured, selectedProvider) {
+    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return;
+    const body = { user_id: userId, ai_providers_configured: configured };
+    if (selectedProvider) body.ai_provider = selectedProvider;
+    else if (!configured.length) body.ai_provider = null;
+    await fetch(`${env.SUPABASE_URL}/rest/v1/user_settings`, {
+        method: 'POST',
+        headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: request.headers.get('Authorization'),
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(body)
+    }).catch(() => { /* best-effort */ });
+}
+
+async function enforceUserAiQuota(env, userId) {
+    const kv = env && env.WEBSEARCH_KV;
+    if (!kv) return;
+    const key = `airl:${userId}:${new Date().toISOString().slice(0, 10)}`;
+    const count = parseInt(await kv.get(key)) || 0;
+    if (count >= 50) {
+        const err = new Error('Quota quotidien de resumes IA atteint');
+        err.statusCode = 429;
+        throw err;
+    }
+    await kv.put(key, String(count + 1), { expirationTtl: 172800 });
+}
+
+async function handleAiKeySet(request, env) {
+    const userId = await verifySupabaseJwt(request, env);
+    if (!env.AI_ENC_KEY || !env.WEBSEARCH_KV) return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
+    const { provider, key } = await request.json().catch(() => ({}));
+    if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
+    if (typeof key !== 'string' || key.trim().length < 8) return jsonResponse({ error: 'Cle API invalide' }, 400);
+    await env.WEBSEARCH_KV.put(`aikey:${userId}:${provider}`, await encryptSecret(env, key.trim()));
+    const configured = await listConfiguredProviders(env, userId);
+    await syncAiConfigToSupabase(request, env, userId, configured, provider);
+    return jsonResponse({ ok: true, provider, configured });
+}
+
+async function handleAiKeyDelete(request, env, url) {
+    const userId = await verifySupabaseJwt(request, env);
+    const provider = url.searchParams.get('provider');
+    if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
+    if (env.WEBSEARCH_KV) await env.WEBSEARCH_KV.delete(`aikey:${userId}:${provider}`);
+    const configured = await listConfiguredProviders(env, userId);
+    await syncAiConfigToSupabase(request, env, userId, configured, null);
+    return jsonResponse({ ok: true, configured });
+}
+
+async function handleAiInsights(request, env) {
+    const userId = await verifySupabaseJwt(request, env);
+    if (!env.WEBSEARCH_KV || !env.AI_ENC_KEY) return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
+    const { provider, prompt, liveSearch } = await request.json().catch(() => ({}));
+    if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
+    if (typeof prompt !== 'string' || !prompt.trim()) return jsonResponse({ error: 'prompt requis' }, 400);
+    const enc = await env.WEBSEARCH_KV.get(`aikey:${userId}:${provider}`);
+    if (!enc) return jsonResponse({ error: 'Aucune cle enregistree pour ce fournisseur' }, 400);
+    await enforceUserAiQuota(env, userId);
+    const apiKey = await decryptSecret(env, enc);
+    const text = await AI_PROVIDERS[provider].call(apiKey, prompt, !!liveSearch);
+    return jsonResponse({ text });
+}
+
+async function route(request, url, env) {
+    if (url.pathname === '/ai/key') {
+        if (request.method === 'POST') return await handleAiKeySet(request, env);
+        if (request.method === 'DELETE') return await handleAiKeyDelete(request, env, url);
+        return jsonResponse({ error: 'Methode non supportee' }, 405);
+    }
+
+    if (url.pathname === '/ai/insights') {
+        if (request.method !== 'POST') return jsonResponse({ error: 'Methode non supportee' }, 405);
+        return await handleAiInsights(request, env);
+    }
+
     if (url.pathname === '/quote') {
         const symbol = url.searchParams.get('symbol');
         if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
@@ -378,7 +604,7 @@ async function route(url, env) {
         return await handleWebSearch(q, env.TAVILY_API_KEY, env.WEBSEARCH_KV);
     }
 
-    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/search?q=', '/websearch?q='] });
+    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/search?q=', '/websearch?q=', 'POST /ai/key', 'DELETE /ai/key?provider=', 'POST /ai/insights'] });
 }
 
 export default {
@@ -402,7 +628,7 @@ export default {
         let res;
         try {
             await enforceRateLimit(request, env);
-            res = await route(url, env);
+            res = await route(request, url, env);
         } catch (e) {
             res = jsonResponse({ error: e.message || 'Erreur proxy' }, e.statusCode || 502);
         }

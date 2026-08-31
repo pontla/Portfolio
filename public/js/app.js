@@ -25,9 +25,7 @@ const CONFIG = {
     CURRENCY_STORAGE: 'portfolio_currency_pref',
     THEME_STORAGE: 'portfolio_theme',
     SIDE_STORAGE: 'portfolio_side_open',
-    ANTHROPIC_KEY_STORAGE: 'portfolio_anthropic_key',
     AI_PROVIDER_STORAGE: 'portfolio_ai_provider',
-    AI_KEYS_STORAGE: 'portfolio_ai_keys',
     INSIGHTS_CACHE_STORAGE: 'portfolio_insights_cache_v1',
     PORTFOLIO_ICONS_STORAGE: 'portfolio_icons_v1',
     PROXY_BASE_URL: 'https://fragrant-band-1476.jrichardeau-cloudflare.workers.dev',
@@ -37,121 +35,15 @@ const CONFIG = {
 
 const supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
-// --- AI PROVIDERS (résumé du portefeuille) ---
-// Chaque provider expose call(apiKey, prompt) -> texte brut de la réponse (censé contenir le JSON attendu).
-// Appels faits directement depuis le navigateur avec la clé de l'utilisateur : jamais de clé stockée côté serveur.
+// --- AI PROVIDERS (résumé du portefeuille) — métadonnées d'affichage uniquement.
+// L'appel réel et la clé API vivent côté worker (POST /ai/insights) : la clé de
+// l'utilisateur n'est jamais chargée ni conservée dans le navigateur.
 const AI_PROVIDERS = {
-    anthropic: {
-        label: 'Anthropic (Claude)',
-        keyPlaceholder: 'sk-ant-...',
-        usesLiveSearch: true,
-        async call(apiKey, prompt) {
-            const res = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'content-type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true'
-                },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-5',
-                    max_tokens: 4096,
-                    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
-                    messages: [{ role: 'user', content: prompt }]
-                })
-            });
-            if (!res.ok) throw new Error(`Anthropic API HTTP ${res.status} : ${(await res.text()).slice(0, 200)}`);
-            const data = await res.json();
-            return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-        }
-    },
-    openai: {
-        label: 'OpenAI (ChatGPT)',
-        keyPlaceholder: 'sk-...',
-        usesLiveSearch: true,
-        async call(apiKey, prompt) {
-            const res = await fetch('https://api.openai.com/v1/responses', {
-                method: 'POST',
-                headers: {
-                    'content-type': 'application/json',
-                    'authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: 'gpt-4.1',
-                    input: prompt,
-                    tools: [{ type: 'web_search_preview' }]
-                })
-            });
-            if (!res.ok) throw new Error(`OpenAI API HTTP ${res.status} : ${(await res.text()).slice(0, 200)}`);
-            const data = await res.json();
-            const messageItem = (data.output || []).find(o => o.type === 'message');
-            const textBlock = messageItem && (messageItem.content || []).find(c => c.type === 'output_text');
-            return (textBlock && textBlock.text) || '';
-        }
-    },
-    gemini: {
-        label: 'Google (Gemini)',
-        keyPlaceholder: 'AIza...',
-        usesLiveSearch: false,
-        async call(apiKey, prompt) {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${encodeURIComponent(apiKey)}`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }]
-                })
-            });
-            if (!res.ok) throw new Error(`Gemini API HTTP ${res.status} : ${(await res.text()).slice(0, 200)}`);
-            const data = await res.json();
-            const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-            return parts.map(p => p.text || '').join('\n').trim();
-        }
-    },
-    grok: {
-        label: 'xAI (Grok)',
-        keyPlaceholder: 'xai-...',
-        usesLiveSearch: true,
-        async call(apiKey, prompt) {
-            const res = await fetch('https://api.x.ai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'content-type': 'application/json',
-                    'authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: 'grok-4-latest',
-                    messages: [{ role: 'user', content: prompt }],
-                    search_parameters: { mode: 'auto' }
-                })
-            });
-            if (!res.ok) throw new Error(`Grok API HTTP ${res.status} : ${(await res.text()).slice(0, 200)}`);
-            const data = await res.json();
-            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-        }
-    },
-    groq: {
-        label: 'Groq (Llama 3.3 70B)',
-        keyPlaceholder: 'gsk_...',
-        usesLiveSearch: false,
-        async call(apiKey, prompt) {
-            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'content-type': 'application/json',
-                    'authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: 0.3
-                })
-            });
-            if (!res.ok) throw new Error(`Groq API HTTP ${res.status} : ${(await res.text()).slice(0, 200)}`);
-            const data = await res.json();
-            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-        }
-    }
+    anthropic: { label: 'Anthropic (Claude)', keyPlaceholder: 'sk-ant-...', usesLiveSearch: true },
+    openai: { label: 'OpenAI (ChatGPT)', keyPlaceholder: 'sk-...', usesLiveSearch: true },
+    gemini: { label: 'Google (Gemini)', keyPlaceholder: 'AIza...', usesLiveSearch: false },
+    grok: { label: 'xAI (Grok)', keyPlaceholder: 'xai-...', usesLiveSearch: true },
+    groq: { label: 'Groq (Llama 3.3 70B)', keyPlaceholder: 'gsk_...', usesLiveSearch: false }
 };
 
 // --- AUTH SERVICE (Supabase Auth) ---
@@ -579,6 +471,46 @@ const APIService = {
         }
     },
 
+    // Resume IA execute cote worker : la cle API du fournisseur n'est jamais
+    // envoyee ici, seul le JWT Supabase identifie l'utilisateur.
+    async aiInsights(provider, prompt, liveSearch) {
+        const session = await AuthService.getSession();
+        if (!session) throw new Error('Session expirée');
+        const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ provider, prompt, liveSearch: !!liveSearch })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
+        return data.text || '';
+    },
+
+    async aiKeySave(provider, key) {
+        const session = await AuthService.getSession();
+        if (!session) throw new Error('Session expirée');
+        const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/key`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ provider, key })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
+        return data.configured || [];
+    },
+
+    async aiKeyDelete(provider) {
+        const session = await AuthService.getSession();
+        if (!session) throw new Error('Session expirée');
+        const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/key?provider=${encodeURIComponent(provider)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
+        return data.configured || [];
+    },
+
     async getCurrentPrice(symbol) {
         if (symbol.startsWith('$')) return 1.0;
 
@@ -792,78 +724,60 @@ class PortfolioService {
         this.fxRate = 1.08;
         this.fxRates = { USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73 };
         this.userId = null;
-        // Config IA, synchronisee via la table user_settings (cache localStorage
-        // pour l'offline / le premier rendu).
+        // Config IA liee au compte (table user_settings). aiProvider = fournisseur
+        // choisi (non secret) ; aiConfigured = fournisseurs pour lesquels une cle
+        // est stockee cote worker. Les cles elles-memes ne transitent jamais ici.
         this.aiProvider = null;
-        this.aiKeys = {};
+        this.aiConfigured = [];
     }
 
-    _readAiCache() {
-        try {
-            return {
-                provider: localStorage.getItem(CONFIG.AI_PROVIDER_STORAGE) || null,
-                keys: JSON.parse(localStorage.getItem(CONFIG.AI_KEYS_STORAGE) || '{}')
-            };
-        } catch (e) {
-            return { provider: null, keys: {} };
-        }
-    }
-
-    _writeAiCache() {
-        try {
-            if (this.aiProvider) localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, this.aiProvider);
-            else localStorage.removeItem(CONFIG.AI_PROVIDER_STORAGE);
-            localStorage.setItem(CONFIG.AI_KEYS_STORAGE, JSON.stringify(this.aiKeys || {}));
-        } catch (e) { /* stockage indisponible */ }
-    }
-
-    // Charge la config IA du compte ; retombe sur le cache local en cas d'echec
-    // (table absente, hors-ligne). Migre une config purement locale vers le compte.
+    // Charge la config IA du compte ; retombe sur le cache local (fournisseur
+    // choisi uniquement) en cas d'echec (table absente, hors-ligne).
     async _loadAiConfig() {
-        const cache = this._readAiCache();
-        this.aiProvider = cache.provider;
-        this.aiKeys = cache.keys;
+        try {
+            this.aiProvider = localStorage.getItem(CONFIG.AI_PROVIDER_STORAGE) || null;
+        } catch (e) { /* stockage indisponible */ }
 
-        let row = null;
         try {
             const { data, error } = await supabaseClient
                 .from('user_settings')
-                .select('ai_provider, ai_keys')
+                .select('ai_provider, ai_providers_configured')
                 .eq('user_id', this.userId)
                 .maybeSingle();
-            if (error) return;
-            row = data;
-        } catch (e) {
-            return;
-        }
-
-        if (row) {
-            this.aiProvider = row.ai_provider || null;
-            this.aiKeys = row.ai_keys || {};
-            this._writeAiCache();
-        } else if (this.aiProvider || Object.keys(this.aiKeys).length) {
+            if (error || !data) return;
+            this.aiProvider = data.ai_provider || null;
+            this.aiConfigured = data.ai_providers_configured || [];
             try {
-                await supabaseClient.from('user_settings').upsert({
-                    user_id: this.userId,
-                    ai_provider: this.aiProvider,
-                    ai_keys: this.aiKeys
-                }, { onConflict: 'user_id' });
-            } catch (e) { /* on garde le cache local */ }
-        }
+                if (this.aiProvider) localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, this.aiProvider);
+                else localStorage.removeItem(CONFIG.AI_PROVIDER_STORAGE);
+            } catch (e) { /* ignore */ }
+        } catch (e) { /* on garde le cache local */ }
     }
 
-    // Enregistre le fournisseur + les cles pour le compte (et le cache local).
-    async saveAiConfig({ provider, keys }) {
+    // Change le fournisseur actif (non secret) : ecriture directe via RLS + cache.
+    async setAiProvider(provider) {
         this.aiProvider = provider || null;
-        this.aiKeys = keys || {};
-        this._writeAiCache();
+        try {
+            if (this.aiProvider) localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, this.aiProvider);
+            else localStorage.removeItem(CONFIG.AI_PROVIDER_STORAGE);
+        } catch (e) { /* ignore */ }
         const { error } = await supabaseClient.from('user_settings').upsert({
             user_id: this.userId,
             ai_provider: this.aiProvider,
-            ai_keys: this.aiKeys,
             updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
         if (error) throw error;
+    }
+
+    // Enregistre / supprime la cle API d'un fournisseur cote worker (chiffree).
+    async saveAiKey(provider, key) {
+        this.aiConfigured = await APIService.aiKeySave(provider, key);
+        this.aiProvider = provider;
+        try { localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, provider); } catch (e) { /* ignore */ }
+    }
+
+    async removeAiKey(provider) {
+        this.aiConfigured = await APIService.aiKeyDelete(provider);
     }
 
     async _fetchRows() {
@@ -2472,45 +2386,37 @@ const App = {
             };
         }
 
-        // Fournisseur IA (résumé IA) : lié au compte (table user_settings), donc
-        // synchronisé d'un appareil à l'autre. Cache localStorage pour l'offline.
+        // Fournisseur IA (résumé IA) : lié au compte. La clé API est chiffrée et
+        // stockée côté worker (POST /ai/key) et n'est jamais rechargée ici ; le
+        // champ affiche seulement si une clé est déjà enregistrée.
         const aiProviderSelect = document.getElementById('aiProviderSelect');
         const aiKeyInput = document.getElementById('aiKeyInput');
         const saveAiKeyBtn = document.getElementById('saveAiKeyBtn');
         const clearAiKeyBtn = document.getElementById('clearAiKeyBtn');
 
-        const getAiKeys = () => ({ ...(this.service.aiKeys || {}) });
-        const persistAiConfig = async (provider, keys) => {
-            localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
-            try {
-                await this.service.saveAiConfig({ provider, keys });
-            } catch (e) {
-                alert('Config IA enregistrée sur cet appareil, mais la synchronisation avec le compte a échoué : ' + (e.message || e));
-            }
-        };
         const refreshAiKeyInputForProvider = () => {
             if (!aiProviderSelect || !aiKeyInput) return;
             const p = aiProviderSelect.value;
-            aiKeyInput.value = p ? (getAiKeys()[p] || '') : '';
-            aiKeyInput.placeholder = (p && AI_PROVIDERS[p]) ? AI_PROVIDERS[p].keyPlaceholder : 'Clé API';
+            const configured = p && (this.service.aiConfigured || []).includes(p);
+            aiKeyInput.value = '';
+            aiKeyInput.placeholder = !p ? 'Clé API'
+                : configured ? '•••••••••• (clé enregistrée — saisir pour remplacer)'
+                    : (AI_PROVIDERS[p] ? AI_PROVIDERS[p].keyPlaceholder : 'Clé API');
             aiKeyInput.disabled = !p;
+            if (clearAiKeyBtn) clearAiKeyBtn.disabled = !configured;
         };
 
         if (aiProviderSelect) {
-            // Migration depuis l'ancien stockage Anthropic-only, une seule fois
-            const legacyKey = localStorage.getItem(CONFIG.ANTHROPIC_KEY_STORAGE);
-            if (legacyKey && !this.service.aiProvider) {
-                const keys = getAiKeys();
-                keys.anthropic = legacyKey;
-                localStorage.removeItem(CONFIG.ANTHROPIC_KEY_STORAGE);
-                persistAiConfig('anthropic', keys);
-            }
-
             aiProviderSelect.value = this.service.aiProvider || '';
             refreshAiKeyInputForProvider();
-            aiProviderSelect.onchange = () => {
+            aiProviderSelect.onchange = async () => {
                 refreshAiKeyInputForProvider();
-                persistAiConfig(aiProviderSelect.value, getAiKeys());
+                localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
+                try {
+                    await this.service.setAiProvider(aiProviderSelect.value);
+                } catch (e) {
+                    alert('Impossible d\'enregistrer le fournisseur sur le compte : ' + (e.message || e));
+                }
             };
         }
         if (saveAiKeyBtn) {
@@ -2518,22 +2424,35 @@ const App = {
                 const p = aiProviderSelect.value;
                 if (!p) { alert('Choisis un fournisseur IA.'); return; }
                 const key = aiKeyInput.value.trim();
-                const keys = getAiKeys();
-                if (key) keys[p] = key;
-                await persistAiConfig(p, keys);
-                settingsModal.classList.remove('open');
-                this.refreshPortfolioInsights(true);
+                if (!key) { alert('Saisis une clé API.'); return; }
+                saveAiKeyBtn.disabled = true;
+                try {
+                    await this.service.saveAiKey(p, key);
+                    localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
+                    settingsModal.classList.remove('open');
+                    this.refreshPortfolioInsights(true);
+                } catch (e) {
+                    alert('Enregistrement de la clé échoué : ' + (e.message || e));
+                } finally {
+                    saveAiKeyBtn.disabled = false;
+                    refreshAiKeyInputForProvider();
+                }
             };
         }
         if (clearAiKeyBtn) {
             clearAiKeyBtn.onclick = async () => {
                 const p = aiProviderSelect.value;
-                const keys = getAiKeys();
-                delete keys[p];
-                await persistAiConfig(p, keys);
-                refreshAiKeyInputForProvider();
-                settingsModal.classList.remove('open');
-                this.refreshPortfolioInsights(true);
+                if (!p) return;
+                try {
+                    await this.service.removeAiKey(p);
+                    localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
+                    settingsModal.classList.remove('open');
+                    this.refreshPortfolioInsights(true);
+                } catch (e) {
+                    alert('Suppression de la clé échouée : ' + (e.message || e));
+                } finally {
+                    refreshAiKeyInputForProvider();
+                }
             };
         }
 
@@ -3859,9 +3778,8 @@ const App = {
 
         const symbols = holdings.map(h => h.symbol);
         const provider = this.service.aiProvider;
-        const aiKeys = this.service.aiKeys || {};
-        const apiKey = provider && aiKeys[provider];
-        const cacheKey = `${provider && apiKey ? 'ai-' + provider : 'plain'}:${symbols.slice().sort().join(',')}`;
+        const hasKey = !!provider && (this.service.aiConfigured || []).includes(provider);
+        const cacheKey = `${hasKey ? 'ai-' + provider : 'plain'}:${symbols.slice().sort().join(',')}`;
 
         if (!force) {
             try {
@@ -3874,7 +3792,7 @@ const App = {
             } catch (e) { /* cache corrompu, on ignore */ }
         }
 
-        if (!provider || !apiKey || !AI_PROVIDERS[provider]) {
+        if (!provider || !hasKey || !AI_PROVIDERS[provider]) {
             const html = await this.buildPlainInsights(holdings);
             bodyEl.innerHTML = html;
             localStorage.setItem(CONFIG.INSIGHTS_CACHE_STORAGE, JSON.stringify({ cacheKey, timestamp: Date.now(), html }));
@@ -3925,7 +3843,7 @@ Réponds UNIQUEMENT avec un objet JSON valide (pas de texte avant/après, pas de
 
 Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plus pertinents et récents, avec le maximum de détails concrets (chiffres, dates, pourcentages). Trie les items de chaque titre du plus récent au plus ancien. "date" est la date de l'actualité ou de l'événement (format AAAA-MM-JJ). N'inclus un titre que si tu as trouvé une information réelle et récente à son sujet.`;
 
-            const text = await AI_PROVIDERS[provider].call(apiKey, prompt);
+            const text = await APIService.aiInsights(provider, prompt, AI_PROVIDERS[provider].usesLiveSearch);
 
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error('Réponse IA non structurée (pas de JSON trouvé)');

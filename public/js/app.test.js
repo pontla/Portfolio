@@ -72,7 +72,10 @@ function supabaseStub(overrides = {}) {
         maybeSingle: overrides.maybeSingle || (() => Promise.resolve({ data: null, error: null })),
         then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); },
     };
-    return { from() { return chain; }, auth: { getSession: async () => ({ data: { session: null } }) } };
+    return {
+        from() { return chain; },
+        auth: { getSession: async () => ({ data: { session: overrides.session || null } }) },
+    };
 }
 
 function loadApp(supabaseOverrides = {}) {
@@ -118,7 +121,7 @@ function loadApp(supabaseOverrides = {}) {
         document: doc,
         localStorage,
         navigator: { userAgent: 'node', onLine: true, language: 'fr-FR' },
-        fetch: async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '' }),
+        fetch: supabaseOverrides.fetch || (async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '' })),
         console,
         Intl,
         Date,
@@ -746,80 +749,38 @@ describe('helpers JWT (garde-fou horloge desynchronisee)', () => {
         expect(isJwtTimingError(null)).toBe(false);
     });
 });
-
 describe('PortfolioService - config IA liée au compte', () => {
-    it('saveAiConfig met à jour la mémoire, le cache local et pousse un upsert', async () => {
-        const calls = [];
+    const SESSION = { access_token: 'jwt-abc', user: { id: 'u-1' } };
+
+    it('_loadAiConfig adopte ai_provider + ai_providers_configured de la ligne du compte', async () => {
         const { PortfolioService, store } = loadApp({
-            upsert: (payload, opts) => { calls.push({ payload, opts }); return Promise.resolve({ data: null, error: null }); }
-        });
-        const svc = new PortfolioService();
-        svc.userId = 'u-1';
-
-        await svc.saveAiConfig({ provider: 'anthropic', keys: { anthropic: 'sk-ant-xxx' } });
-
-        expect(svc.aiProvider).toBe('anthropic');
-        expect(svc.aiKeys).toEqual({ anthropic: 'sk-ant-xxx' });
-        expect(store.get('portfolio_ai_provider')).toBe('anthropic');
-        expect(JSON.parse(store.get('portfolio_ai_keys'))).toEqual({ anthropic: 'sk-ant-xxx' });
-        expect(calls).toHaveLength(1);
-        expect(calls[0].payload).toMatchObject({ user_id: 'u-1', ai_provider: 'anthropic', ai_keys: { anthropic: 'sk-ant-xxx' } });
-        expect(calls[0].opts).toEqual({ onConflict: 'user_id' });
-    });
-
-    it('saveAiConfig propage l erreur Supabase (config gardée en local)', async () => {
-        const { PortfolioService, store } = loadApp({
-            upsert: () => Promise.resolve({ data: null, error: { message: 'boom' } })
-        });
-        const svc = new PortfolioService();
-        svc.userId = 'u-1';
-        await expect(svc.saveAiConfig({ provider: 'openai', keys: { openai: 'sk-o' } })).rejects.toMatchObject({ message: 'boom' });
-        expect(store.get('portfolio_ai_provider')).toBe('openai');
-    });
-
-    it('_loadAiConfig adopte la ligne du compte quand elle existe', async () => {
-        const { PortfolioService, store } = loadApp({
-            maybeSingle: () => Promise.resolve({ data: { ai_provider: 'groq', ai_keys: { groq: 'gsk-1' } }, error: null })
+            maybeSingle: () => Promise.resolve({
+                data: { ai_provider: 'groq', ai_providers_configured: ['groq', 'openai'] }, error: null
+            })
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
         store.set('portfolio_ai_provider', 'anthropic');
-        store.set('portfolio_ai_keys', JSON.stringify({ anthropic: 'old' }));
 
         await svc._loadAiConfig();
 
         expect(svc.aiProvider).toBe('groq');
-        expect(svc.aiKeys).toEqual({ groq: 'gsk-1' });
+        expect(svc.aiConfigured).toEqual(['groq', 'openai']);
         expect(store.get('portfolio_ai_provider')).toBe('groq');
     });
 
-    it('_loadAiConfig migre une config purement locale vers le compte', async () => {
-        const calls = [];
+    it('_loadAiConfig sans ligne garde le fournisseur en cache et aiConfigured vide', async () => {
         const { PortfolioService, store } = loadApp({
-            maybeSingle: () => Promise.resolve({ data: null, error: null }),
-            upsert: (payload) => { calls.push(payload); return Promise.resolve({ data: null, error: null }); }
-        });
-        const svc = new PortfolioService();
-        svc.userId = 'u-1';
-        store.set('portfolio_ai_provider', 'xai');
-        store.set('portfolio_ai_keys', JSON.stringify({ xai: 'xai-key' }));
-
-        await svc._loadAiConfig();
-
-        expect(svc.aiProvider).toBe('xai');
-        expect(calls).toHaveLength(1);
-        expect(calls[0]).toMatchObject({ user_id: 'u-1', ai_provider: 'xai', ai_keys: { xai: 'xai-key' } });
-    });
-
-    it('_loadAiConfig sans ligne ni cache laisse la config vide', async () => {
-        const { PortfolioService } = loadApp({
             maybeSingle: () => Promise.resolve({ data: null, error: null })
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
+        store.set('portfolio_ai_provider', 'anthropic');
+
         await svc._loadAiConfig();
-        expect(svc.aiProvider).toBeNull();
-        expect(svc.aiKeys).toEqual({});
+
+        expect(svc.aiProvider).toBe('anthropic');
+        expect(svc.aiConfigured).toEqual([]);
     });
 
     it('_loadAiConfig retombe sur le cache local si la table est absente', async () => {
@@ -828,12 +789,82 @@ describe('PortfolioService - config IA liée au compte', () => {
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
-        store.set('portfolio_ai_provider', 'anthropic');
-        store.set('portfolio_ai_keys', JSON.stringify({ anthropic: 'sk-local' }));
+        store.set('portfolio_ai_provider', 'grok');
 
         await svc._loadAiConfig();
 
+        expect(svc.aiProvider).toBe('grok');
+        expect(svc.aiConfigured).toEqual([]);
+    });
+
+    it('setAiProvider écrit la sélection (cache + upsert), sans toucher aux clés', async () => {
+        const calls = [];
+        const { PortfolioService, store } = loadApp({
+            upsert: (payload, opts) => { calls.push({ payload, opts }); return Promise.resolve({ data: null, error: null }); }
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+
+        await svc.setAiProvider('openai');
+
+        expect(svc.aiProvider).toBe('openai');
+        expect(store.get('portfolio_ai_provider')).toBe('openai');
+        expect(calls).toHaveLength(1);
+        expect(calls[0].payload).toMatchObject({ user_id: 'u-1', ai_provider: 'openai' });
+        expect(calls[0].payload).not.toHaveProperty('ai_keys');
+        expect(calls[0].opts).toEqual({ onConflict: 'user_id' });
+    });
+
+    it('saveAiKey POST /ai/key avec le JWT, ne stocke jamais la clé en clair', async () => {
+        const reqs = [];
+        const { PortfolioService, store } = loadApp({
+            session: SESSION,
+            fetch: async (urlArg, opts) => {
+                reqs.push({ url: String(urlArg), opts });
+                return { ok: true, status: 200, json: async () => ({ ok: true, provider: 'anthropic', configured: ['anthropic'] }) };
+            }
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+
+        await svc.saveAiKey('anthropic', 'sk-ant-secret');
+
+        expect(svc.aiConfigured).toEqual(['anthropic']);
         expect(svc.aiProvider).toBe('anthropic');
-        expect(svc.aiKeys).toEqual({ anthropic: 'sk-local' });
+        expect(reqs).toHaveLength(1);
+        expect(reqs[0].url).toMatch(/\/ai\/key$/);
+        expect(reqs[0].opts.method).toBe('POST');
+        expect(reqs[0].opts.headers.Authorization).toBe('Bearer jwt-abc');
+        expect(JSON.parse(reqs[0].opts.body)).toEqual({ provider: 'anthropic', key: 'sk-ant-secret' });
+        // aucune trace de la clé dans le stockage local
+        expect(JSON.stringify([...store.entries()])).not.toContain('sk-ant-secret');
+    });
+
+    it('removeAiKey appelle DELETE /ai/key?provider= et rafraîchit aiConfigured', async () => {
+        const reqs = [];
+        const { PortfolioService } = loadApp({
+            session: SESSION,
+            fetch: async (urlArg, opts) => {
+                reqs.push({ url: String(urlArg), method: opts && opts.method });
+                return { ok: true, status: 200, json: async () => ({ ok: true, configured: [] }) };
+            }
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+        svc.aiConfigured = ['anthropic'];
+
+        await svc.removeAiKey('anthropic');
+
+        expect(svc.aiConfigured).toEqual([]);
+        expect(reqs[0].method).toBe('DELETE');
+        expect(reqs[0].url).toMatch(/\/ai\/key\?provider=anthropic$/);
+    });
+
+    it('AI_PROVIDERS ne contient plus de fonction call (appel déplacé côté worker)', () => {
+        const { AI_PROVIDERS } = loadApp();
+        for (const p of Object.keys(AI_PROVIDERS)) {
+            expect(typeof AI_PROVIDERS[p].call).toBe('undefined');
+            expect(typeof AI_PROVIDERS[p].label).toBe('string');
+        }
     });
 });

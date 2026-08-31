@@ -110,6 +110,138 @@ describe('securite : origine & quota', () => {
     });
 });
 
+describe('/ai/* : cles IA jamais exposees au navigateur', () => {
+    const ENC_KEY = Buffer.alloc(32, 9).toString('base64');
+    const AI_ENV = () => ({
+        SUPABASE_URL: 'https://proj.supabase.co',
+        SUPABASE_ANON_KEY: 'anon-pub',
+        AI_ENC_KEY: ENC_KEY,
+        WEBSEARCH_KV: fakeKV()
+    });
+
+    function fakeKV(initial = {}) {
+        const m = new Map(Object.entries(initial));
+        return {
+            _map: m,
+            get: async (k) => (m.has(k) ? m.get(k) : null),
+            put: async (k, v) => { m.set(k, String(v)); },
+            delete: async (k) => { m.delete(k); },
+            list: async ({ prefix }) => ({ keys: [...m.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })) })
+        };
+    }
+
+    function routeFetch(handlers) {
+        return async (url, opts) => {
+            const u = String(url);
+            for (const [frag, fn] of handlers) if (u.includes(frag)) return fn(u, opts);
+            throw new Error('fetch inattendu: ' + u);
+        };
+    }
+
+    const aiCall = (path, { method = 'POST', env, headers = {}, body } = {}) =>
+        worker.fetch(new Request(`https://proxy.test${path}`, {
+            method,
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: body === undefined ? undefined : JSON.stringify(body)
+        }), env);
+
+    it('refuse (401) sans en-tete Authorization', async () => {
+        const res = await aiCall('/ai/key', { env: AI_ENV(), body: { provider: 'anthropic', key: 'sk-ant-1234567' } });
+        expect(res.status).toBe(401);
+    });
+
+    it('POST /ai/key : verifie le JWT, chiffre la cle, ne la stocke jamais en clair', async () => {
+        const env = AI_ENV();
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })]
+        ]));
+
+        const res = await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        const data = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(data.configured).toEqual(['anthropic']);
+        const stored = env.WEBSEARCH_KV._map.get('aikey:user-42:anthropic');
+        expect(stored).toBeTruthy();
+        expect(stored).not.toContain('sk-ant-SECRET-KEY');
+        // le JWT a bien ete presente a Supabase
+        expect(fetchMock).toHaveBeenCalledWith('https://proj.supabase.co/auth/v1/user', expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer jwt-xyz', apikey: 'anon-pub' })
+        }));
+    });
+
+    it('POST /ai/insights : dechiffre la cle cote worker et appelle le fournisseur', async () => {
+        const env = AI_ENV();
+        let sentKey = null;
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })],
+            ['api.anthropic.com', (_u, opts) => {
+                sentKey = opts.headers['x-api-key'];
+                return { ok: true, json: async () => ({ content: [{ type: 'text', text: 'RESUME IA' }] }) };
+            }]
+        ]));
+
+        await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        const res = await aiCall('/ai/insights', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', prompt: 'analyse', liveSearch: true }
+        });
+        const data = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(data.text).toBe('RESUME IA');
+        expect(sentKey).toBe('sk-ant-SECRET-KEY');
+    });
+
+    it('POST /ai/insights : 400 si aucune cle enregistree pour le fournisseur', async () => {
+        const env = AI_ENV();
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })]
+        ]));
+        const res = await aiCall('/ai/insights', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', prompt: 'analyse' }
+        });
+        expect(res.status).toBe(400);
+    });
+
+    it('DELETE /ai/key : retire la cle stockee', async () => {
+        const env = AI_ENV();
+        env.WEBSEARCH_KV._map.set('aikey:user-42:anthropic', 'chiffre');
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })]
+        ]));
+
+        const res = await aiCall('/ai/key?provider=anthropic', {
+            method: 'DELETE', env, headers: { Authorization: 'Bearer jwt-xyz' }, body: undefined
+        });
+        const data = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(data.configured).toEqual([]);
+        expect(env.WEBSEARCH_KV._map.has('aikey:user-42:anthropic')).toBe(false);
+    });
+
+    it('401 si le JWT est rejete par Supabase', async () => {
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: false, status: 401, json: async () => ({}) })]
+        ]));
+        const res = await aiCall('/ai/insights', {
+            env: AI_ENV(), headers: { Authorization: 'Bearer bad' }, body: { provider: 'anthropic', prompt: 'x' }
+        });
+        expect(res.status).toBe(401);
+    });
+});
+
 describe('/quote', () => {
     it('renvoie 400 si symbol manquant', async () => {
         const res = await call('/quote');

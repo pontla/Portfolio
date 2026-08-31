@@ -26,12 +26,14 @@ create table if not exists trades (
     created_at timestamptz not null default now()
 );
 
--- Config par compte (fournisseur IA + cles API), pour retrouver ses reglages
--- d'un appareil a l'autre. Une ligne par utilisateur.
+-- Config IA par compte, pour retrouver ses reglages d'un appareil a l'autre.
+-- ai_provider : fournisseur choisi. ai_providers_configured : fournisseurs pour
+-- lesquels une cle API est stockee (chiffree) cote worker. Les cles ne sont PAS
+-- en base (KV du worker, chiffrees AES-GCM). Une ligne par utilisateur.
 create table if not exists user_settings (
     user_id uuid primary key references auth.users(id) on delete cascade,
     ai_provider text,
-    ai_keys jsonb not null default '{}'::jsonb,
+    ai_providers_configured text[] not null default '{}',
     updated_at timestamptz not null default now()
 );
 
