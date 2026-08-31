@@ -59,15 +59,18 @@ window.supabase = {
       trades: [{
         id: 'e2e-t1', portfolio_id: 'e2e-pf', type: 'BUY', symbol: 'AAPL',
         qty: 10, price: 150, amount: 1500, fees: 0, fx_rate: null, date: '2024-02-01'
-      }]
+      }],
+      user_settings: []
     };
     function builder(table) {
       var rows = DATA[table] || [];
       var b = {
         select: function () { return b; }, order: function () { return b; },
         eq: function () { return b; }, limit: function () { return b; },
-        insert: function () { return b; }, update: function () { return b; }, delete: function () { return b; },
+        insert: function () { return b; }, update: function () { return b; },
+        delete: function () { return b; }, upsert: function () { return b; },
         single: function () { return Promise.resolve({ data: rows[0] || null, error: null }); },
+        maybeSingle: function () { return Promise.resolve({ data: rows[0] || null, error: null }); },
         then: function (res, rej) { return Promise.resolve({ data: rows, error: null }).then(res, rej); }
       };
       return b;

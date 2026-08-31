@@ -792,6 +792,78 @@ class PortfolioService {
         this.fxRate = 1.08;
         this.fxRates = { USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73 };
         this.userId = null;
+        // Config IA, synchronisee via la table user_settings (cache localStorage
+        // pour l'offline / le premier rendu).
+        this.aiProvider = null;
+        this.aiKeys = {};
+    }
+
+    _readAiCache() {
+        try {
+            return {
+                provider: localStorage.getItem(CONFIG.AI_PROVIDER_STORAGE) || null,
+                keys: JSON.parse(localStorage.getItem(CONFIG.AI_KEYS_STORAGE) || '{}')
+            };
+        } catch (e) {
+            return { provider: null, keys: {} };
+        }
+    }
+
+    _writeAiCache() {
+        try {
+            if (this.aiProvider) localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, this.aiProvider);
+            else localStorage.removeItem(CONFIG.AI_PROVIDER_STORAGE);
+            localStorage.setItem(CONFIG.AI_KEYS_STORAGE, JSON.stringify(this.aiKeys || {}));
+        } catch (e) { /* stockage indisponible */ }
+    }
+
+    // Charge la config IA du compte ; retombe sur le cache local en cas d'echec
+    // (table absente, hors-ligne). Migre une config purement locale vers le compte.
+    async _loadAiConfig() {
+        const cache = this._readAiCache();
+        this.aiProvider = cache.provider;
+        this.aiKeys = cache.keys;
+
+        let row = null;
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_settings')
+                .select('ai_provider, ai_keys')
+                .eq('user_id', this.userId)
+                .maybeSingle();
+            if (error) return;
+            row = data;
+        } catch (e) {
+            return;
+        }
+
+        if (row) {
+            this.aiProvider = row.ai_provider || null;
+            this.aiKeys = row.ai_keys || {};
+            this._writeAiCache();
+        } else if (this.aiProvider || Object.keys(this.aiKeys).length) {
+            try {
+                await supabaseClient.from('user_settings').upsert({
+                    user_id: this.userId,
+                    ai_provider: this.aiProvider,
+                    ai_keys: this.aiKeys
+                }, { onConflict: 'user_id' });
+            } catch (e) { /* on garde le cache local */ }
+        }
+    }
+
+    // Enregistre le fournisseur + les cles pour le compte (et le cache local).
+    async saveAiConfig({ provider, keys }) {
+        this.aiProvider = provider || null;
+        this.aiKeys = keys || {};
+        this._writeAiCache();
+        const { error } = await supabaseClient.from('user_settings').upsert({
+            user_id: this.userId,
+            ai_provider: this.aiProvider,
+            ai_keys: this.aiKeys,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+        if (error) throw error;
     }
 
     async _fetchRows() {
@@ -852,6 +924,8 @@ class PortfolioService {
         if (this.activePortfolioId !== 'GLOBAL' && !this.portfolios.find(p => p.id === this.activePortfolioId)) {
             this.activePortfolioId = this.portfolios[0].id;
         }
+
+        await this._loadAiConfig();
     }
 
     async createPortfolio(name, color = '#3b82f6') {
@@ -2398,15 +2472,21 @@ const App = {
             };
         }
 
-        // Fournisseur IA (résumé IA), clés stockées uniquement en local, une par fournisseur
+        // Fournisseur IA (résumé IA) : lié au compte (table user_settings), donc
+        // synchronisé d'un appareil à l'autre. Cache localStorage pour l'offline.
         const aiProviderSelect = document.getElementById('aiProviderSelect');
         const aiKeyInput = document.getElementById('aiKeyInput');
         const saveAiKeyBtn = document.getElementById('saveAiKeyBtn');
         const clearAiKeyBtn = document.getElementById('clearAiKeyBtn');
 
-        const getAiKeys = () => {
-            try { return JSON.parse(localStorage.getItem(CONFIG.AI_KEYS_STORAGE) || '{}'); }
-            catch (e) { return {}; }
+        const getAiKeys = () => ({ ...(this.service.aiKeys || {}) });
+        const persistAiConfig = async (provider, keys) => {
+            localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
+            try {
+                await this.service.saveAiConfig({ provider, keys });
+            } catch (e) {
+                alert('Config IA enregistrée sur cet appareil, mais la synchronisation avec le compte a échoué : ' + (e.message || e));
+            }
         };
         const refreshAiKeyInputForProvider = () => {
             if (!aiProviderSelect || !aiKeyInput) return;
@@ -2419,42 +2499,38 @@ const App = {
         if (aiProviderSelect) {
             // Migration depuis l'ancien stockage Anthropic-only, une seule fois
             const legacyKey = localStorage.getItem(CONFIG.ANTHROPIC_KEY_STORAGE);
-            if (legacyKey && !localStorage.getItem(CONFIG.AI_PROVIDER_STORAGE)) {
+            if (legacyKey && !this.service.aiProvider) {
                 const keys = getAiKeys();
                 keys.anthropic = legacyKey;
-                localStorage.setItem(CONFIG.AI_KEYS_STORAGE, JSON.stringify(keys));
-                localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, 'anthropic');
                 localStorage.removeItem(CONFIG.ANTHROPIC_KEY_STORAGE);
+                persistAiConfig('anthropic', keys);
             }
 
-            aiProviderSelect.value = localStorage.getItem(CONFIG.AI_PROVIDER_STORAGE) || '';
+            aiProviderSelect.value = this.service.aiProvider || '';
             refreshAiKeyInputForProvider();
             aiProviderSelect.onchange = () => {
-                localStorage.setItem(CONFIG.AI_PROVIDER_STORAGE, aiProviderSelect.value);
-                localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
                 refreshAiKeyInputForProvider();
+                persistAiConfig(aiProviderSelect.value, getAiKeys());
             };
         }
         if (saveAiKeyBtn) {
-            saveAiKeyBtn.onclick = () => {
+            saveAiKeyBtn.onclick = async () => {
                 const p = aiProviderSelect.value;
                 if (!p) { alert('Choisis un fournisseur IA.'); return; }
                 const key = aiKeyInput.value.trim();
                 const keys = getAiKeys();
                 if (key) keys[p] = key;
-                localStorage.setItem(CONFIG.AI_KEYS_STORAGE, JSON.stringify(keys));
-                localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
+                await persistAiConfig(p, keys);
                 settingsModal.classList.remove('open');
                 this.refreshPortfolioInsights(true);
             };
         }
         if (clearAiKeyBtn) {
-            clearAiKeyBtn.onclick = () => {
+            clearAiKeyBtn.onclick = async () => {
                 const p = aiProviderSelect.value;
                 const keys = getAiKeys();
                 delete keys[p];
-                localStorage.setItem(CONFIG.AI_KEYS_STORAGE, JSON.stringify(keys));
-                localStorage.removeItem(CONFIG.INSIGHTS_CACHE_STORAGE);
+                await persistAiConfig(p, keys);
                 refreshAiKeyInputForProvider();
                 settingsModal.classList.remove('open');
                 this.refreshPortfolioInsights(true);
@@ -3782,8 +3858,8 @@ const App = {
         }
 
         const symbols = holdings.map(h => h.symbol);
-        const provider = localStorage.getItem(CONFIG.AI_PROVIDER_STORAGE);
-        const aiKeys = JSON.parse(localStorage.getItem(CONFIG.AI_KEYS_STORAGE) || '{}');
+        const provider = this.service.aiProvider;
+        const aiKeys = this.service.aiKeys || {};
         const apiKey = provider && aiKeys[provider];
         const cacheKey = `${provider && apiKey ? 'ai-' + provider : 'plain'}:${symbols.slice().sort().join(',')}`;
 

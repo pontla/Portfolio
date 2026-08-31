@@ -58,22 +58,24 @@ function makeEl() {
     return el;
 }
 
-function supabaseStub() {
+function supabaseStub(overrides = {}) {
     const chain = {
         from() { return chain; },
         select() { return chain; },
         insert() { return chain; },
         update() { return chain; },
         delete() { return chain; },
+        upsert: overrides.upsert || (() => Promise.resolve({ data: null, error: null })),
         eq() { return chain; },
         order() { return Promise.resolve({ data: [], error: null }); },
         single() { return Promise.resolve({ data: null, error: null }); },
+        maybeSingle: overrides.maybeSingle || (() => Promise.resolve({ data: null, error: null })),
         then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); },
     };
     return { from() { return chain; }, auth: { getSession: async () => ({ data: { session: null } }) } };
 }
 
-function loadApp() {
+function loadApp(supabaseOverrides = {}) {
     const store = new Map();
     const localStorage = {
         getItem: (k) => (store.has(k) ? store.get(k) : null),
@@ -83,7 +85,7 @@ function loadApp() {
     };
 
     const win = {
-        supabase: { createClient: () => supabaseStub() },
+        supabase: { createClient: () => supabaseStub(supabaseOverrides) },
         localStorage,
         matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
         addEventListener() {},
@@ -742,5 +744,96 @@ describe('helpers JWT (garde-fou horloge desynchronisee)', () => {
         expect(isJwtTimingError(new Error('JWSError JWSInvalidSignature'))).toBe(false);
         expect(isJwtTimingError({ message: 'relation "trades" does not exist' })).toBe(false);
         expect(isJwtTimingError(null)).toBe(false);
+    });
+});
+
+describe('PortfolioService - config IA liée au compte', () => {
+    it('saveAiConfig met à jour la mémoire, le cache local et pousse un upsert', async () => {
+        const calls = [];
+        const { PortfolioService, store } = loadApp({
+            upsert: (payload, opts) => { calls.push({ payload, opts }); return Promise.resolve({ data: null, error: null }); }
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+
+        await svc.saveAiConfig({ provider: 'anthropic', keys: { anthropic: 'sk-ant-xxx' } });
+
+        expect(svc.aiProvider).toBe('anthropic');
+        expect(svc.aiKeys).toEqual({ anthropic: 'sk-ant-xxx' });
+        expect(store.get('portfolio_ai_provider')).toBe('anthropic');
+        expect(JSON.parse(store.get('portfolio_ai_keys'))).toEqual({ anthropic: 'sk-ant-xxx' });
+        expect(calls).toHaveLength(1);
+        expect(calls[0].payload).toMatchObject({ user_id: 'u-1', ai_provider: 'anthropic', ai_keys: { anthropic: 'sk-ant-xxx' } });
+        expect(calls[0].opts).toEqual({ onConflict: 'user_id' });
+    });
+
+    it('saveAiConfig propage l erreur Supabase (config gardée en local)', async () => {
+        const { PortfolioService, store } = loadApp({
+            upsert: () => Promise.resolve({ data: null, error: { message: 'boom' } })
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+        await expect(svc.saveAiConfig({ provider: 'openai', keys: { openai: 'sk-o' } })).rejects.toMatchObject({ message: 'boom' });
+        expect(store.get('portfolio_ai_provider')).toBe('openai');
+    });
+
+    it('_loadAiConfig adopte la ligne du compte quand elle existe', async () => {
+        const { PortfolioService, store } = loadApp({
+            maybeSingle: () => Promise.resolve({ data: { ai_provider: 'groq', ai_keys: { groq: 'gsk-1' } }, error: null })
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+        store.set('portfolio_ai_provider', 'anthropic');
+        store.set('portfolio_ai_keys', JSON.stringify({ anthropic: 'old' }));
+
+        await svc._loadAiConfig();
+
+        expect(svc.aiProvider).toBe('groq');
+        expect(svc.aiKeys).toEqual({ groq: 'gsk-1' });
+        expect(store.get('portfolio_ai_provider')).toBe('groq');
+    });
+
+    it('_loadAiConfig migre une config purement locale vers le compte', async () => {
+        const calls = [];
+        const { PortfolioService, store } = loadApp({
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
+            upsert: (payload) => { calls.push(payload); return Promise.resolve({ data: null, error: null }); }
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+        store.set('portfolio_ai_provider', 'xai');
+        store.set('portfolio_ai_keys', JSON.stringify({ xai: 'xai-key' }));
+
+        await svc._loadAiConfig();
+
+        expect(svc.aiProvider).toBe('xai');
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ user_id: 'u-1', ai_provider: 'xai', ai_keys: { xai: 'xai-key' } });
+    });
+
+    it('_loadAiConfig sans ligne ni cache laisse la config vide', async () => {
+        const { PortfolioService } = loadApp({
+            maybeSingle: () => Promise.resolve({ data: null, error: null })
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+        await svc._loadAiConfig();
+        expect(svc.aiProvider).toBeNull();
+        expect(svc.aiKeys).toEqual({});
+    });
+
+    it('_loadAiConfig retombe sur le cache local si la table est absente', async () => {
+        const { PortfolioService, store } = loadApp({
+            maybeSingle: () => Promise.resolve({ data: null, error: { message: 'relation "user_settings" does not exist' } })
+        });
+        const svc = new PortfolioService();
+        svc.userId = 'u-1';
+        store.set('portfolio_ai_provider', 'anthropic');
+        store.set('portfolio_ai_keys', JSON.stringify({ anthropic: 'sk-local' }));
+
+        await svc._loadAiConfig();
+
+        expect(svc.aiProvider).toBe('anthropic');
+        expect(svc.aiKeys).toEqual({ anthropic: 'sk-local' });
     });
 });

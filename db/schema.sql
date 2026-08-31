@@ -26,6 +26,15 @@ create table if not exists trades (
     created_at timestamptz not null default now()
 );
 
+-- Config par compte (fournisseur IA + cles API), pour retrouver ses reglages
+-- d'un appareil a l'autre. Une ligne par utilisateur.
+create table if not exists user_settings (
+    user_id uuid primary key references auth.users(id) on delete cascade,
+    ai_provider text,
+    ai_keys jsonb not null default '{}'::jsonb,
+    updated_at timestamptz not null default now()
+);
+
 create index if not exists trades_user_id_idx on trades(user_id);
 create index if not exists trades_portfolio_id_idx on trades(portfolio_id);
 
@@ -35,6 +44,7 @@ create index if not exists trades_portfolio_id_idx on trades(portfolio_id);
 
 alter table portfolios enable row level security;
 alter table trades enable row level security;
+alter table user_settings enable row level security;
 
 create policy "portfolios_owner_all" on portfolios
     for all
@@ -42,6 +52,11 @@ create policy "portfolios_owner_all" on portfolios
     with check (auth.uid() = user_id);
 
 create policy "trades_owner_all" on trades
+    for all
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+create policy "user_settings_owner_all" on user_settings
     for all
     using (auth.uid() = user_id)
     with check (auth.uid() = user_id);
