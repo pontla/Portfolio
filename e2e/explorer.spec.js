@@ -97,6 +97,26 @@ test('cliquer sur une position détenue ouvre l’Explorer sur cette valeur', as
     await expect(page.locator('#researchChart')).toBeVisible();
 });
 
+test('section Valorisation : rendue en différé avec repères moyenne 5 ans et aides', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchValuationCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchValuationGrid');
+    // le placeholder "Chargement…" est remplacé par les métriques
+    await expect(grid.locator('.research-kv')).toHaveCount(8);
+    await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
+
+    // PER prévisionnel provient de quoteSummary (27,4 ×)
+    await expect(grid).toContainText('PER prévisionnel');
+    await expect(grid).toContainText('27,4 ×');
+
+    // repère visuel vs moyenne historique du titre + info-bulle d'aide
+    await expect(grid.locator('.kv-cmp').first()).toBeVisible();
+    await expect(grid.locator('.kv-help').first()).toHaveAttribute('data-tip', /.+/);
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(

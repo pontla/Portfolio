@@ -1571,11 +1571,48 @@ input:focus {
     gap: 14px 18px;
 }
 .research-kv { display: flex; flex-direction: column; gap: 3px; }
-.research-kv .k { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+.research-kv .k { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; gap: 5px; }
 .research-kv .v { font-size: 15px; font-weight: 600; font-family: var(--font-mono); }
 .research-kv .v.text-green { color: var(--up); }
 .research-kv .v.text-red { color: var(--dn); }
 .research-kv .v a { color: var(--acc); text-decoration: none; }
+.research-kv-loading { font-family: var(--font-ui); font-weight: 500; color: var(--text-secondary); }
+
+/* "i" d'aide + bulle d'info — reutilisable pour toutes les metriques d'analyse */
+.kv-help {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; flex: none;
+    border: 1px solid var(--l2); border-radius: 50%;
+    font-family: var(--font-ui); font-size: 9px; font-weight: 700; line-height: 1;
+    color: var(--text-secondary); text-transform: none; letter-spacing: 0;
+    cursor: help; position: relative; outline: none;
+}
+.kv-help:hover, .kv-help:focus-visible { color: var(--text-primary); border-color: var(--acc); }
+.kv-help::after {
+    content: attr(data-tip);
+    position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%);
+    width: max-content; max-width: 240px; padding: 8px 10px;
+    background: var(--sheet); color: var(--text-primary);
+    border: 1px solid var(--l2); border-radius: 10px;
+    font-family: var(--font-ui); font-size: 11px; font-weight: 500; line-height: 1.4;
+    text-transform: none; letter-spacing: 0; white-space: normal; text-align: left;
+    opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s;
+    box-shadow: 0 10px 30px var(--shadow, rgba(0, 0, 0, .4)); z-index: 60;
+}
+.kv-help:hover::after, .kv-help:focus-visible::after { opacity: 1; visibility: visible; }
+
+.kv-cmp {
+    margin-top: 1px;
+    font-family: var(--font-ui); font-size: 10.5px; font-weight: 600;
+    text-transform: none; letter-spacing: 0;
+    display: inline-flex; align-items: center; gap: 3px;
+}
+.kv-cmp.above { color: var(--dn); }
+.kv-cmp.below { color: var(--up); }
+
+@media (max-width: 560px) {
+    .kv-help::after { max-width: 200px; }
+}
 
 .research-range-bar { margin-top: 18px; }
 .rrb-track {

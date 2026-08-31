@@ -4930,6 +4930,82 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchNews(symbol, displayName);
         this.renderResearchQuick();
         lucide.createIcons();
+
+        // Analyse approfondie (phases 2+) : chargee en arriere-plan pour ne pas
+        // retarder l'affichage des sections rapides ci-dessus.
+        this.renderResearchValuation(null);
+        AnalysisService.build(symbol).then(a => {
+            if (this.researchSymbol !== symbol || !a) return;
+            this.researchAnalysis = a;
+            this.renderResearchValuation(a);
+        }).catch(e => console.warn('AnalysisService.build KO', e));
+    },
+
+    // Petit "i" d'aide reutilisable pour toutes les nouvelles metriques.
+    _kvHelp(tip) {
+        return `<span class="kv-help" tabindex="0" aria-label="${String(tip).replace(/"/g, '&quot;')}" data-tip="${String(tip).replace(/"/g, '&quot;')}">i</span>`;
+    },
+
+    renderResearchValuation(a) {
+        const card = document.getElementById('researchValuationCard');
+        const grid = document.getElementById('researchValuationGrid');
+        const src = document.getElementById('researchValuationSrc');
+        if (!card || !grid) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            grid.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            return;
+        }
+
+        const v = a.valuation || {};
+        const h = v.hist5y || {};
+        const ND = 'Non disponible';
+        const mult = (x) => (x == null || !isFinite(x))
+            ? null
+            : new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(x) + ' ×';
+
+        const kv = (label, valueStr, tip, cmpHtml = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${cmpHtml}</div>`;
+
+        // Repere visuel : valeur courante vs moyenne 5 ans du titre.
+        const cmp = (cur, avg) => {
+            if (cur == null || avg == null || !isFinite(cur) || !isFinite(avg) || avg <= 0) return '';
+            const above = cur > avg;
+            return `<span class="kv-cmp ${above ? 'above' : 'below'}">${above ? '▲' : '▼'} ` +
+                `${above ? 'au-dessus' : 'sous'} la moy. 5 ans (${mult(avg)})</span>`;
+        };
+
+        grid.innerHTML =
+            kv('PER (TTM)', mult(v.peTTM),
+                'Cours rapporté au bénéfice par action des 12 derniers mois. Plus il est élevé, plus le marché paie cher chaque euro de bénéfice.',
+                cmp(v.peTTM, h.pe)) +
+            kv('PER prévisionnel', mult(v.peForward),
+                'Cours rapporté au bénéfice par action attendu sur les 12 prochains mois. Nettement sous le PER TTM : le marché anticipe une hausse des bénéfices.') +
+            kv('PEG', mult(v.peg),
+                'PER divisé par la croissance attendue du bénéfice. Sous 1 : la croissance n\'est pas encore payée ; au-dessus de 2 : valorisation tendue.') +
+            kv('P/B', mult(v.pb),
+                'Cours rapporté à la valeur comptable des capitaux propres. Pertinent surtout pour les sociétés à forts actifs (banques, industrie).',
+                cmp(v.pb, h.pb)) +
+            kv('P/S', mult(v.ps),
+                'Cours rapporté au chiffre d\'affaires par action. Utile pour comparer des sociétés peu ou pas bénéficiaires.',
+                cmp(v.ps, h.ps)) +
+            kv('VE / EBITDA', mult(v.evEbitda),
+                'Valeur d\'entreprise (capitalisation + dette nette) sur l\'EBITDA. Comparable entre sociétés à endettement différent ; repère 8-12 pour une société mûre.',
+                cmp(v.evEbitda, h.evEbitda)) +
+            kv('VE / CA', mult(v.evRevenue),
+                'Valeur d\'entreprise sur le chiffre d\'affaires. Alternative au P/S qui tient compte de la dette.') +
+            kv('Rendement FCF', v.fcfYield == null ? null : Utils.formatPercent(v.fcfYield, false),
+                'Free cash flow annuel rapporté à la capitalisation : le rendement de trésorerie réelle dégagée. Au-dessus de 5 % est confortable.');
+
+        if (src) {
+            const hasHist = [h.pe, h.pb, h.ps, h.evEbitda].some(x => x != null);
+            src.textContent = hasHist
+                ? 'Yahoo Finance · moyennes 5 ans FMP'
+                : (a.isUS ? 'Yahoo Finance · historique 5 ans indisponible' : 'Historique complet : actions US uniquement');
+        }
     },
 
     renderResearchPosition(symbol, cur, price) {
