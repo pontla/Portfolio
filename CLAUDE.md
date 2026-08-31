@@ -7,11 +7,12 @@
 # WORKFLOW DE COMMIT AUTOMATIQUE
 Dès qu'une fonctionnalité, révision ou correction est terminée et validée :
 1. Exécute `git status` et `git diff` pour analyser les changements.
-2. Rédige un message de commit court au format Conventional Commits (`feat:`, `fix:`, `refactor:`, `style:`)[cite: 3].
-3. Exécute directement :
+2. Lance `npm test` et, si le changement touche l'UI ou un parcours, `npm run test:e2e` ; ne commit pas tant qu'ils ne passent pas.
+3. Rédige un message de commit court au format Conventional Commits (`feat:`, `fix:`, `refactor:`, `style:`)[cite: 3].
+4. Exécute directement :
    git add .
    git commit -m "<ton_message_de_commit>"
-4. Préviens-moi en 1 ligne que le commit est fait pour me permettre de faire un `/compact` ou `/clear`[cite: 3].
+5. Préviens-moi en 1 ligne que le commit est fait pour me permettre de faire un `/compact` ou `/clear`[cite: 3].
 
 # Compte test
 
