@@ -527,6 +527,10 @@ async function handleFmp(resource, symbol, apiKey) {
     if (!apiKey) throw new Error('FMP_API_KEY non configuree');
     const build = FMP_RESOURCES[resource];
     if (!build) return jsonResponse({ error: 'ressource FMP inconnue' }, 400);
+    // Le plan gratuit FMP ne couvre pas les places hors US : inutile de bruler
+    // 8 requetes du quota quotidien (250) pour recevoir 8 erreurs. On repond
+    // directement "indisponible", avec le meme cache long que les donnees reelles.
+    if (isNonUsSymbol(symbol)) return jsonResponse({ unavailable: true, data: null }, 200, 86400);
     const pathPart = build(encodeURIComponent(symbol.toUpperCase()));
     const sep = pathPart.includes('?') ? '&' : '?';
     const res = await fetch(`https://financialmodelingprep.com/api/v3/${pathPart}${sep}apikey=${apiKey}`);

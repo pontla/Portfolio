@@ -517,6 +517,14 @@ describe('/fmp', () => {
         expect(res.headers.get('Cache-Control')).toMatch(/s-maxage=86400/);
     });
 
+    it('symbole hors US : repond indisponible sans consommer le quota FMP', async () => {
+        const res = await call('/fmp?symbol=MC.PA&resource=ratios', { FMP_API_KEY: 'secret' });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ unavailable: true });
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(res.headers.get('Cache-Control')).toMatch(/s-maxage=86400/);
+    });
+
     it('signale une ressource non couverte par le plan (Error Message -> unavailable)', async () => {
         fetchMock.mockResolvedValue(jsonFetchResponse({ 'Error Message': 'Exclusive Endpoint' }));
         const res = await call('/fmp?symbol=MSFT&resource=dcf', { FMP_API_KEY: 'secret' });
