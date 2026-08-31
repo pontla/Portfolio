@@ -58,6 +58,58 @@ describe('routing', () => {
     });
 });
 
+describe('securite : origine & quota', () => {
+    const callWith = (path, headers, env = {}) =>
+        worker.fetch(new Request(`https://proxy.test${path}`, { headers }), env);
+
+    it('refuse (403) une origine navigateur non autorisee', async () => {
+        const res = await callWith('/quote?symbol=AAPL', { Origin: 'https://evil.example' });
+        expect(res.status).toBe(403);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('reflete une origine autorisee dans Access-Control-Allow-Origin', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse(
+            chartResult({ regularMarketPrice: 10 })
+        ));
+        const allowed = 'https://portfolio.jrichardeau-cloudflare.workers.dev';
+        const res = await callWith('/quote?symbol=AAPL', { Origin: allowed });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('Access-Control-Allow-Origin')).toBe(allowed);
+        expect(res.headers.get('Vary')).toBe('Origin');
+    });
+
+    it('laisse passer une requete sans en-tete Origin (appel serveur)', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse(
+            chartResult({ regularMarketPrice: 10 })
+        ));
+        const res = await callWith('/quote?symbol=AAPL', {});
+        expect(res.status).toBe(200);
+        expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    });
+
+    it('renvoie 429 quand le quota KV par IP est atteint', async () => {
+        const store = new Map([['rl:ip:', '5000']]);
+        const kv = {
+            get: vi.fn(async (k) => {
+                for (const [key, val] of store) if (k.startsWith(key)) return val;
+                return null;
+            }),
+            put: vi.fn(async () => {})
+        };
+        const res = await callWith('/quote?symbol=AAPL', {}, { WEBSEARCH_KV: kv });
+        expect(res.status).toBe(429);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('incremente le compteur KV a chaque appel autorise', async () => {
+        fetchMock.mockResolvedValue(jsonFetchResponse(chartResult({ regularMarketPrice: 10 })));
+        const kv = { get: vi.fn(async () => '0'), put: vi.fn(async () => {}) };
+        await callWith('/quote?symbol=AAPL', {}, { WEBSEARCH_KV: kv });
+        expect(kv.put).toHaveBeenCalledWith(expect.stringMatching(/^rl:ip:/), '1', expect.objectContaining({ expirationTtl: expect.any(Number) }));
+    });
+});
+
 describe('/quote', () => {
     it('renvoie 400 si symbol manquant', async () => {
         const res = await call('/quote');

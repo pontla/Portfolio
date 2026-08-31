@@ -21,12 +21,48 @@ const YAHOO_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 };
 
-function corsHeaders() {
+// Seules ces origines (navigateur) peuvent consommer le proxy. Une requete sans
+// en-tete Origin (appel serveur / cURL) passe le filtre CORS mais reste soumise
+// au quota par IP ci-dessous.
+const ALLOWED_ORIGINS = [
+    'https://portfolio.jrichardeau-cloudflare.workers.dev',
+    'http://localhost:8788',
+    'http://127.0.0.1:8788'
+];
+
+// Quota journalier par IP, tous chemins confondus (defense en profondeur contre
+// l'abus des cles Finnhub/Tavily si l'URL du worker fuite). Necessite WEBSEARCH_KV.
+const RATE_LIMIT_PER_DAY = 3000;
+
+// Retourne l'origine a renvoyer dans Access-Control-Allow-Origin, ou null si
+// l'origine presente est interdite (-> 403).
+function resolveOrigin(request) {
+    const origin = request.headers.get('Origin');
+    if (!origin) return '*';
+    return ALLOWED_ORIGINS.includes(origin) ? origin : null;
+}
+
+function corsHeaders(origin = '*') {
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin || '*',
+        'Vary': 'Origin',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type'
     };
+}
+
+async function enforceRateLimit(request, env) {
+    const kv = env && env.WEBSEARCH_KV;
+    if (!kv) return;
+    const ip = request.headers.get('CF-Connecting-IP') || 'anon';
+    const key = `rl:ip:${new Date().toISOString().slice(0, 10)}:${ip}`;
+    const count = parseInt(await kv.get(key)) || 0;
+    if (count >= RATE_LIMIT_PER_DAY) {
+        const err = new Error('Quota quotidien atteint pour cette IP');
+        err.statusCode = 429;
+        throw err;
+    }
+    await kv.put(key, String(count + 1), { expirationTtl: 172800 });
 }
 
 function jsonResponse(data, status = 200, cacheSeconds = 0) {
@@ -289,70 +325,92 @@ async function handleSearch(query) {
     return jsonResponse(results, 200, 3600); // cache 1h
 }
 
+async function route(url, env) {
+    if (url.pathname === '/quote') {
+        const symbol = url.searchParams.get('symbol');
+        if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
+        return await handleQuote(symbol);
+    }
+
+    if (url.pathname === '/history') {
+        const symbol = url.searchParams.get('symbol');
+        const from = url.searchParams.get('from');
+        const to = url.searchParams.get('to');
+        if (!symbol || !from || !to) return jsonResponse({ error: 'symbol, from, to requis' }, 400);
+        return await handleHistory(symbol, from, to);
+    }
+
+    if (url.pathname === '/dividends') {
+        const symbol = url.searchParams.get('symbol');
+        const from = url.searchParams.get('from');
+        const to = url.searchParams.get('to');
+        if (!symbol || !from || !to) return jsonResponse({ error: 'symbol, from, to requis' }, 400);
+        return await handleDividends(symbol, from, to);
+    }
+
+    if (url.pathname === '/sector') {
+        const symbol = url.searchParams.get('symbol');
+        if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
+        return await handleSector(symbol, env.FINNHUB_API_KEY);
+    }
+
+    if (url.pathname === '/earnings') {
+        const symbol = url.searchParams.get('symbol');
+        if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
+        return await handleEarnings(symbol, env.FINNHUB_API_KEY);
+    }
+
+    if (url.pathname === '/fundamentals') {
+        const symbol = url.searchParams.get('symbol');
+        if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
+        return await handleFundamentals(symbol, env.FINNHUB_API_KEY);
+    }
+
+    if (url.pathname === '/search') {
+        const q = url.searchParams.get('q');
+        if (!q) return jsonResponse({ error: 'q requis' }, 400);
+        return await handleSearch(q);
+    }
+
+    if (url.pathname === '/websearch') {
+        const q = url.searchParams.get('q');
+        if (!q) return jsonResponse({ error: 'q requis' }, 400);
+        return await handleWebSearch(q, env.TAVILY_API_KEY, env.WEBSEARCH_KV);
+    }
+
+    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/search?q=', '/websearch?q='] });
+}
+
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
+        const origin = resolveOrigin(request);
 
         if (request.method === 'OPTIONS') {
-            return new Response(null, { headers: corsHeaders() });
+            return new Response(null, { headers: corsHeaders(origin) });
         }
 
+        const cors = corsHeaders(origin);
+
+        if (origin === null) {
+            return new Response(JSON.stringify({ error: 'Origine non autorisee' }), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json', ...cors, 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        let res;
         try {
-            if (url.pathname === '/quote') {
-                const symbol = url.searchParams.get('symbol');
-                if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
-                return await handleQuote(symbol);
-            }
-
-            if (url.pathname === '/history') {
-                const symbol = url.searchParams.get('symbol');
-                const from = url.searchParams.get('from');
-                const to = url.searchParams.get('to');
-                if (!symbol || !from || !to) return jsonResponse({ error: 'symbol, from, to requis' }, 400);
-                return await handleHistory(symbol, from, to);
-            }
-
-            if (url.pathname === '/dividends') {
-                const symbol = url.searchParams.get('symbol');
-                const from = url.searchParams.get('from');
-                const to = url.searchParams.get('to');
-                if (!symbol || !from || !to) return jsonResponse({ error: 'symbol, from, to requis' }, 400);
-                return await handleDividends(symbol, from, to);
-            }
-
-            if (url.pathname === '/sector') {
-                const symbol = url.searchParams.get('symbol');
-                if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
-                return await handleSector(symbol, env.FINNHUB_API_KEY);
-            }
-
-            if (url.pathname === '/earnings') {
-                const symbol = url.searchParams.get('symbol');
-                if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
-                return await handleEarnings(symbol, env.FINNHUB_API_KEY);
-            }
-
-            if (url.pathname === '/fundamentals') {
-                const symbol = url.searchParams.get('symbol');
-                if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
-                return await handleFundamentals(symbol, env.FINNHUB_API_KEY);
-            }
-
-            if (url.pathname === '/search') {
-                const q = url.searchParams.get('q');
-                if (!q) return jsonResponse({ error: 'q requis' }, 400);
-                return await handleSearch(q);
-            }
-
-            if (url.pathname === '/websearch') {
-                const q = url.searchParams.get('q');
-                if (!q) return jsonResponse({ error: 'q requis' }, 400);
-                return await handleWebSearch(q, env.TAVILY_API_KEY, env.WEBSEARCH_KV);
-            }
-
-            return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/search?q=', '/websearch?q='] });
+            await enforceRateLimit(request, env);
+            res = await route(url, env);
         } catch (e) {
-            return jsonResponse({ error: e.message || 'Erreur proxy' }, 502);
+            res = jsonResponse({ error: e.message || 'Erreur proxy' }, e.statusCode || 502);
         }
+
+        // Re-applique l'origine autorisee sur la reponse produite par les handlers.
+        const headers = new Headers(res.headers);
+        headers.set('Access-Control-Allow-Origin', origin);
+        headers.set('Vary', 'Origin');
+        return new Response(res.body, { status: res.status, headers });
     }
 };
