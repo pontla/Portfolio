@@ -2534,6 +2534,15 @@ const App = {
             }
         }, true);
 
+        // Bulles d'aide : bascule l'ancrage au dernier moment pour que le texte
+        // reste dans la carte (les colonnes de droite déborderaient sinon).
+        const placeTip = (e) => {
+            const el = e.target.closest && e.target.closest('.kv-help');
+            if (el) this._placeTip(el);
+        };
+        document.addEventListener('pointerover', placeTip);
+        document.addEventListener('focusin', placeTip);
+
         // Boutons « Afficher plus / moins » des insights (markup injecté par innerHTML).
         document.addEventListener('click', (e) => {
             const sumBtn = e.target.closest('.insights-summary-toggle');
@@ -4934,11 +4943,26 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         // Analyse approfondie (phases 2+) : chargee en arriere-plan pour ne pas
         // retarder l'affichage des sections rapides ci-dessus.
         this.renderResearchValuation(null);
+        this.renderResearchGrowth(null);
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
             this.researchAnalysis = a;
             this.renderResearchValuation(a);
+            this.renderResearchGrowth(a);
         }).catch(e => console.warn('AnalysisService.build KO', e));
+    },
+
+    // Ancre la bulle a gauche ou a droite du "i" si la version centree sortirait de la carte.
+    _placeTip(el) {
+        el.classList.remove('tip-end', 'tip-start');
+        const box = el.closest('.card');
+        if (!box) return;
+        const r = el.getBoundingClientRect();
+        const b = box.getBoundingClientRect();
+        const half = 124;   // demi-largeur max de la bulle (240px) + marge
+        const c = r.left + r.width / 2;
+        if (c + half > b.right) el.classList.add('tip-end');
+        else if (c - half < b.left) el.classList.add('tip-start');
     },
 
     // Petit "i" d'aide reutilisable pour toutes les nouvelles metriques.
@@ -5005,6 +5029,98 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             src.textContent = hasHist
                 ? 'Yahoo Finance · moyennes 5 ans FMP'
                 : (a.isUS ? 'Yahoo Finance · historique 5 ans indisponible' : 'Historique complet : actions US uniquement');
+        }
+    },
+
+    // Historique annuel en barres (CA, BPA) : echelle sur la plus grande valeur absolue,
+    // variation d'une annee sur l'autre affichee a droite.
+    _growthSeries(title, points, fmt, tip) {
+        const vals = (points || []).map(p => p.value).filter(v => v != null && isFinite(v));
+        const head = `<div class="gs-title">${title} ${this._kvHelp(tip)}</div>`;
+        if (!vals.length) return `<div class="gs-block">${head}<div class="gs-empty">Non disponible</div></div>`;
+
+        const max = Math.max(...vals.map(Math.abs)) || 1;
+        const rows = points.map((p, i) => {
+            const prev = i > 0 ? points[i - 1].value : null;
+            let yoy = '<span class="gs-yoy"></span>';
+            if (p.value != null && prev != null && prev > 0) {
+                const g = (p.value - prev) / prev * 100;
+                yoy = `<span class="gs-yoy ${g >= 0 ? 'up' : 'dn'}">${Utils.formatPercent(g)}</span>`;
+            }
+            const w = p.value == null ? 0 : Math.max(2, Math.abs(p.value) / max * 100);
+            return `<div class="gs-row"><span class="gs-year">${p.year || '—'}</span>` +
+                `<span class="gs-bar-wrap"><span class="gs-bar${p.value < 0 ? ' neg' : ''}" style="width:${w.toFixed(1)}%"></span></span>` +
+                `<span class="gs-val">${p.value == null ? '—' : fmt(p.value)}</span>${yoy}</div>`;
+        }).join('');
+        return `<div class="gs-block">${head}${rows}</div>`;
+    },
+
+    renderResearchGrowth(a) {
+        const card = document.getElementById('researchGrowthCard');
+        const grid = document.getElementById('researchGrowthGrid');
+        const series = document.getElementById('researchGrowthSeries');
+        const src = document.getElementById('researchGrowthSrc');
+        if (!card || !grid || !series) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            grid.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            series.innerHTML = '';
+            return;
+        }
+
+        const g = a.growth || {};
+        const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
+        const ND = 'Non disponible';
+        const pct = (x) => (x == null || !isFinite(x)) ? null : Utils.formatPercent(x);
+        const money = (x) => Utils.formatCompact(x, cur);
+        const eps = (x) => Utils.formatCurrency(x, cur);
+
+        const kv = (label, valueStr, tip) =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span></div>`;
+
+        // Consensus : estimations annuelles FMP en priorite, sinon l'exercice +1 de Yahoo.
+        const estAnnual = AnalysisUtils.arr(g.estimates);
+        const lastRevYear = Number((AnalysisUtils.arr(g.revenueAnnual).slice(-1)[0] || {}).year) || 0;
+        const nextEst = estAnnual.find(e => Number(e.year) > lastRevYear) || estAnnual[estAnnual.length - 1] || null;
+        const yahooY1 = AnalysisUtils.arr(g.estimatesShortTerm).find(e => e.period === '+1y') || null;
+        const estRev = (nextEst && nextEst.revenueAvg != null) ? nextEst.revenueAvg : (yahooY1 ? yahooY1.revenueAvg : null);
+        const estEps = (nextEst && nextEst.epsAvg != null) ? nextEst.epsAvg : (yahooY1 ? yahooY1.epsAvg : null);
+        const estYear = (nextEst && nextEst.year) || (yahooY1 && yahooY1.endDate ? String(yahooY1.endDate).slice(0, 4) : null);
+        const analysts = g.analystCount != null ? g.analystCount
+            : (nextEst && nextEst.analysts != null ? nextEst.analysts : (yahooY1 ? yahooY1.analysts : null));
+
+        grid.innerHTML =
+            kv('TCAC CA 5 ans', pct(g.revenueCagrPct),
+                'Taux de croissance annuel moyen du chiffre d\'affaires sur 5 ans. Lisse les à-coups d\'une année isolée.') +
+            kv('TCAC BPA 5 ans', pct(g.epsCagrPct),
+                'Taux de croissance annuel moyen du bénéfice par action sur 5 ans. Au-dessus du TCAC du CA : les marges progressent.') +
+            kv('Croissance CA (1 an)', pct(g.revenueGrowthYoyPct),
+                'Variation du chiffre d\'affaires sur les 12 derniers mois par rapport aux 12 précédents.') +
+            kv('Croissance BPA (1 an)', pct(g.epsGrowthYoyPct),
+                'Variation du bénéfice par action sur les 12 derniers mois. Plus volatile que le CA (effets exceptionnels, rachats d\'actions).') +
+            kv(`CA attendu${estYear ? ' ' + estYear : ''}`, estRev == null ? null : money(estRev),
+                'Chiffre d\'affaires moyen attendu par les analystes pour le prochain exercice. Une prévision, pas un engagement.') +
+            kv(`BPA attendu${estYear ? ' ' + estYear : ''}`, estEps == null ? null : eps(estEps),
+                'Bénéfice par action moyen attendu par les analystes pour le prochain exercice. Sert de base au PER prévisionnel.') +
+            kv('Analystes suivis', analysts == null ? null : String(Math.round(analysts)),
+                'Nombre d\'analystes couvrant la valeur. Sous 5, le consensus est fragile et peut bouger fortement.') +
+            kv('Guidance direction', g.guidance,
+                'Objectifs communiqués par la direction. Non fournis par les sources gratuites utilisées ici : à vérifier dans le communiqué de résultats.');
+
+        series.innerHTML =
+            this._growthSeries('Chiffre d\'affaires', AnalysisUtils.arr(g.revenueAnnual), money,
+                'Chiffre d\'affaires annuel publié sur les 5 derniers exercices. La barre est proportionnelle au plus haut de la période.') +
+            this._growthSeries('Bénéfice par action', AnalysisUtils.arr(g.epsAnnual), eps,
+                'Bénéfice par action annuel publié sur les 5 derniers exercices. Une barre rouge signale un exercice en perte.');
+
+        if (src) {
+            const hasHist = AnalysisUtils.arr(g.revenueAnnual).some(p => p.value != null);
+            src.textContent = hasHist
+                ? 'FMP · consensus analystes Yahoo Finance'
+                : (a.isUS ? 'Historique annuel indisponible' : 'Historique complet : actions US uniquement');
         }
     },
 

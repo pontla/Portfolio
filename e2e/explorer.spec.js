@@ -117,6 +117,32 @@ test('section Valorisation : rendue en différé avec repères moyenne 5 ans et 
     await expect(grid.locator('.kv-help').first()).toHaveAttribute('data-tip', /.+/);
 });
 
+test('section Croissance : historiques annuels en barres et consensus analystes', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchGrowthCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchGrowthGrid');
+    await expect(grid.locator('.research-kv')).toHaveCount(8);
+    await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
+
+    // TCAC calculé depuis l'historique FMP (260 Md -> 383 Md sur 4 ans)
+    await expect(grid).toContainText('TCAC CA 5 ans');
+    await expect(grid).toContainText('%');
+    // guidance non fournie par les sources gratuites
+    await expect(grid).toContainText('Non disponible');
+
+    // deux séries annuelles de 5 exercices, avec barres dimensionnées
+    const series = page.locator('#researchGrowthSeries');
+    await expect(series.locator('.gs-block')).toHaveCount(2);
+    await expect(series.locator('.gs-row')).toHaveCount(10);
+    await expect(series.locator('.gs-empty')).toHaveCount(0);
+    const w = await series.locator('.gs-bar').first().evaluate((el) => el.getBoundingClientRect().width);
+    expect(w).toBeGreaterThan(0);
+    await expect(series.locator('.gs-yoy.up').first()).toBeVisible();
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(

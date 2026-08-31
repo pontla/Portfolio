@@ -1600,6 +1600,11 @@ input:focus {
     box-shadow: 0 10px 30px var(--shadow, rgba(0, 0, 0, .4)); z-index: 60;
 }
 .kv-help:hover::after, .kv-help:focus-visible::after { opacity: 1; visibility: visible; }
+/* Ancrage lateral (classes posees par App._placeTip) pour rester dans la carte */
+.kv-help.tip-end::after { left: auto; right: -5px; transform: none; }
+.kv-help.tip-start::after { left: -5px; right: auto; transform: none; }
+/* La bulle centree ne doit jamais elargir la page : clip horizontal, vertical libre */
+.research-kv-grid, .growth-series { overflow-x: clip; }
 
 .kv-cmp {
     margin-top: 1px;
@@ -1610,8 +1615,42 @@ input:focus {
 .kv-cmp.above { color: var(--dn); }
 .kv-cmp.below { color: var(--up); }
 
+/* Historiques annuels en barres (croissance CA / BPA) */
+.growth-series {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px 24px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--l1);
+}
+.gs-title {
+    display: flex; align-items: center; gap: 5px;
+    color: var(--text-secondary); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .03em;
+    margin-bottom: 10px;
+}
+.gs-row {
+    display: grid;
+    grid-template-columns: 34px 1fr auto auto;
+    align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11.5px;
+    padding: 2px 0;
+}
+.gs-year { color: var(--text-secondary); }
+.gs-bar-wrap { height: 7px; background: var(--tile); border-radius: 4px; overflow: hidden; }
+.gs-bar { display: block; height: 100%; background: var(--acc); border-radius: 4px; }
+.gs-bar.neg { background: var(--dn); }
+.gs-val { font-weight: 600; }
+.gs-yoy { font-family: var(--font-ui); font-size: 10.5px; font-weight: 600; min-width: 54px; text-align: right; }
+.gs-yoy.up { color: var(--up); }
+.gs-yoy.dn { color: var(--dn); }
+.gs-empty { color: var(--text-secondary); font-size: 13px; }
+
 @media (max-width: 560px) {
     .kv-help::after { max-width: 200px; }
+    .gs-row { grid-template-columns: 32px 1fr auto auto; gap: 6px; font-size: 11px; }
+    .gs-yoy { min-width: 48px; }
 }
 
 .research-range-bar { margin-top: 18px; }
