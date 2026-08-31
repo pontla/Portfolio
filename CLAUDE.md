@@ -4,15 +4,28 @@
 - N'explique pas tes modifications sauf si je le demande explicitement.
 - Ne réécris pas des fichiers entiers si seules quelques lignes changent ; cible uniquement les blocs impactés.
 
-# WORKFLOW DE COMMIT AUTOMATIQUE
-Dès qu'une fonctionnalité, révision ou correction est terminée et validée :
-1. Exécute `git status` et `git diff` pour analyser les changements.
-2. Lance `npm test` et, si le changement touche l'UI ou un parcours, `npm run test:e2e` ; ne commit pas tant qu'ils ne passent pas.
-3. Rédige un message de commit court au format Conventional Commits (`feat:`, `fix:`, `refactor:`, `style:`)[cite: 3].
-4. Exécute directement :
-   git add .
-   git commit -m "<ton_message_de_commit>"
-5. Préviens-moi en 1 ligne que le commit est fait pour me permettre de faire un `/compact` ou `/clear`[cite: 3].
+# WORKFLOW GIT, TESTS & COMMIT AUTOMATIQUE
+
+1. **Inauguration de tâche (Création de branche) :**
+   - Avant de démarrer toute nouvelle fonctionnalité ou correction, vérifie la branche courante.
+   - Si tu es sur `main`, crée et bascule directement sur une nouvelle branche explicite :
+     `git checkout main && git pull && git checkout -b feature/<nom-court-de-la-feature>`
+
+2. **Validation par les tests (Obligatoire) :**
+   - Une fois la modification terminée, lance la suite de tests unitaires : `npm test`.
+   - Si la modification impacte l'UI, les composants ou un parcours utilisateur, lance également : `npm run test:e2e`[cite: 3].
+   - **Interdiction absolue de commiter** tant que l'ensemble des tests ne passe pas à 100 %[cite: 3].
+
+3. **Commit automatique sur la branche :**
+   - Une fois les tests au vert, analyse le travail avec `git status` et `git diff`[cite: 3].
+   - Rédige un message au format Conventional Commits (`feat:`, `fix:`, `refactor:`, `style:`)[cite: 3].
+   - Exécute l'enregistrement :
+     `git add .`
+     `git commit -m "<ton_message_de_commit>"`[cite: 3]
+
+4. **Fin de tâche :**
+   - N'essaie pas de fusionner (*merge*) sur `main` toi-même[cite: 3].
+   - Indique-moi simplement en 1 ligne : *"Commit effectué sur la branche <nom-de-branche>. Tu peux lancer `/compact` ou `/clear`."*
 
 # Compte test
 

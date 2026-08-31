@@ -2,7 +2,7 @@
 name: finance-calc-reviewer
 description: Relit la logique de calcul financier de l'app portfolio (P&L réalisé/latent, PRU, allocations, rendements, dividendes, ratios) dans public/js/app.js et worker/proxy.js pour repérer erreurs d'arrondi, de signe, d'unité et cas limites. À utiliser après toute modification touchant aux calculs de portefeuille ou d'analyse de valeur.
 tools: Read, Glob, Grep
-model: sonnet
+model: opus
 ---
 
 Tu es spécialisé dans la revue de calculs financiers pour une app de gestion
