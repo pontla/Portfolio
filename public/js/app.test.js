@@ -1027,6 +1027,37 @@ describe('AnalysisService._normalize', () => {
     });
 });
 
+describe('AnalysisService._dividendBlock (phase 8)', () => {
+    const { AnalysisService: S } = app;
+
+    it('agrege par annee civile et compte les hausses sur exercices complets', () => {
+        const out = S._dividendBlock([
+            { date: '2021-03-01', amountPerShare: 0.5 }, { date: '2021-09-01', amountPerShare: 0.5 },
+            { date: '2022-03-01', amountPerShare: 0.6 }, { date: '2022-09-01', amountPerShare: 0.6 },
+            { date: '2023-03-01', amountPerShare: 0.7 }, { date: '2023-09-01', amountPerShare: 0.7 },
+            { date: '2024-03-01', amountPerShare: 0.75 }
+        ], { yieldPct: 2.4, payoutRatio: 0.42, ratePerShare: 1.5, avgYield5y: 1.9 });
+
+        expect(out.paysDividend).toBe(true);
+        expect(out.avgYield5y).toBe(1.9);
+        expect(out.annualPerShare.map(p => p.year)).toEqual(['2021', '2022', '2023', '2024']);
+        expect(out.annualPerShare[1].value).toBeCloseTo(1.2, 10);
+        // 2024 incomplete -> exclue ; 2021 < 2022 < 2023 -> 2 hausses
+        expect(out.growthStreakYears).toBe(2);
+        expect(out.lastPayment.date).toBe('2024-03-01');
+    });
+
+    it('valeur sans dividende : rien a afficher, aucun NaN', () => {
+        const out = S._dividendBlock([], { yieldPct: null, payoutRatio: null, ratePerShare: null });
+        expect(out.paysDividend).toBe(false);
+        expect(out.growthStreakYears).toBe(0);
+        expect(out.avgYield5y).toBeNull();
+        expect(out.annualPerShare).toEqual([]);
+        expect(out.lastPayment).toBeNull();
+        expect(JSON.stringify(out)).not.toContain('NaN');
+    });
+});
+
 describe('AnalysisService : analyse technique (phase 7)', () => {
     const { AnalysisService: S } = app;
 

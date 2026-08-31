@@ -51,7 +51,7 @@ const QUOTE_SUMMARY = {
     returnOnEquity: 1.5, returnOnAssets: 0.28,
     grossMargins: 0.46, operatingMargins: 0.30, profitMargins: 0.25,
     revenueGrowth: 0.08, earningsGrowth: 0.11,
-    dividendYield: 0.005, dividendRate: 0.96, payoutRatio: 0.15,
+    dividendYield: 0.005, dividendRate: 0.96, payoutRatio: 0.15, fiveYearAvgDividendYield: 0.62,
     beta: 1.24, fiftyTwoWeekHigh: 210, fiftyTwoWeekLow: 150,
     fiftyDayAverage: 195, twoHundredDayAverage: 185,
     regularMarketVolume: 64000000, averageVolume: 58000000, averageVolume10Days: 61000000,

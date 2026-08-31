@@ -264,6 +264,33 @@ test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe
     expect(filled).toBeGreaterThan(50);
 });
 
+test('section Dividende : rendement, distribution et historique par action', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchDivCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchDivGrid');
+    await expect(grid.locator('.research-kv')).toHaveCount(8);
+
+    // le rendement a quitté "Données clés" pour cette section
+    await expect(page.locator('#researchKeyGrid')).not.toContainText('Rendement du dividende');
+    await expect(grid).toContainText('Rendement actuel');
+    await expect(grid).toContainText('0,51 %');
+    // 0,51 % vs 0,62 % de moyenne 5 ans
+    await expect(grid.locator('.kv-cmp.dn').first()).toContainText('pts vs moyenne 5 ans');
+
+    // payout 15 % -> soutenable ; 2 exercices complets de hausse (2021 < 2022 < 2023)
+    await expect(grid).toContainText('15,00 %');
+    await expect(grid).toContainText('soutenable');
+    await expect(grid.locator('.research-kv', { hasText: 'Hausses consécutives' })).toContainText('2 ans');
+
+    // 4 années civiles de versements
+    const series = page.locator('#researchDivSeries');
+    await expect(series.locator('.gs-row')).toHaveCount(4);
+    await expect(series.locator('.gs-empty')).toHaveCount(0);
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(

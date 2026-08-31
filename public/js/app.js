@@ -1002,7 +1002,8 @@ const AnalysisService = {
         const dividend = this._dividendBlock(U.arr(x.dividends), {
             yieldPct: n(fund.dividendYield) ?? pctU(n(qs.dividendYield)) ?? pctU(n(rTtm.dividendYieldTTM)),
             payoutRatio: n(qs.payoutRatio) ?? n(rTtm.payoutRatioTTM) ?? n(latestRatio.payoutRatio),
-            ratePerShare: n(qs.dividendRate)
+            ratePerShare: n(qs.dividendRate),
+            avgYield5y: n(qs.fiveYearAvgDividendYield)   // Yahoo : deja en unites de %
         });
 
         return {
@@ -1052,6 +1053,7 @@ const AnalysisService = {
         return {
             paysDividend,
             yieldPct: base.yieldPct,
+            avgYield5y: base.avgYield5y ?? null,
             ratePerShare: base.ratePerShare,
             payoutRatio: base.payoutRatio,           // fraction (0.42) — cf. formatage en phase 8
             growthStreakYears: paysDividend ? streak : 0,
@@ -5048,6 +5050,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchProfitability(null);
         this.renderResearchSentiment(null);
         this.renderResearchTechnical(null);
+        this.renderResearchDividend(null);
         this.researchAnalysis = null;
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
@@ -5058,6 +5061,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             this.renderResearchProfitability(a);
             this.renderResearchSentiment(a);
             this.renderResearchTechnical(a);
+            this.renderResearchDividend(a);
             this.applyResearchMaOverlay();
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
@@ -5656,6 +5660,83 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         if (src) src.textContent = `Calculé sur ${t.points} séances de cotation`;
     },
 
+    // Carte conditionnelle : masquee pour les valeurs qui ne versent pas de dividende.
+    renderResearchDividend(a) {
+        const card = document.getElementById('researchDivCard');
+        const grid = document.getElementById('researchDivGrid');
+        const series = document.getElementById('researchDivSeries');
+        const src = document.getElementById('researchDivSrc');
+        if (!card || !grid || !series) return;
+
+        if (!a) { card.hidden = true; return; }
+
+        const d = a.dividend || {};
+        if (!d.paysDividend) { card.hidden = true; return; }
+        card.hidden = false;
+
+        const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
+        const ND = 'Non disponible';
+        const money = (x) => (x == null || !isFinite(x)) ? null : Utils.formatCurrency(x, cur);
+        const pct = (x) => (x == null || !isFinite(x)) ? null : Utils.formatPercent(x, false);
+
+        const kv = (label, valueStr, tip, extra = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${extra}</div>`;
+
+        // Taux de distribution : part du benefice reversee. Seuils explicites et
+        // ajustables — au-dela de 80 % la marge de securite devient mince, le
+        // dividende dependant alors de la stabilite parfaite des resultats.
+        const payoutPct = (d.payoutRatio == null || !isFinite(d.payoutRatio)) ? null : d.payoutRatio * 100;
+        const payoutTag = payoutPct == null ? ''
+            : `<span class="kv-tag ${payoutPct > 80 ? 'warn' : (payoutPct > 60 ? 'mid' : 'ok')}">` +
+              `${payoutPct > 80 ? 'peu soutenable' : (payoutPct > 60 ? 'à surveiller' : 'soutenable')}</span>`;
+
+        // Ecart au rendement moyen des 5 dernieres annees : au-dessus, le titre
+        // rapporte plus que d'habitude (souvent parce que le cours a baisse).
+        const vsAvg = (d.yieldPct != null && d.avgYield5y) ? d.yieldPct - d.avgYield5y : null;
+        const vsAvgTag = vsAvg == null ? ''
+            : `<span class="kv-cmp ${vsAvg >= 0 ? 'up' : 'dn'}">` +
+              `${vsAvg >= 0 ? '+' : '−'}${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(Math.abs(vsAvg))} pts vs moyenne 5 ans</span>`;
+
+        const streak = d.growthStreakYears;
+        const streakTag = !streak ? ''
+            : `<span class="kv-tag ${streak >= 5 ? 'ok' : 'mid'}">${streak >= 5 ? 'régulier' : 'récent'}</span>`;
+
+        const last = d.lastPayment;
+        const annual = AnalysisUtils.arr(d.annualPerShare);
+        const lastFull = annual.length > 1 ? annual[annual.length - 2] : null;
+
+        grid.innerHTML =
+            kv('Rendement actuel', pct(d.yieldPct),
+                'Dividende annuel rapporté au cours actuel. Un rendement très élevé traduit souvent un cours qui a chuté, pas une bonne affaire.',
+                vsAvgTag) +
+            kv('Rendement moyen 5 ans', pct(d.avgYield5y),
+                'Rendement moyen des 5 dernières années : sert de repère pour situer le rendement actuel.') +
+            kv('Dividende par action', money(d.ratePerShare),
+                'Montant annuel versé par action, sur la base du dernier taux connu.') +
+            kv('Versé sur le dernier exercice', lastFull == null ? null : money(lastFull.value),
+                'Somme réellement versée par action sur le dernier exercice complet, tous détachements confondus.') +
+            kv('Taux de distribution', payoutPct == null ? null : pct(payoutPct),
+                'Part du bénéfice reversée aux actionnaires. Au-delà de 80 %, le dividende absorbe presque tout le résultat : peu de marge en cas de mauvaise année.',
+                payoutTag) +
+            kv('Hausses consécutives', streak == null ? null : `${streak} an${streak > 1 ? 's' : ''}`,
+                'Nombre d\'exercices complets consécutifs où le dividende annuel a augmenté. Une longue série signale une politique de distribution assumée.',
+                streakTag) +
+            kv('Dernier versement', !last ? null : money(Number(last.amountPerShare)),
+                'Montant et date du dernier détachement connu.',
+                (last && last.date) ? `<span class="kv-cmp">${Utils.formatDateDisplay(last.date)}</span>` : '') +
+            kv('Historique disponible', annual.length ? `${annual.length} exercices` : null,
+                'Profondeur de l\'historique de versements récupéré (source Yahoo Finance).');
+
+        series.innerHTML = this._growthSeries(
+            'Dividende annuel par action',
+            annual, (x) => Utils.formatCurrency(x, cur),
+            'Somme des détachements de chaque année civile. La dernière année est souvent incomplète : elle n\'entre pas dans le calcul des hausses consécutives.'
+        );
+
+        if (src) src.textContent = annual.length ? 'Yahoo Finance' : 'Historique de versements indisponible';
+    },
+
     // Trace MM 50 / MM 200 par-dessus la courbe de cours existante. Les moyennes
     // viennent de l'analyse (15 mois d'historique) : rien n'est re-telecharge, et
     // les points hors de cette fenetre restent vides plutot qu'approximes.
@@ -5739,7 +5820,6 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             kv('Capitalisation', Utils.formatCompact(fund.marketCap, 'USD')) +
             kv('PER (P/E TTM)', n1(fund.peTTM, 1)) +
             kv('BPA (TTM)', fund.epsTTM == null ? '—' : Utils.formatCurrency(fund.epsTTM, cur)) +
-            kv('Rendement du dividende', pct(fund.dividendYield)) +
             kv('Bêta', n1(fund.beta)) +
             kv('Cours / Valeur compta. (P/B)', n1(fund.pbAnnual)) +
             kv('Cours / Ventes (P/S)', n1(fund.psTTM)) +
