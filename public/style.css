@@ -1604,7 +1604,41 @@ input:focus {
 .kv-help.tip-end::after { left: auto; right: -5px; transform: none; }
 .kv-help.tip-start::after { left: -5px; right: auto; transform: none; }
 /* La bulle centree ne doit jamais elargir la page : clip horizontal, vertical libre */
-.research-kv-grid, .growth-series { overflow-x: clip; }
+.research-kv-grid, .growth-series, .spark-list { overflow-x: clip; }
+
+/* Evolution d'une marge sur 5 ans : courbe miniature + variation en points */
+.spark-list {
+    margin-top: 18px; padding-top: 16px;
+    border-top: 1px solid var(--l1);
+    display: grid; gap: 12px;
+}
+.spark-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 1fr) 104px auto auto;
+    align-items: center; gap: 10px;
+}
+.spark-lab {
+    display: flex; align-items: center; gap: 5px;
+    color: var(--text-secondary); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .03em;
+}
+.spark { width: 104px; height: 26px; display: block; }
+.spark polyline {
+    fill: none; stroke: var(--acc); stroke-width: 1.5;
+    stroke-linejoin: round; stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+.spark-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+.spark-delta { font-family: var(--font-ui); font-size: 10.5px; font-weight: 600; min-width: 66px; text-align: right; }
+.spark-delta.up { color: var(--up); }
+.spark-delta.dn { color: var(--dn); }
+.spark-empty { color: var(--text-secondary); font-size: 12px; font-family: var(--font-ui); }
+
+@media (max-width: 560px) {
+    .spark-row { grid-template-columns: 1fr 84px auto; gap: 8px; }
+    .spark { width: 84px; }
+    .spark-delta { display: none; }
+}
 
 .kv-cmp {
     margin-top: 1px;

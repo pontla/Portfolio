@@ -169,6 +169,27 @@ test('section Santé financière : ratios avec pastilles de risque et historique
     await expect(series.locator('.gs-empty')).toHaveCount(0);
 });
 
+test('section Rentabilité : ROIC/ROA/marges et sparklines 5 ans', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchProfitCard');
+    await expect(card).toBeVisible();
+
+    const grid = page.locator('#researchProfitGrid');
+    await expect(grid.locator('.research-kv')).toHaveCount(6);
+    await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
+    await expect(grid).toContainText('ROIC');
+    await expect(grid).toContainText('55,00 %');   // roicTTM 0.55 (FMP key-metrics-ttm)
+    await expect(grid).toContainText('Marge brute');
+
+    // trois courbes de marges, avec variation en points de pourcentage
+    const sparks = page.locator('#researchProfitSparks');
+    await expect(sparks.locator('.spark-row')).toHaveCount(3);
+    await expect(sparks.locator('svg.spark polyline')).toHaveCount(3);
+    await expect(sparks.locator('.spark-empty')).toHaveCount(0);
+    await expect(sparks.locator('.spark-delta').first()).toContainText('pts');
+});
+
 test('aucun débordement horizontal du corps de page', async ({ page }) => {
     await openResearch(page, 'AAPL');
     const overflow = await page.evaluate(

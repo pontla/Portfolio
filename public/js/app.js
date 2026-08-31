@@ -4945,12 +4945,14 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         this.renderResearchValuation(null);
         this.renderResearchGrowth(null);
         this.renderResearchHealth(null);
+        this.renderResearchProfitability(null);
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
             this.researchAnalysis = a;
             this.renderResearchValuation(a);
             this.renderResearchGrowth(a);
             this.renderResearchHealth(a);
+            this.renderResearchProfitability(a);
         }).catch(e => console.warn('AnalysisService.build KO', e));
     },
 
@@ -5206,6 +5208,95 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             src.textContent = hasFcf
                 ? 'FMP · Yahoo Finance'
                 : (a.isUS ? 'Historique de trésorerie indisponible' : 'Historique complet : actions US uniquement');
+        }
+    },
+
+    // Courbe miniature (SVG inline, compatible CSP) d'une serie annuelle.
+    _sparkline(points) {
+        const pts = AnalysisUtils.arr(points).filter(p => p.value != null && isFinite(p.value));
+        if (pts.length < 2) return '';
+        const w = 104, h = 26, pad = 3;
+        const vals = pts.map(p => p.value);
+        const min = Math.min(...vals);
+        const span = (Math.max(...vals) - min) || 1;
+        const coords = pts.map((p, i) => {
+            const x = pad + (i / (pts.length - 1)) * (w - pad * 2);
+            const y = h - pad - ((p.value - min) / span) * (h - pad * 2);
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${coords}"/></svg>`;
+    },
+
+    // Ligne "marge X : courbe 5 ans + niveau actuel + variation en points de %".
+    _sparkRow(label, points, tip) {
+        const pts = AnalysisUtils.arr(points).filter(p => p.value != null && isFinite(p.value));
+        const head = `<span class="spark-lab">${label} ${this._kvHelp(tip)}</span>`;
+        if (pts.length < 2) {
+            return `<div class="spark-row">${head}<span class="spark-empty">Non disponible</span></div>`;
+        }
+        const first = pts[0].value;
+        const last = pts[pts.length - 1].value;
+        const d = last - first;
+        const delta = `${d >= 0 ? '+' : '−'}${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(Math.abs(d))} pts`;
+        return `<div class="spark-row">${head}${this._sparkline(pts)}` +
+            `<span class="spark-val">${Utils.formatPercent(last, false)}</span>` +
+            `<span class="spark-delta ${d >= 0 ? 'up' : 'dn'}" title="${pts[0].year} → ${pts[pts.length - 1].year}">${delta}</span></div>`;
+    },
+
+    renderResearchProfitability(a) {
+        const card = document.getElementById('researchProfitCard');
+        const grid = document.getElementById('researchProfitGrid');
+        const sparks = document.getElementById('researchProfitSparks');
+        const src = document.getElementById('researchProfitSrc');
+        if (!card || !grid || !sparks) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            grid.innerHTML = '<div class="research-kv"><span class="v research-kv-loading">Chargement…</span></div>';
+            sparks.innerHTML = '';
+            return;
+        }
+
+        const p = a.profitability || {};
+        const mh = p.marginHistory || {};
+        const ND = 'Non disponible';
+        const pct = (x) => (x == null || !isFinite(x)) ? null : Utils.formatPercent(x, false);
+
+        const kv = (label, valueStr, tip, tag = '') =>
+            `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
+            `<span class="v">${valueStr == null ? ND : valueStr}</span>${tag}</div>`;
+
+        grid.innerHTML =
+            kv('ROE', pct(p.roe),
+                'Résultat net rapporté aux capitaux propres : ce que la société génère avec l\'argent des actionnaires. Au-dessus de 15 % durablement, c\'est solide.',
+                this._healthFlag(p.roe, 15, 8, 'high')) +
+            kv('ROA', pct(p.roa),
+                'Résultat net rapporté au total du bilan : rentabilité de l\'ensemble des actifs, dette comprise. Moins flatteur que le ROE mais moins manipulable.',
+                this._healthFlag(p.roa, 8, 3, 'high')) +
+            kv('ROIC', pct(p.roic),
+                'Rentabilité du capital réellement investi (dette + fonds propres). S\'il dépasse durablement le coût du capital (~8-10 %), la société crée de la valeur.',
+                this._healthFlag(p.roic, 12, 6, 'high')) +
+            kv('Marge brute', pct(p.grossMargin),
+                'Part du chiffre d\'affaires restante après le coût de production. Une marge brute élevée et stable est un bon indice de pouvoir de fixation des prix.') +
+            kv('Marge opérationnelle', pct(p.operatingMargin),
+                'Part du chiffre d\'affaires restante après tous les coûts d\'exploitation. Mesure l\'efficacité du métier, hors dette et impôts.') +
+            kv('Marge nette', pct(p.netMargin),
+                'Part du chiffre d\'affaires qui finit en résultat net, une fois tout payé.');
+
+        sparks.innerHTML =
+            this._sparkRow('Marge brute (5 ans)', mh.gross,
+                'Évolution de la marge brute sur les 5 derniers exercices. En hausse : les prix ou le mix produit s\'améliorent.') +
+            this._sparkRow('Marge opérationnelle (5 ans)', mh.operating,
+                'Évolution de la marge opérationnelle sur 5 ans. Une érosion continue signale une pression concurrentielle ou des coûts qui dérapent.') +
+            this._sparkRow('Marge nette (5 ans)', mh.net,
+                'Évolution de la marge nette sur 5 ans. Variation exprimée en points de pourcentage entre le premier et le dernier exercice.');
+
+        if (src) {
+            const hasHist = AnalysisUtils.arr(mh.net).some(x => x.value != null);
+            src.textContent = hasHist
+                ? 'Yahoo Finance · historique de marges FMP'
+                : (a.isUS ? 'Yahoo Finance · historique de marges indisponible' : 'Historique complet : actions US uniquement');
         }
     },
 
