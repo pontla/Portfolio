@@ -32,11 +32,15 @@
 
     <!-- Icons : SVG inline, registre dans app.js (Icons.render) -->
 
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js (version épinglée + SRI) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous"></script>
 
-    <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase (version épinglée + SRI) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.min.js"
+        integrity="sha384-yiVMs0R/Jyz7OhoXa/DsEMUSBLjEhr/QJta2ONO+zB6I8/GmNg/7AUFrZmAJV7KV"
+        crossorigin="anonymous"></script>
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="style.css?v=48">
@@ -890,21 +894,6 @@
         </div>
     </div>
 
-    <!-- MODAL: Asset Detail Chart -->
-    <div class="modal-overlay" id="assetChartModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 id="assetChartTitle">Actif</h3>
-                <button class="close-btn" id="closeAssetChartBtn"><i data-lucide="x"></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="chart-container" style="height:280px;">
-                    <canvas id="assetDetailChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- MODAL: Portfolio Create/Edit -->
     <div class="modal-overlay" id="portfolioModal">
         <div class="modal">
@@ -957,7 +946,7 @@
     </div>
 
     <!-- App Logic -->
-    <script src="js/app.js?v=96"></script>
+    <script src="js/app.js?v=97"></script>
 </body>
 
 </html>

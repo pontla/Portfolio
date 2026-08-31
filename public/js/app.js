@@ -2235,12 +2235,6 @@ const App = {
             closePortfolioModalBtn.onclick = () => portfolioModal.classList.remove('open');
         }
 
-        const assetChartModal = document.getElementById('assetChartModal');
-        const closeAssetChartBtn = document.getElementById('closeAssetChartBtn');
-        if (closeAssetChartBtn && assetChartModal) {
-            closeAssetChartBtn.onclick = () => assetChartModal.classList.remove('open');
-        }
-
         // Portfolio Form Submit (Create or Edit)
         if (portfolioForm) {
             portfolioForm.onsubmit = async (e) => {
@@ -2780,7 +2774,7 @@ const App = {
 
                 // Charts created while their tab was hidden (display:none) can be
                 // measured with a stale size by Chart.js; force a resize once visible.
-                [this.chart, this.profitChart, this.assetChart, this.classChart, this.currencyChart, this.sectorChart, this.assetDetailChart, this.researchChart]
+                [this.chart, this.profitChart, this.assetChart, this.classChart, this.currencyChart, this.sectorChart, this.researchChart]
                     .forEach(c => c && c.resize());
 
                 if (tab === 'research') this.onResearchTabShown();
@@ -4726,90 +4720,6 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             card.hidden = false;
         } catch (e) { /* actualités indisponibles */ }
     },
-
-    async openAssetChart(symbol) {
-        const modal = document.getElementById('assetChartModal');
-        const titleEl = document.getElementById('assetChartTitle');
-        const canvas = document.getElementById('assetDetailChart');
-        if (!modal || !canvas) return;
-
-        const name = this.assetNameCache[symbol];
-        titleEl.textContent = name ? `${symbol} · ${name}` : symbol;
-        modal.classList.add('open');
-
-        const stats = this.service.calculatePortfolio(this.chartState.currency);
-        const holding = stats.holdings.find(h => h.symbol === symbol);
-        if (!holding) return;
-
-        const trades = this.service.getSortedTrades().filter(t => t.symbol === symbol);
-        const oneYearAgo = new Date();
-        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        const firstTradeDate = trades.length ? Utils.parseDate(trades[0].date) : oneYearAgo;
-        const startDate = firstTradeDate < oneYearAgo ? oneYearAgo : firstTradeDate;
-        const endDate = new Date();
-
-        const history = await APIService.getDailyHistory(symbol, startDate, endDate, holding.avgPrice, holding.currentPrice);
-        const sortedDates = Object.keys(history).sort();
-        const labels = sortedDates.map(d => Utils.formatDateDisplay(d));
-        const values = sortedDates.map(d => history[d]);
-        const ink = this.chartInk();
-        const lineColor = holding.currentPrice >= holding.avgPrice ? '#2ebd85' : '#f6465c';
-
-        if (this.assetDetailChart) {
-            this.assetDetailChart.data.labels = labels;
-            this.assetDetailChart.data.datasets[0].data = values;
-            this.assetDetailChart.data.datasets[0].borderColor = lineColor;
-            this.assetDetailChart.data.datasets[0].label = symbol;
-            this.assetDetailChart.options.plugins.tooltip.callbacks.label = (ctx) => Utils.formatCurrency(ctx.parsed.y, holding.currency);
-            this.assetDetailChart.options.scales.y.ticks.callback = (value) => Utils.formatCurrency(value, holding.currency);
-            this.assetDetailChart.update();
-            return;
-        }
-
-        this.assetDetailChart = new Chart(canvas.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label: symbol,
-                    data: values,
-                    borderColor: lineColor,
-                    backgroundColor: 'transparent',
-                    fill: false,
-                    tension: 0.15,
-                    borderWidth: 2.2,
-                    borderCapStyle: 'round',
-                    pointRadius: 0,
-                    pointHoverRadius: 5
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => Utils.formatCurrency(ctx.parsed.y, holding.currency)
-                        }
-                    }
-                },
-                scales: {
-                    x: { grid: { display: false }, border: { display: false }, ticks: { color: ink.tick, font: { size: 11 }, maxTicksLimit: 8 } },
-                    y: {
-                        position: 'right',
-                        grid: { color: ink.grid, lineWidth: 1, drawTicks: false },
-                        border: { display: false },
-                        ticks: {
-                            color: ink.tick,
-                            font: { size: 11 },
-                            callback: (value) => Utils.formatCurrency(value, holding.currency)
-                        }
-                    }
-                }
-            }
-        });
-    }
 };
 
 window.onerror = function (msg, url, line) {
