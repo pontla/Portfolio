@@ -97,6 +97,38 @@ test('cliquer sur une position détenue ouvre l’Explorer sur cette valeur', as
     await expect(page.locator('#researchChart')).toBeVisible();
 });
 
+test('synthèse : score global, signal et sous-scores justifiés', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchScoreCard');
+    await expect(card).toBeVisible();
+
+    // score global sur 100 + signal
+    const top = page.locator('#researchScoreTop');
+    await expect(top.locator('.score-val')).toHaveText(/^\d{1,3}$/);
+    await expect(top.locator('.score-max')).toHaveText('/ 100');
+    const signal = top.locator('.score-signal');
+    await expect(signal).toHaveText(/^(Achat|Conserver|Vente)$/);
+    // la pondération est explicitée dans l'aide
+    await expect(top.locator('.kv-help')).toHaveAttribute('data-tip', /Achat/);
+
+    // 5 sous-scores, chacun avec sa barre et sa justification chiffrée
+    const subs = page.locator('#researchScoreSubs .score-sub');
+    await expect(subs).toHaveCount(5);
+    await expect(page.locator('#researchScoreSubs')).toContainText('Valorisation');
+    await expect(page.locator('#researchScoreSubs')).toContainText('Sentiment & technique');
+    await expect(subs.locator('.score-bar i')).toHaveCount(5);
+    for (const t of ['Valorisation', 'Rentabilité']) {
+        const row = subs.filter({ hasText: t }).first();
+        await expect(row.locator('.score-sub-val')).toContainText('/ 100');
+        await expect(row.locator('.score-note')).not.toBeEmpty();
+    }
+    await expect(page.locator('#researchScoreSubs')).not.toContainText('NaN');
+
+    // avertissement visible
+    await expect(card.locator('.score-disclaimer')).toContainText('pas un conseil en investissement');
+});
+
 test('section Valorisation : rendue en différé avec repères moyenne 5 ans et aides', async ({ page }) => {
     await openResearch(page, 'AAPL');
 

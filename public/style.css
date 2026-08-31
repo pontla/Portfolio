@@ -1750,6 +1750,48 @@ input:focus {
 .kv-tag.warn { color: var(--dn); border-color: color-mix(in srgb, var(--dn) 40%, transparent); }
 .kv-tag.mid { color: var(--text-secondary); border-color: var(--l2); }
 
+/* Synthese : score global, signal et detail des sous-scores */
+.score-top {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    padding-bottom: 16px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--l1);
+}
+.score-dial { display: flex; align-items: baseline; gap: 2px; }
+.score-val { font-family: var(--font-mono); font-size: 34px; font-weight: 700; line-height: 1; }
+.score-max { color: var(--text-secondary); font-family: var(--font-mono); font-size: 14px; }
+.score-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 200px; }
+.score-signal {
+    align-self: flex-start; padding: 3px 12px; border-radius: 999px;
+    font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    border: 1px solid transparent;
+}
+/* Couleurs du signal : achat = vert, conserver = neutre, vente = rouge */
+.score-signal.buy { color: var(--up); border-color: color-mix(in srgb, var(--up) 45%, transparent); background: color-mix(in srgb, var(--up) 12%, transparent); }
+.score-signal.hold { color: var(--text-secondary); border-color: var(--l2); }
+.score-signal.sell { color: var(--dn); border-color: color-mix(in srgb, var(--dn) 45%, transparent); background: color-mix(in srgb, var(--dn) 12%, transparent); }
+.score-caption { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+
+.score-subs { display: grid; gap: 14px; overflow-x: clip; }
+.score-sub { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+.score-sub-lab {
+    display: flex; align-items: center; gap: 5px;
+    color: var(--text-secondary); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .03em;
+}
+.score-sub-val { font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+.score-bar { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--tile); overflow: hidden; }
+.score-bar i { display: block; height: 100%; border-radius: 999px; background: var(--acc); }
+/* Palier de couleur identique aux seuils du signal (45 / 65) */
+.score-bar i.low { background: var(--dn); }
+.score-bar i.high { background: var(--up); }
+.score-note { grid-column: 1 / -1; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.score-disclaimer {
+    margin: 16px 0 0; padding-top: 14px;
+    border-top: 1px solid var(--l1);
+    color: var(--text-secondary); font-size: 11.5px; line-height: 1.5;
+}
+
 /* Comparaison sectorielle : tableau qui defile horizontalement sur mobile
    sans jamais elargir la page (premiere colonne collante pour garder le nom). */
 .peers-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }

@@ -1010,8 +1010,15 @@ describe('AnalysisService._normalize', () => {
 
         // 2 seules seances d'historique -> pas d'analyse technique possible
         expect(out.technical).toBeNull();
-        // champ calcule en phase 11
-        expect(out.score).toBeNull();
+        // score global : moyenne ponderee des 5 sous-scores disponibles
+        expect(out.score.subs.map(x => x.key)).toEqual(['valuation', 'growth', 'health', 'profitability', 'momentum']);
+        expect(out.score.subsUsed).toBe(5);
+        expect(out.score.weightCoverage).toBeCloseTo(1, 6);
+        expect(out.score.global).toBeGreaterThan(0);
+        expect(out.score.global).toBeLessThan(100);
+        expect(['Achat', 'Conserver', 'Vente']).toContain(out.score.signal);
+        // chaque sous-score porte une justification chiffree
+        out.score.subs.forEach(x => expect(x.note.length).toBeGreaterThan(0));
         expect(out.meta.errors).toEqual([]);
     });
 
@@ -1212,5 +1219,78 @@ describe('AnalysisService : comparaison sectorielle (phase 10)', () => {
         const out = await S.buildPeers({ symbol: 'XYZ.PA', peersSymbols: [] });
         expect(out.peers).toEqual([]);
         expect(out.self.symbol).toBe('XYZ.PA');
+    });
+});
+
+describe('AnalysisService : score global (phase 11)', () => {
+    const { AnalysisService: S } = app;
+
+    it('_scoreLinear interpole et borne, dans les deux sens', () => {
+        expect(S._scoreLinear(10, 0, 20)).toBe(50);
+        expect(S._scoreLinear(-5, 0, 20)).toBe(0);      // borne basse
+        expect(S._scoreLinear(50, 0, 20)).toBe(100);    // borne haute
+        // sens inverse (PER : plus bas vaut mieux)
+        expect(S._scoreLinear(10, 45, 10)).toBe(100);
+        expect(S._scoreLinear(45, 45, 10)).toBe(0);
+        expect(S._scoreLinear(null, 0, 20)).toBeNull();
+        expect(S._scoreLinear(NaN, 0, 20)).toBeNull();
+    });
+
+    it('_scoreCriteria ignore les criteres absents et justifie avec des chiffres', () => {
+        const out = S._scoreCriteria([
+            { score: 90, note: 'ROE de 40,0 %' },
+            { score: 20, note: 'PER de 44,0 ×' },
+            { score: null, note: null }
+        ]);
+        expect(out.value).toBe(55);          // (90 + 20) / 2, le critere absent est ignore
+        expect(out.used).toBe(2);
+        expect(out.total).toBe(3);
+        expect(out.note).toBe('ROE de 40,0 % ; PER de 44,0 ×');
+    });
+
+    it('sous-score sans aucune donnee -> null et message explicite', () => {
+        const out = S._scoreCriteria([{ score: null, note: null }, { score: null, note: null }]);
+        expect(out.value).toBeNull();
+        expect(out.note).toContain('Données insuffisantes');
+    });
+
+    it('_scoreBlock : ponderation renormalisee sur les dimensions disponibles', () => {
+        // seules valorisation et rentabilite sont notables ici
+        const out = S._scoreBlock({
+            valuation: { peTTM: 10, peg: 1, evEbitda: 8, fcfYield: 8, hist5y: { pe: 20 } },
+            growth: {}, health: {}, sentiment: {}, technical: {},
+            profitability: { roe: 30, roic: 20, netMargin: 25, operatingMargin: 30 },
+            price: {}
+        });
+        expect(out.subsUsed).toBe(2);
+        expect(out.weightCoverage).toBeCloseTo(S.SCORE_WEIGHTS.valuation + S.SCORE_WEIGHTS.profitability, 6);
+        expect(out.global).toBe(100);        // tous les criteres au maximum
+        expect(out.signal).toBe('Achat');
+        expect(out.subs.find(s => s.key === 'growth').value).toBeNull();
+    });
+
+    it('_scoreBlock : signal Vente sur des fondamentaux degrades', () => {
+        const out = S._scoreBlock({
+            valuation: { peTTM: 60, peg: 4, evEbitda: 30, fcfYield: -2, hist5y: { pe: 20 } },
+            growth: { revenueGrowthYoyPct: -8, revenueCagrPct: -5, epsCagrPct: -10 },
+            health: { netDebtToEbitda: 6, debtToEquity: 3, currentRatio: 0.5, interestCoverage: 1, fcfTrend: 'décroissant' },
+            profitability: { roe: 1, roic: 1, netMargin: 0.5, operatingMargin: 1 },
+            sentiment: { recommendationMean: 4.5, targetMean: 80 },
+            technical: { trend: 'baissière', rsi14: 25, rsiZone: 'survente' },
+            price: { current: 100 }
+        });
+        expect(out.global).toBeLessThan(S.SIGNAL_THRESHOLDS.hold);
+        expect(out.signal).toBe('Vente');
+        expect(JSON.stringify(out)).not.toContain('NaN');
+    });
+
+    it('_scoreBlock : moins de 2 dimensions notables -> pas de score global', () => {
+        const out = S._scoreBlock({
+            valuation: {}, growth: {}, health: {}, sentiment: {}, technical: {},
+            profitability: { roe: 20 }, price: {}
+        });
+        expect(out.subsUsed).toBe(1);
+        expect(out.global).toBeNull();
+        expect(out.signal).toBeNull();
     });
 });

@@ -1071,6 +1071,8 @@ const AnalysisService = {
             exDate: qs.exDividendDate || null
         });
 
+        const technical = this._technicalBlock(x.history, priceBlock, qs);
+
         // ---------- Qualitatif / risques ----------
         // Rien n'est redige ici : la description vient telle quelle de l'emetteur
         // (Yahoo assetProfile ou FMP) et les risques se limitent aux scores
@@ -1103,8 +1105,8 @@ const AnalysisService = {
             peersSymbols: this._peerSymbols(x.peersRaw, x.symbol),
             priceHistory: x.history || {},   // brut, series utilisees en phase 7
             earnings: x.earn || null,
-            technical: this._technicalBlock(x.history, priceBlock, qs),
-            score: null,       // calcule en phase 11
+            technical,
+            score: this._scoreBlock({ valuation, growth, health, profitability, sentiment, technical, price: priceBlock }),
             meta: {
                 errors: x.errors,
                 fmpUnavailable,
@@ -1116,6 +1118,126 @@ const AnalysisService = {
                 }
             }
         };
+    },
+
+    // ---------- Score global ----------
+    // Bareme volontairement explicite, pour pouvoir l'ajuster sans relire le code :
+    //  1. chaque critere est note de 0 a 100 par interpolation lineaire entre deux
+    //     bornes documentees — `lo` vaut la note 0, `hi` la note 100. Quand
+    //     lo > hi, le sens est inverse (ex : le PER, ou plus bas vaut mieux).
+    //  2. un sous-score est la MOYENNE SIMPLE des criteres reellement disponibles :
+    //     une donnee absente est ignoree, elle ne penalise pas la valeur.
+    //  3. le score global est la moyenne PONDEREE des sous-scores disponibles, les
+    //     poids etant renormalises sur ceux qui ont pu etre calcules.
+    // Pour ajuster le comportement : SCORE_WEIGHTS (importance relative de chaque
+    // dimension), les bornes lo/hi de chaque critere ci-dessous, ou
+    // SIGNAL_THRESHOLDS (points de bascule Achat / Conserver / Vente).
+    SCORE_WEIGHTS: {
+        valuation: 0.25,      // cherete du titre
+        growth: 0.20,         // dynamique du chiffre d'affaires et du benefice
+        health: 0.20,         // solidite du bilan
+        profitability: 0.25,  // qualite economique de l'entreprise
+        momentum: 0.10        // consensus des analystes + configuration technique
+    },
+    SIGNAL_THRESHOLDS: { buy: 65, hold: 45 },   // >= 65 Achat, >= 45 Conserver, sinon Vente
+    SCORE_MIN_SUBS: 2,                          // en dessous, pas de score global
+
+    // Note 0-100 d'une valeur entre deux bornes (`lo` = 0, `hi` = 100), bornee.
+    _scoreLinear(v, lo, hi) {
+        if (v == null || !isFinite(v)) return null;
+        return Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
+    },
+
+    // Moyenne des criteres disponibles + justification en une ligne, construite
+    // a partir du critere le plus favorable et du plus defavorable (chiffres
+    // reels, jamais de commentaire generique).
+    _scoreCriteria(list) {
+        const kept = list.filter(c => c && c.score != null && isFinite(c.score));
+        if (!kept.length) return { value: null, note: 'Données insuffisantes pour noter cette dimension.', used: 0, total: list.length };
+        const value = kept.reduce((s, c) => s + c.score, 0) / kept.length;
+        const sorted = kept.slice().sort((a, b) => b.score - a.score);
+        const notes = [sorted[0].note];
+        if (sorted.length > 1) notes.push(sorted[sorted.length - 1].note);
+        return { value, note: notes.join(' ; '), used: kept.length, total: list.length };
+    },
+
+    _scoreBlock(b) {
+        const L = (v, lo, hi) => this._scoreLinear(v, lo, hi);
+        const nf = (x, d = 1) => new Intl.NumberFormat('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }).format(x);
+        const mult = (x) => nf(x) + ' ×';
+        const pct = (x) => Utils.formatPercent(x, false);
+        const v = b.valuation || {}, g = b.growth || {}, h = b.health || {};
+        const p = b.profitability || {}, s = b.sentiment || {}, t = b.technical || {};
+        const h5 = v.hist5y || {};
+
+        // Valorisation : bornes calees sur les extremes usuels des grandes capis.
+        const peVsHist = (v.peTTM != null && h5.pe) ? v.peTTM / h5.pe : null;
+        const valuation = this._scoreCriteria([
+            { score: L(v.peTTM, 45, 10), note: v.peTTM == null ? null : `PER de ${mult(v.peTTM)}` },
+            { score: L(peVsHist, 1.5, 0.7), note: peVsHist == null ? null : `PER ${peVsHist >= 1 ? 'au-dessus' : 'en dessous'} de sa moyenne 5 ans (${mult(h5.pe)})` },
+            { score: L(v.peg, 3, 1), note: v.peg == null ? null : `PEG de ${mult(v.peg)}` },
+            { score: L(v.evEbitda, 25, 8), note: v.evEbitda == null ? null : `VE/EBITDA de ${mult(v.evEbitda)}` },
+            { score: L(v.fcfYield, 0, 8), note: v.fcfYield == null ? null : `rendement du free cash-flow de ${pct(v.fcfYield)}` }
+        ]);
+
+        // Croissance : 20 %/an de CA ou de BPA = note maximale.
+        const growth = this._scoreCriteria([
+            { score: L(g.revenueGrowthYoyPct, 0, 20), note: g.revenueGrowthYoyPct == null ? null : `chiffre d'affaires à ${Utils.formatPercent(g.revenueGrowthYoyPct)} sur un an` },
+            { score: L(g.revenueCagrPct, 0, 15), note: g.revenueCagrPct == null ? null : `CA en croissance de ${Utils.formatPercent(g.revenueCagrPct)} par an sur l'historique` },
+            { score: L(g.epsCagrPct, 0, 20), note: g.epsCagrPct == null ? null : `bénéfice par action à ${Utils.formatPercent(g.epsCagrPct)} par an` }
+        ]);
+
+        // Sante : bornes alignees sur les seuils deja utilises par les pastilles.
+        const fcfTrendScore = { 'croissant': 100, 'stable': 60, 'décroissant': 20 }[h.fcfTrend];
+        const health = this._scoreCriteria([
+            { score: L(h.netDebtToEbitda, 4, 0), note: h.netDebtToEbitda == null ? null : `dette nette à ${mult(h.netDebtToEbitda)} l'EBITDA` },
+            { score: L(h.debtToEquity, 2.5, 0.3), note: h.debtToEquity == null ? null : `dette sur fonds propres à ${mult(h.debtToEquity)}` },
+            { score: L(h.currentRatio, 0.8, 2), note: h.currentRatio == null ? null : `liquidité générale à ${mult(h.currentRatio)}` },
+            { score: L(h.interestCoverage, 2, 15), note: h.interestCoverage == null ? null : `intérêts couverts ${mult(h.interestCoverage)}` },
+            { score: fcfTrendScore == null ? null : fcfTrendScore, note: h.fcfTrend ? `free cash-flow ${h.fcfTrend}` : null }
+        ]);
+
+        const profitability = this._scoreCriteria([
+            { score: L(p.roe, 5, 30), note: p.roe == null ? null : `ROE de ${pct(p.roe)}` },
+            { score: L(p.roic, 4, 20), note: p.roic == null ? null : `ROIC de ${pct(p.roic)}` },
+            { score: L(p.netMargin, 2, 25), note: p.netMargin == null ? null : `marge nette de ${pct(p.netMargin)}` },
+            { score: L(p.operatingMargin, 4, 30), note: p.operatingMargin == null ? null : `marge opérationnelle de ${pct(p.operatingMargin)}` }
+        ]);
+
+        // Momentum : consensus (1 = achat fort, 5 = vente forte) + technique.
+        const price = b.price && b.price.current;
+        const upside = (price && s.targetMean) ? (s.targetMean - price) / price * 100 : null;
+        const trendScore = { 'haussière': 100, 'neutre': 55, 'baissière': 20 }[t.trend];
+        // RSI : survente = potentiel de rebond, surachat = point d'entree tardif.
+        const rsiScore = t.rsiZone == null ? null : ({ 'survente': 85, 'neutre': 60, 'surachat': 35 })[t.rsiZone];
+        const momentum = this._scoreCriteria([
+            { score: L(s.recommendationMean, 4, 1.5), note: s.recommendationMean == null ? null : `consensus analystes à ${nf(s.recommendationMean)} / 5` },
+            { score: L(upside, -10, 30), note: upside == null ? null : `objectif moyen à ${Utils.formatPercent(upside)} du cours` },
+            { score: trendScore == null ? null : trendScore, note: t.trend ? `tendance ${t.trend} (MM 50 / MM 200)` : null },
+            { score: rsiScore == null ? null : rsiScore, note: t.rsi14 == null ? null : `RSI à ${nf(t.rsi14, 0)} (${t.rsiZone})` }
+        ]);
+
+        const defs = [
+            { key: 'valuation', label: 'Valorisation', res: valuation },
+            { key: 'growth', label: 'Croissance', res: growth },
+            { key: 'health', label: 'Santé financière', res: health },
+            { key: 'profitability', label: 'Rentabilité', res: profitability },
+            { key: 'momentum', label: 'Sentiment & technique', res: momentum }
+        ];
+        const subs = defs.map(d => ({
+            key: d.key, label: d.label, weight: this.SCORE_WEIGHTS[d.key],
+            value: d.res.value, note: d.res.note, used: d.res.used, total: d.res.total
+        }));
+
+        const avail = subs.filter(x => x.value != null);
+        const wsum = avail.reduce((acc, x) => acc + x.weight, 0);
+        const global = (avail.length >= this.SCORE_MIN_SUBS && wsum > 0)
+            ? avail.reduce((acc, x) => acc + x.value * x.weight, 0) / wsum
+            : null;
+        const T = this.SIGNAL_THRESHOLDS;
+        const signal = global == null ? null : (global >= T.buy ? 'Achat' : (global >= T.hold ? 'Conserver' : 'Vente'));
+
+        return { global, signal, subs, subsUsed: avail.length, weightCoverage: wsum };
     },
 
     _dividendBlock(divList, base) {
@@ -5128,6 +5250,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
 
         // Analyse approfondie (phases 2+) : chargee en arriere-plan pour ne pas
         // retarder l'affichage des sections rapides ci-dessus.
+        this.renderResearchScore(null);
         this.renderResearchValuation(null);
         this.renderResearchGrowth(null);
         this.renderResearchHealth(null);
@@ -5141,6 +5264,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         AnalysisService.build(symbol).then(a => {
             if (this.researchSymbol !== symbol || !a) return;
             this.researchAnalysis = a;
+            this.renderResearchScore(a);
             this.renderResearchValuation(a);
             this.renderResearchGrowth(a);
             this.renderResearchHealth(a);
@@ -5824,6 +5948,62 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         );
 
         if (src) src.textContent = annual.length ? 'Yahoo Finance' : 'Historique de versements indisponible';
+    },
+
+    // ---------- Synthese / score global ----------
+    // L'affichage ne recalcule rien : toute la logique de notation (bornes,
+    // ponderations, seuils du signal) vit dans AnalysisService._scoreBlock.
+    renderResearchScore(a) {
+        const card = document.getElementById('researchScoreCard');
+        const top = document.getElementById('researchScoreTop');
+        const subsEl = document.getElementById('researchScoreSubs');
+        const src = document.getElementById('researchScoreSrc');
+        if (!card || !top || !subsEl) return;
+        card.hidden = false;
+
+        if (!a) {
+            if (src) src.textContent = '';
+            top.innerHTML = '<span class="research-kv-loading">Chargement…</span>';
+            subsEl.innerHTML = '';
+            return;
+        }
+
+        const sc = a.score || {};
+        const subs = AnalysisUtils.arr(sc.subs);
+        const T = AnalysisService.SIGNAL_THRESHOLDS;
+        const r0 = (x) => Math.round(x);
+
+        const signalCls = { 'Achat': 'buy', 'Conserver': 'hold', 'Vente': 'sell' }[sc.signal] || 'hold';
+        const tipGlobal = `Moyenne pondérée des dimensions notées : valorisation ${r0(AnalysisService.SCORE_WEIGHTS.valuation * 100)} %, ` +
+            `rentabilité ${r0(AnalysisService.SCORE_WEIGHTS.profitability * 100)} %, croissance ${r0(AnalysisService.SCORE_WEIGHTS.growth * 100)} %, ` +
+            `santé financière ${r0(AnalysisService.SCORE_WEIGHTS.health * 100)} %, sentiment & technique ${r0(AnalysisService.SCORE_WEIGHTS.momentum * 100)} %. ` +
+            `Signal : ${T.buy} et plus = Achat, ${T.hold} à ${T.buy} = Conserver, en dessous = Vente.`;
+
+        if (sc.global == null) {
+            top.innerHTML = `<div class="score-side"><span class="score-signal hold">Non disponible</span>` +
+                `<span class="score-caption">Trop peu de données publiques sur cette valeur pour calculer un score fiable.</span></div>`;
+            subsEl.innerHTML = '';
+            if (src) src.textContent = '';
+        } else {
+            top.innerHTML =
+                `<div class="score-dial"><span class="score-val">${r0(sc.global)}</span><span class="score-max">/ 100</span></div>` +
+                `<div class="score-side"><span class="score-signal ${signalCls}">${sc.signal}</span>` +
+                `<span class="score-caption">Synthèse de ${sc.subsUsed} dimension${sc.subsUsed > 1 ? 's' : ''} sur ${subs.length}. ` +
+                `${this._kvHelp(tipGlobal)}</span></div>`;
+
+            subsEl.innerHTML = subs.map(s => {
+                const v = s.value;
+                const bar = v == null ? '' :
+                    `<div class="score-bar"><i class="${v >= T.buy ? 'high' : (v < T.hold ? 'low' : '')}" style="width:${Math.max(2, Math.min(100, v)).toFixed(0)}%"></i></div>`;
+                return `<div class="score-sub">` +
+                    `<span class="score-sub-lab">${s.label} ${this._kvHelp(`Pondération ${r0(s.weight * 100)} % du score global. ${s.used} critère${s.used > 1 ? 's' : ''} disponible${s.used > 1 ? 's' : ''} sur ${s.total}.`)}</span>` +
+                    `<span class="score-sub-val">${v == null ? 'Non disponible' : r0(v) + ' / 100'}</span>` +
+                    bar +
+                    `<span class="score-note">${Utils.escapeHtml(s.note)}</span>` +
+                    `</div>`;
+            }).join('');
+            if (src) src.textContent = `Mis à jour le ${Utils.formatDateDisplay(a.asOf)}`;
+        }
     },
 
     // ---------- Comparaison sectorielle ----------
