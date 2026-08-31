@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Your Portfolio</title>
+
+    <!-- Theme bootstrap (no flash) -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('portfolio_theme') || 'dark';
+                if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            } catch (e) { }
+        })();
+    </script>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a0b0e">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Portfolio">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Icons : SVG inline, registre dans app.js (Icons.render) -->
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css?v=47">
+</head>
+
+<body>
+
+    <!-- LANDING SCREEN -->
+    <div class="landing-screen" id="landingScreen">
+        <header class="landing-header">
+            <div class="landing-brand">
+                <img src="icons/icon-192.png" alt="" width="32" height="32">
+                <span>Your Portfolio</span>
+            </div>
+            <button type="button" class="btn-outline" id="landingLoginBtn">Se connecter</button>
+        </header>
+
+        <section class="landing-hero">
+            <h1>Suivez vos investissements.<br>Comprenez-les <span class="text-green">vraiment</span>.</h1>
+            <p>Un tableau de bord clair pour votre portefeuille, avec des résumés IA nourris de vraies actualités financières — pas juste des chiffres.</p>
+            <div class="landing-cta-group">
+                <button type="button" class="btn-primary" id="landingSignupBtn">Créer un compte gratuit</button>
+                <button type="button" class="btn-outline" id="landingLoginBtn2">J'ai déjà un compte</button>
+            </div>
+        </section>
+
+        <section class="landing-preview" aria-hidden="true">
+            <div class="mock-card mock-donut">
+                <div class="mock-donut-ring"></div>
+                <span>Répartition par actif</span>
+            </div>
+            <div class="mock-card mock-bars">
+                <div class="mock-bar-row"><span>GOOGL</span><i style="width:92%"></i><b class="text-green">+123%</b></div>
+                <div class="mock-bar-row"><span>NVDA</span><i style="width:70%"></i><b class="text-green">+76%</b></div>
+                <div class="mock-bar-row"><span>AMZN</span><i style="width:45%"></i><b class="text-green">+45%</b></div>
+            </div>
+        </section>
+
+        <section class="landing-features">
+            <div class="feature-card">
+                <i data-lucide="sparkles"></i>
+                <h3>Résumés IA en langage clair</h3>
+                <p>Chaque actualisation croise vos positions avec de vraies actualités du marché pour un résumé pertinent, pas générique.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="line-chart"></i>
+                <h3>Graphique détaillé par position</h3>
+                <p>Cliquez sur une action pour voir son historique de prix depuis votre premier achat.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="calendar-clock"></i>
+                <h3>Dividendes & résultats à venir</h3>
+                <p>Ne manquez plus une date de publication ou un versement de dividende.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="globe"></i>
+                <h3>Multi-devises, multi-portefeuilles</h3>
+                <p>Suivez plusieurs portefeuilles et convertissez en USD ou EUR en un clic.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="smartphone"></i>
+                <h3>Installable comme une app</h3>
+                <p>Ajoutez le site à votre écran d'accueil : ça marche hors-ligne comme une vraie app mobile.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="lock"></i>
+                <h3>Vos clés IA restent chez vous</h3>
+                <p>Les clés d'API des modèles IA ne sont stockées que dans votre navigateur, jamais sur nos serveurs.</p>
+            </div>
+        </section>
+
+        <section class="landing-cta-final">
+            <h2>Prêt à voir votre portefeuille autrement ?</h2>
+            <button type="button" class="btn-primary" id="landingSignupBtn2">Créer un compte gratuit</button>
+        </section>
+    </div>
+
+    <!-- AUTH SCREEN -->
+    <div class="auth-screen" id="authScreen" style="display:none;">
+        <div class="auth-card">
+            <button type="button" class="auth-back-btn" id="authBackBtn" aria-label="Retour"><i data-lucide="arrow-left"></i></button>
+            <h2 id="authTitle">Connexion</h2>
+            <form id="authForm">
+                <div class="form-group" id="authEmailGroup">
+                    <label>Email</label>
+                    <input type="email" name="email" required autocomplete="email">
+                </div>
+                <div class="form-group" id="authPasswordGroup">
+                    <label>Mot de passe</label>
+                    <input type="password" name="password" required autocomplete="current-password" minlength="6">
+                </div>
+                <p id="authError" class="auth-error" style="display:none;"></p>
+                <p id="authInfo" class="auth-error" style="display:none; color:var(--accent-green);"></p>
+                <button type="submit" class="btn-primary full-width" id="authSubmitBtn">Se connecter</button>
+            </form>
+            <button type="button" class="auth-toggle-btn" id="authForgotBtn">Mot de passe oublié ?</button>
+            <button type="button" class="auth-toggle-btn" id="authToggleBtn">Pas encore de compte ? Créer un compte</button>
+        </div>
+    </div>
+
+    <div class="app-container" id="appContainer" style="display:none;">
+
+        <!-- Menu latéral (desktop ≥ 1024px) -->
+        <aside class="side-nav" id="sideNav">
+            <div class="side-logo">
+                <span class="side-logo-mark" aria-hidden="true">Y</span>
+                <span class="side-logo-text">Your Portfolio</span>
+            </div>
+            <nav class="side-tabs">
+                <button class="tab-btn side-tab active" data-tab="overview" title="Vue d'ensemble"><i data-lucide="layout-dashboard" class="side-ico"></i><span class="side-label">Vue d'ensemble</span></button>
+                <button class="tab-btn side-tab" data-tab="holdings" title="Holdings"><i data-lucide="pie-chart" class="side-ico"></i><span class="side-label">Holdings</span></button>
+                <button class="tab-btn side-tab" data-tab="transactions" title="Transactions"><i data-lucide="arrow-left-right" class="side-ico"></i><span class="side-label">Transactions</span></button>
+                <button class="tab-btn side-tab" data-tab="analysis" title="Analyse"><i data-lucide="trending-up" class="side-ico"></i><span class="side-label">Analyse</span></button>
+                <button class="tab-btn side-tab" data-tab="research" title="Explorer une valeur"><i data-lucide="compass" class="side-ico"></i><span class="side-label">Explorer</span></button>
+            </nav>
+            <div class="side-portfolios">
+                <div class="side-section-label">Portefeuilles</div>
+                <div id="sidePortfolioList"><!-- Injecté par JS --></div>
+            </div>
+            <div class="side-foot">
+                <span class="side-live-dot" aria-hidden="true"></span>
+                <div class="side-foot-text"><b>Données de marché</b><span>Yahoo Finance · live</span></div>
+            </div>
+        </aside>
+
+        <!-- Header / barre supérieure -->
+        <header>
+            <button type="button" id="sideToggleBtn" class="side-toggle" aria-label="Afficher ou masquer le menu"></button>
+            <div class="app-brand" aria-hidden="true">
+                <img src="icons/icon-192.png" alt="">
+                <span>Your Portfolio</span>
+            </div>
+            <div class="header-left">
+                <div class="portfolio-dropdown-container" id="portfolioDropdownContainer">
+                    <button class="portfolio-switcher-btn" id="portfolioSwitcherBtn">
+                        <span class="portfolio-bullet" id="activePortfolioBullet" style="background:#3b82f6;"></span>
+                        <span class="portfolio-name" id="appTitle">Portefeuille Principal</span>
+                        <i data-lucide="chevron-down" class="icon-chevron"></i>
+                    </button>
+
+                    <div class="portfolio-dropdown-menu" id="portfolioDropdownMenu">
+                        <div class="portfolio-dropdown-header">Vues & Portefeuilles</div>
+                        
+                        <!-- Global Option -->
+                        <div class="portfolio-dropdown-item global-item" data-portfolio-id="GLOBAL" id="globalPortfolioItem">
+                            <div class="portfolio-item-left">
+                                <span class="portfolio-bullet global-bullet"><i data-lucide="globe" style="width:12px;height:12px;"></i></span>
+                                <div class="portfolio-item-text">
+                                    <span class="portfolio-title">Tous les portefeuilles (Global)</span>
+                                    <span class="portfolio-sub">Vue consolidée globale</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dropdown-divider"></div>
+
+                        <!-- User Portfolios List -->
+                        <div class="portfolio-list" id="portfolioDropdownList">
+                            <!-- Injected by JS -->
+                        </div>
+
+                        <div class="dropdown-divider"></div>
+
+                        <!-- Create Portfolio Button -->
+                        <button class="dropdown-action-btn" id="openCreatePortfolioBtn">
+                            <i data-lucide="plus-circle" class="icon-sm"></i>
+                            <span>Nouveau portefeuille</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" id="desktopSearchBtn" class="desktop-search">
+                <span class="ds-ico" aria-hidden="true"></span>Rechercher un actif…
+            </button>
+
+            <button id="refreshDataBtn" class="icon-btn" title="Actualiser les données" aria-label="Actualiser les données">
+                <i data-lucide="refresh-cw" class="icon-sm"></i>
+                <span class="rd-label">Actualiser</span>
+            </button>
+            <button id="settingsBtn" class="icon-btn" title="Réglages">
+                <i data-lucide="settings" class="icon-sm"></i>
+            </button>
+            <button id="addTransactionBtn" class="btn-primary">
+                Ajouter une transaction
+            </button>
+        </header>
+
+        <div class="app-scroll" id="appScroll">
+
+        <!-- Squelette de chargement -->
+        <div class="app-skeleton" id="appSkeleton" aria-hidden="true">
+            <div class="skel-row">
+                <div class="skel skel-card"></div>
+                <div class="skel skel-card skel-static"></div>
+            </div>
+            <div class="skel-tabs">
+                <div class="skel skel-tab"></div>
+                <div class="skel skel-tab skel-static"></div>
+                <div class="skel skel-tab"></div>
+            </div>
+            <div class="skel skel-chart"></div>
+            <div class="skel skel-block skel-static"></div>
+            <div class="skel skel-small"></div>
+        </div>
+
+        <!-- État vide -->
+        <div class="empty-state" id="emptyState" hidden>
+            <svg class="empty-illus" viewBox="0 0 150 105" width="150" height="105" aria-hidden="true">
+                <defs>
+                    <pattern id="emptyStripes" width="10" height="10" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+                        <rect width="10" height="10" fill="var(--surf)"></rect>
+                        <rect width="5" height="10" fill="var(--tile)"></rect>
+                    </pattern>
+                </defs>
+                <rect x="10" y="18" width="130" height="78" rx="12" fill="url(#emptyStripes)" stroke="var(--l2)"></rect>
+                <circle cx="75" cy="57" r="19" fill="none" stroke="rgba(0,211,242,.5)" stroke-width="6" stroke-dasharray="60 60" stroke-linecap="round"></circle>
+            </svg>
+            <h3 class="empty-title">Aucune position pour l'instant</h3>
+            <p class="empty-body">Ajoute ta première transaction — ou importe ton historique en CSV — et le portefeuille se construit tout seul.</p>
+            <div class="empty-actions">
+                <button type="button" class="btn-primary" id="emptyAddBtn">Ajouter une transaction</button>
+                <button type="button" class="btn-outline" id="emptyImportBtn">Importer un CSV</button>
+            </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid" id="statsGrid">
+            <!-- Cards will be injected by JS -->
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+            <div class="stat-card skeleton"></div>
+        </div>
+        <div class="stats-dots" id="statsDots">
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="overview">Vue d'ensemble</button>
+            <button class="tab-btn" data-tab="holdings">Holdings</button>
+            <button class="tab-btn" data-tab="transactions">Transactions</button>
+            <button class="tab-btn" data-tab="analysis">Analyse</button>
+            <button class="tab-btn" data-tab="research">Explorer</button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="mainContent">
+
+            <!-- OVERVIEW TAB CONTENT -->
+            <section id="view-overview" class="tab-content active">
+                <div class="overview-hero-row">
+                <div class="card analysis-card" id="portfolioInsightsCard">
+                    <div class="insights-head">
+                        <h3><i data-lucide="sparkles"></i>Résumé du portefeuille</h3>
+                        <span class="insights-updated" id="insightsUpdatedAt" hidden></span>
+                        <button type="button" class="insights-refresh" id="refreshInsightsBtn" title="Actualiser" aria-label="Actualiser"><i data-lucide="refresh-cw"></i></button>
+                    </div>
+                    <div id="portfolioInsightsBody" style="margin-top:12px; font-size:13px; line-height:1.6; color:var(--text-primary);"></div>
+                </div>
+
+                <div class="chart-section">
+                    <div class="chart-header">
+                        <div class="chart-head-top">
+                            <h2 id="chartPortfolioTitle">Changement de portefeuille</h2>
+                            <div class="toggle-group" id="currencyToggle">
+                                <button class="toggle-btn" data-currency="USD">$</button>
+                                <button class="toggle-btn active" data-currency="EUR">€</button>
+                            </div>
+                        </div>
+                        <div class="chart-headline" id="chartHeadline">
+                            <span class="chart-headline-value" id="chartHeadlineValue">—</span>
+                            <span class="chart-headline-delta" id="chartHeadlineDelta"></span>
+                        </div>
+                        <div class="chart-head-controls">
+                            <div class="toggle-group" id="modeToggle">
+                                <button class="toggle-btn active">Valeur</button>
+                                <button class="toggle-btn">Performance</button>
+                            </div>
+                            <div class="benchmark-checkboxes" id="benchmarkCheckboxes">
+                                <button class="benchmark-checkbox-btn" data-symbol="SPY">
+                                    <span class="checkbox-icon"></span>
+                                    S&P 500
+                                </button>
+                                <button class="benchmark-checkbox-btn" data-symbol="QQQ">
+                                    <span class="checkbox-icon"></span>
+                                    NASDAQ
+                                </button>
+                                <button class="benchmark-checkbox-btn" data-symbol="^FCHI">
+                                    <span class="checkbox-icon"></span>
+                                    CAC 40
+                                </button>
+                                <button class="benchmark-checkbox-btn" data-symbol="URTH">
+                                    <span class="checkbox-icon"></span>
+                                    MSCI World
+                                </button>
+                                <button class="benchmark-checkbox-btn" data-symbol="BTC-USD">
+                                    <span class="checkbox-icon"></span>
+                                    Bitcoin
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <canvas id="portfolioChart"></canvas>
+                    </div>
+
+                    <div class="time-range-selector" id="timeRangeSelector">
+                        <button class="range-btn" data-range="1M">
+                            <span class="label">1 mois</span>
+                            <span class="value" data-range-val="1M">—</span>
+                        </button>
+                        <button class="range-btn" data-range="3M">
+                            <span class="label">3 mois</span>
+                            <span class="value" data-range-val="3M">—</span>
+                        </button>
+                        <button class="range-btn" data-range="6M">
+                            <span class="label">6 mois</span>
+                            <span class="value" data-range-val="6M">—</span>
+                        </button>
+                        <button class="range-btn" data-range="YTD">
+                            <span class="label">YTD</span>
+                            <span class="value" data-range-val="YTD">—</span>
+                        </button>
+                        <button class="range-btn" data-range="1Y">
+                            <span class="label">1 an</span>
+                            <span class="value" data-range-val="1Y">—</span>
+                        </button>
+                        <button class="range-btn active" data-range="ALL">
+                            <span class="label">Tout</span>
+                            <span class="value" data-range-val="ALL">—</span>
+                        </button>
+                    </div>
+                </div>
+                </div><!-- /.overview-hero-row -->
+
+                <div class="analysis-grid movers-grid">
+                    <div class="card analysis-card">
+                        <h3>Gagnants du jour</h3>
+                        <div class="perf-list" id="gainersList"></div>
+                    </div>
+                    <div class="card analysis-card">
+                        <h3>Perdants du jour</h3>
+                        <div class="perf-list" id="losersList"></div>
+                    </div>
+                </div>
+
+                <div class="overview-tables-row">
+                <div class="card analysis-card profit-section">
+                    <h3>Dividendes à venir <span style="font-weight:400; font-size:12px; color:var(--text-secondary);">(estimation, 45 jours)</span></h3>
+                    <div class="perf-row perf-row-header">
+                        <span class="perf-logo" style="width:24px;"></span>
+                        <span class="perf-ticker">Titre</span>
+                        <span style="flex:1; font-size:12px; color:var(--text-secondary);">Date estimée</span>
+                        <span style="width:90px; text-align:right; font-size:12px; color:var(--text-secondary);">Montant</span>
+                        <span style="width:60px; text-align:right; font-size:12px; color:var(--text-secondary);">Rendement</span>
+                    </div>
+                    <div class="perf-list" id="upcomingDividendsList"></div>
+                </div>
+
+                <div class="card analysis-card profit-section">
+                    <h3>Revenus à venir <span style="font-weight:400; font-size:12px; color:var(--text-secondary);">(90 jours, actions US uniquement)</span></h3>
+                    <div class="perf-row perf-row-header">
+                        <span class="perf-logo" style="width:24px;"></span>
+                        <span class="perf-ticker">Titre</span>
+                        <span style="flex:1; font-size:12px; color:var(--text-secondary);">Date de publication</span>
+                        <span style="width:110px; text-align:right; font-size:12px; color:var(--text-secondary);">BPA estimé</span>
+                    </div>
+                    <div class="perf-list" id="upcomingEarningsList"></div>
+                </div>
+                </div><!-- /.overview-tables-row -->
+            </section>
+
+            <!-- HOLDINGS TAB CONTENT -->
+            <section id="view-holdings" class="tab-content">
+                <div class="card">
+                    <div class="holdings-cards-head">
+                        <div class="hch-count"><span id="holdingsCount">0 position</span> · <strong id="holdingsCardsTotal">—</strong></div>
+                        <span class="hch-hint">← glisser pour vendre</span>
+                    </div>
+                    <div class="holdings-cards" id="holdingsCardsList"></div>
+                    <div class="table-scroll">
+                    <table class="table table-cards">
+                        <thead>
+                            <tr>
+                                <th>Actif</th>
+                                <th>Quantité</th>
+                                <th>Prix Moyen</th>
+                                <th>Prix Actuel</th>
+                                <th>Valeur</th>
+                                <th>+/- Latente</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTableBody">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ANALYSIS TAB CONTENT -->
+            <section id="view-analysis" class="tab-content">
+                <div class="analysis-grid donut-carousel" id="donutCarousel">
+                    <div class="card analysis-card">
+                        <h3>Par actif</h3>
+                        <div class="analysis-chart-wrap">
+                            <canvas id="assetChart"></canvas>
+                            <div class="chart-center-label" id="assetChartCenter"></div>
+                        </div>
+                        <ul class="analysis-legend" id="assetLegend"></ul>
+                    </div>
+                    <div class="card analysis-card">
+                        <h3>Par classe d'actif</h3>
+                        <div class="analysis-chart-wrap">
+                            <canvas id="classChart"></canvas>
+                            <div class="chart-center-label" id="classChartCenter"></div>
+                        </div>
+                        <ul class="analysis-legend" id="classLegend"></ul>
+                    </div>
+                    <div class="card analysis-card">
+                        <h3>Par devise</h3>
+                        <div class="analysis-chart-wrap">
+                            <canvas id="currencyChart"></canvas>
+                            <div class="chart-center-label" id="currencyChartCenter"></div>
+                        </div>
+                        <ul class="analysis-legend" id="currencyLegend"></ul>
+                    </div>
+                    <div class="card analysis-card">
+                        <h3>Par secteur</h3>
+                        <div class="analysis-chart-wrap">
+                            <canvas id="sectorChart"></canvas>
+                            <div class="chart-center-label" id="sectorChartCenter"></div>
+                        </div>
+                        <ul class="analysis-legend" id="sectorLegend"></ul>
+                    </div>
+                </div>
+                <div class="donut-dots" id="donutDots" aria-hidden="true"></div>
+
+                <div class="card analysis-card perf-section">
+                    <div class="perf-header">
+                        <h3>Performances des participations</h3>
+                        <div class="perf-filter-group" id="perfFilterGroup">
+                            <button class="filter-btn active" data-filter="all">Tout</button>
+                            <button class="filter-btn" data-filter="up">En hausse</button>
+                            <button class="filter-btn" data-filter="down">En baisse</button>
+                            <button class="filter-btn" data-filter="dividends">Dividendes</button>
+                        </div>
+                    </div>
+                    <div class="perf-list" id="perfList"></div>
+                </div>
+
+                <div class="card analysis-card profit-section">
+                    <h3>Profit</h3>
+                    <div class="chart-container" style="height:280px;">
+                        <canvas id="profitChart"></canvas>
+                    </div>
+                    <div class="time-range-selector" id="profitRangeSelector">
+                        <button class="range-btn" data-range="1M">
+                            <span class="label">1 mois</span>
+                            <span class="value" data-profit-range-val="1M">—</span>
+                        </button>
+                        <button class="range-btn" data-range="3M">
+                            <span class="label">3 mois</span>
+                            <span class="value" data-profit-range-val="3M">—</span>
+                        </button>
+                        <button class="range-btn" data-range="6M">
+                            <span class="label">6 mois</span>
+                            <span class="value" data-profit-range-val="6M">—</span>
+                        </button>
+                        <button class="range-btn" data-range="YTD">
+                            <span class="label">YTD</span>
+                            <span class="value" data-profit-range-val="YTD">—</span>
+                        </button>
+                        <button class="range-btn" data-range="1Y">
+                            <span class="label">1 an</span>
+                            <span class="value" data-profit-range-val="1Y">—</span>
+                        </button>
+                        <button class="range-btn active" data-range="ALL">
+                            <span class="label">Tout</span>
+                            <span class="value" data-profit-range-val="ALL">—</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card analysis-card profit-section">
+                    <h3>Performance par année</h3>
+                    <div class="table-scroll">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Période</th>
+                                <th>Rendement</th>
+                                <th>Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="yearlyTableBody"></tbody>
+                    </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RESEARCH / EXPLORER UNE VALEUR -->
+            <section id="view-research" class="tab-content">
+                <div class="card research-search-card">
+                    <div class="research-search">
+                        <span class="tx-search-ico" aria-hidden="true"></span>
+                        <input type="text" id="researchSearchInput" placeholder="Rechercher une action, un ETF… (ex : AAPL, MC.PA)" autocomplete="off">
+                        <div class="research-suggest" id="researchSuggest" hidden></div>
+                    </div>
+                    <div class="research-quick" id="researchQuick"></div>
+                </div>
+
+                <div id="researchEmpty" class="research-empty">
+                    <p>Choisissez une valeur pour voir son cours, ses ratios (PER, BPA, rendement, bêta…) et votre position (PRU, +/- value, poids).</p>
+                </div>
+
+                <div id="researchContent" hidden>
+                    <div class="card research-head-card">
+                        <div class="research-head">
+                            <img id="researchLogo" class="research-logo" alt="" onerror="this.style.visibility='hidden'">
+                            <div class="research-id">
+                                <h2 id="researchSymbol">—</h2>
+                                <span id="researchName" class="research-name"></span>
+                                <span id="researchMeta" class="research-meta"></span>
+                            </div>
+                            <div class="research-price">
+                                <span id="researchPrice" class="research-price-val">—</span>
+                                <span id="researchChange" class="research-price-chg"></span>
+                            </div>
+                        </div>
+                        <div id="researchNotHeld" class="research-notheld" hidden>
+                            <span>Vous ne détenez pas cette valeur.</span>
+                            <button type="button" class="btn-primary btn-sm" id="researchAddBtn">Ajouter une transaction</button>
+                        </div>
+                    </div>
+
+                    <div class="card research-position-card" id="researchPositionCard" hidden>
+                        <div class="research-card-head">
+                            <h3>Votre position</h3>
+                            <span id="researchPositionPtf" class="research-sub"></span>
+                        </div>
+                        <div class="research-kv-grid" id="researchPositionGrid"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="research-card-head">
+                            <h3>Cours</h3>
+                            <div class="time-range-selector research-range" id="researchRange">
+                                <button class="range-btn" data-range="1M"><span class="label">1M</span></button>
+                                <button class="range-btn" data-range="3M"><span class="label">3M</span></button>
+                                <button class="range-btn" data-range="6M"><span class="label">6M</span></button>
+                                <button class="range-btn active" data-range="1Y"><span class="label">1A</span></button>
+                                <button class="range-btn" data-range="5Y"><span class="label">5A</span></button>
+                            </div>
+                        </div>
+                        <div class="research-chart-wrap">
+                            <canvas id="researchChart"></canvas>
+                        </div>
+                        <div class="research-range-bar" id="research52wBar" hidden>
+                            <div class="rrb-track"><span class="rrb-dot" id="research52wDot"></span></div>
+                            <div class="rrb-labels"><span id="research52wLo">—</span><span>52 semaines</span><span id="research52wHi">—</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="research-card-head"><h3>Données clés</h3><span id="researchKeySrc" class="research-sub"></span></div>
+                        <div class="research-kv-grid" id="researchKeyGrid"></div>
+                    </div>
+
+                    <div class="card research-about-card" id="researchAboutCard" hidden>
+                        <div class="research-card-head"><h3>À propos</h3></div>
+                        <div class="research-kv-grid" id="researchAboutGrid"></div>
+                    </div>
+
+                    <div class="card research-news-card" id="researchNewsCard" hidden>
+                        <div class="research-card-head"><h3>Actualités récentes</h3></div>
+                        <ul class="research-news" id="researchNewsList"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TRANSACTIONS TAB CONTENT -->
+            <section id="view-transactions" class="tab-content">
+                <div class="card">
+                    <div class="tx-filters">
+                        <div class="tx-search">
+                            <span class="tx-search-ico" aria-hidden="true"></span>
+                            <input type="text" id="txSearchInput" placeholder="Rechercher un actif…">
+                        </div>
+                        <button type="button" class="tx-filter-open" id="txFilterOpenBtn">Filtres<span id="txFilterCount"></span></button>
+                    </div>
+                    <div class="tx-cards" id="txCardsList"></div>
+                    <div class="table-scroll">
+                    <table class="table table-cards">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Portefeuille</th>
+                                <th>Type</th>
+                                <th>Actif</th>
+                                <th>Nom</th>
+                                <th>Quantité</th>
+                                <th>Prix</th>
+                                <th>Total</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTableBody">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+        </div><!-- /.app-scroll -->
+
+        <!-- Bottom app navigation (mobile only) -->
+        <nav class="bottom-nav">
+            <button class="tab-btn bottom-nav-btn active" data-tab="overview">
+                <i data-lucide="layout-dashboard" aria-hidden="true"></i><span>Aperçu</span>
+            </button>
+            <button class="tab-btn bottom-nav-btn" data-tab="holdings">
+                <i data-lucide="pie-chart" aria-hidden="true"></i><span>Holdings</span>
+            </button>
+            <button class="tab-btn bottom-nav-btn" data-tab="transactions">
+                <i data-lucide="arrow-left-right" aria-hidden="true"></i><span>Transactions</span>
+            </button>
+            <button class="tab-btn bottom-nav-btn" data-tab="analysis">
+                <i data-lucide="trending-up" aria-hidden="true"></i><span>Analyse</span>
+            </button>
+            <button class="tab-btn bottom-nav-btn" data-tab="research">
+                <i data-lucide="compass" aria-hidden="true"></i><span>Explorer</span>
+            </button>
+        </nav>
+
+        <button id="addTransactionFab" class="fab-btn" aria-label="Ajouter une transaction"></button>
+    </div>
+
+    <!-- MODAL: Add Transaction -->
+    <div class="modal-overlay" id="transactionModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="transactionModalTitle">Nouvelle Transaction</h3>
+                <button class="close-btn" id="closeModalBtn"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="transactionForm">
+                    <div class="form-group" id="portfolioSelectGroup">
+                        <label>Portefeuille concerné</label>
+                        <select name="portfolioId" id="targetPortfolioSelect" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
+                            <!-- Injected dynamically by JS -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Type d'opération</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="type" value="BUY" checked>
+                                <span>Achat</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type" value="SELL">
+                                <span>Vente</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type" value="DEPOSIT">
+                                <span>Dépôt</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type" value="WITHDRAWAL">
+                                <span>Retrait</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type" value="DIVIDEND">
+                                <span>Dividende</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type" value="FEE">
+                                <span>Frais</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="symbolGroup">
+                        <label id="symbolLabel">Symbole (ex: AAPL)</label>
+                        <input type="text" name="symbol" id="symbolInputField" list="stockList" placeholder="Rechercher..." required
+                            uppercase>
+                        <datalist id="stockList"></datalist>
+                    </div>
+
+                    <div class="form-row form-row-3" id="qtyPriceRow">
+                        <div class="form-group" id="qtyGroup">
+                            <label id="qtyLabel">Quantité</label>
+                            <input type="number" name="qty" id="qtyInputField" step="any" min="0.000001" required>
+                        </div>
+                        <div class="form-group" id="priceGroup">
+                            <label id="priceLabel">Prix unitaire</label>
+                            <input type="number" name="price" id="priceInputField" step="any" min="0" required>
+                        </div>
+                        <div class="form-group" id="priceCurrencyGroup">
+                            <label>Devise saisie</label>
+                            <select name="priceCurrency" id="priceCurrencyField" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (€)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="amountGroup" style="display: none;">
+                        <label id="amountLabel">Montant total ($)</label>
+                        <input type="number" name="amount" id="amountInputField" step="any" min="0.01" placeholder="Ex: 500">
+                    </div>
+
+                    <div class="form-group" id="feesGroup">
+                        <label>Frais de courtage (optionnel, dans la devise saisie)</label>
+                        <input type="number" name="fees" id="feesInputField" step="any" min="0" placeholder="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" name="date" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary full-width">Enregistrer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Settings -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Données de marché</h3>
+                <button class="close-btn" id="closeSettingsBtn"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-section-label">Apparence</p>
+                <div class="theme-segmented" id="themeSegmented" role="radiogroup" aria-label="Thème">
+                    <button type="button" class="theme-seg-btn" data-theme-choice="dark" aria-checked="true" role="radio">
+                        <span class="theme-seg-ring"></span>Sombre
+                    </button>
+                    <button type="button" class="theme-seg-btn" data-theme-choice="light" aria-checked="false" role="radio">
+                        <span class="theme-seg-ring"></span>Clair
+                    </button>
+                </div>
+
+                <p style="font-size:13px; color:var(--text-secondary); margin:20px 0 15px;">
+                    Prix et historiques en temps réel via Yahoo Finance (proxy). Aucune clé API requise.
+                    <br><i>En cas d'indisponibilité du proxy, l'app repasse automatiquement en mode simulation.</i>
+                </p>
+                <button type="button" id="reloadPricesBtn" class="btn-primary full-width">Recharger les prix</button>
+                <button type="button" id="syncDividendsBtn" class="btn-primary full-width" style="margin-top:10px;">Synchroniser les dividendes</button>
+
+                <p style="font-size:13px; color:#666; margin:20px 0 10px 0;">
+                    Transactions (CSV) — colonnes séparées par <b>;</b>, nombres avec virgule (ex: 10,5).
+                    <br>Types : BUY, SELL, DEPOSIT, WITHDRAWAL, DIVIDEND, FEE. Devises : USD, EUR.
+                </p>
+                <button type="button" id="downloadTemplateBtn" class="btn-primary full-width" style="background:#374151;">Télécharger le modèle</button>
+                <button type="button" id="exportCsvBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Exporter en CSV</button>
+                <button type="button" id="importCsvBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Importer un CSV</button>
+                <input type="file" id="importCsvInput" accept=".csv,text/csv" style="display:none;">
+
+                <p style="font-size:13px; color:#666; margin:20px 0 10px 0;">
+                    Résumé IA (optionnel) — choisis ton fournisseur, ta clé reste dans ton navigateur
+                    (localStorage), jamais envoyée à un serveur autre que celui du fournisseur choisi.
+                    Aucun fournisseur = résumé factuel sans IA.
+                </p>
+                <div class="form-group" style="margin-bottom:10px;">
+                    <select id="aiProviderSelect" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
+                        <option value="">Aucun (résumé factuel)</option>
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="openai">OpenAI (ChatGPT)</option>
+                        <option value="gemini">Google (Gemini)</option>
+                        <option value="grok">xAI (Grok)</option>
+                        <option value="groq">Groq (Llama 3.3 70B)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:10px;">
+                    <input type="password" id="aiKeyInput" placeholder="Clé API" autocomplete="off">
+                </div>
+                <button type="button" id="saveAiKeyBtn" class="btn-primary full-width" style="background:#374151;">Enregistrer la clé</button>
+                <button type="button" id="clearAiKeyBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Supprimer la clé de ce fournisseur</button>
+
+                <button type="button" id="logoutBtn" class="btn-primary full-width" style="background:#ef4444; margin-top:20px;">Se déconnecter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Filtres transactions -->
+    <div class="modal-overlay" id="txFilterModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Filtres</h3>
+                <button type="button" class="btn-sm" id="txFilterResetBtn">Réinitialiser</button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-section-label">Type d'opération</p>
+                <div class="tx-type-pills" id="txTypePills">
+                    <button type="button" data-type="BUY">Achat</button>
+                    <button type="button" data-type="SELL">Vente</button>
+                    <button type="button" data-type="DIVIDEND">Dividende</button>
+                    <button type="button" data-type="FEE">Frais</button>
+                    <button type="button" data-type="DEPOSIT">Dépôt</button>
+                    <button type="button" data-type="WITHDRAWAL">Retrait</button>
+                </div>
+                <p class="settings-section-label">Période</p>
+                <div class="tx-date-row">
+                    <label class="tx-date-field"><span>Depuis</span><input type="date" id="txFromFilter"></label>
+                    <label class="tx-date-field"><span>Jusqu'à</span><input type="date" id="txToFilter"></label>
+                </div>
+                <button type="button" class="btn-primary full-width" id="txApplyBtn">Appliquer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Symbol Search (TradingView Style) -->
+    <div class="modal-overlay" id="symbolSearchModal">
+        <div class="modal search-modal-content">
+            <div class="search-header">
+                <h3>Recherche de symbole</h3>
+                <button class="close-btn" id="closeSearchBtn"><i data-lucide="x"></i></button>
+            </div>
+            <div class="search-input-wrapper">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="globalSearchInput" placeholder="Rechercher (ex: Apple, BTC...)"
+                    autocomplete="off">
+            </div>
+            <div class="search-filters">
+                <button class="filter-btn active">Tous</button>
+                <button class="filter-btn">Actions</button>
+                <button class="filter-btn">Fonds</button>
+                <button class="filter-btn">Crypto</button>
+            </div>
+            <div class="search-results-list" id="searchResultsList">
+                <!-- Results injected here -->
+                <div class="search-placeholder">Commencez à taper...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Asset Detail Chart -->
+    <div class="modal-overlay" id="assetChartModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="assetChartTitle">Actif</h3>
+                <button class="close-btn" id="closeAssetChartBtn"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="chart-container" style="height:280px;">
+                    <canvas id="assetDetailChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Portfolio Create/Edit -->
+    <div class="modal-overlay" id="portfolioModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="portfolioModalTitle">Nouveau Portefeuille</h3>
+                <button class="close-btn" id="closePortfolioModalBtn"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="portfolioForm">
+                    <input type="hidden" name="portfolioEditId" id="portfolioEditId" value="">
+                    <div class="form-group">
+                        <label>Nom du portefeuille</label>
+                        <input type="text" name="portfolioName" id="portfolioNameInput" placeholder="Ex: PEA, Crypto, CTO, Assurance Vie..." required>
+                    </div>
+                    <div class="form-group">
+                        <label>Couleur du thème</label>
+                        <div class="color-picker-group" id="portfolioColorPicker">
+                            <label class="color-option"><input type="radio" name="portfolioColor" value="#3b82f6" checked><span style="background:#3b82f6;"></span></label>
+                            <label class="color-option"><input type="radio" name="portfolioColor" value="#10b981"><span style="background:#10b981;"></span></label>
+                            <label class="color-option"><input type="radio" name="portfolioColor" value="#f59e0b"><span style="background:#f59e0b;"></span></label>
+                            <label class="color-option"><input type="radio" name="portfolioColor" value="#8b5cf6"><span style="background:#8b5cf6;"></span></label>
+                            <label class="color-option"><input type="radio" name="portfolioColor" value="#ec4899"><span style="background:#ec4899;"></span></label>
+                            <label class="color-option"><input type="radio" name="portfolioColor" value="#64748b"><span style="background:#64748b;"></span></label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Icône</label>
+                        <div class="icon-picker-group" id="portfolioIconPicker">
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="" checked><span title="Automatique (selon le nom)"><i data-lucide="sparkles"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="wallet"><span><i data-lucide="wallet"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="banknote"><span><i data-lucide="banknote"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="landmark"><span><i data-lucide="landmark"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="briefcase"><span><i data-lucide="briefcase"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="bitcoin"><span><i data-lucide="bitcoin"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="shield"><span><i data-lucide="shield"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="house"><span><i data-lucide="house"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="piggy-bank"><span><i data-lucide="piggy-bank"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="coins"><span><i data-lucide="coins"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="globe"><span><i data-lucide="globe"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="cpu"><span><i data-lucide="cpu"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="trending-up"><span><i data-lucide="trending-up"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="gem"><span><i data-lucide="gem"></i></span></label>
+                            <label class="icon-option"><input type="radio" name="portfolioIcon" value="rocket"><span><i data-lucide="rocket"></i></span></label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary full-width" id="portfolioSubmitBtn">Enregistrer le portefeuille</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Logic -->
+    <script src="js/app.js?v=94"></script>
+</body>
+
+</html>

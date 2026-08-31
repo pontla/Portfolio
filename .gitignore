@@ -1,0 +1,26 @@
+node_modules/
+coverage/
+.wrangler/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.claude/settings.local.json
+
+# Ruflo local secrets and runtime data
+.env.local
+.env.*.local
+.claude-flow/
+.swarm/
+.claude/proven-config.json
+.claude/.proven-config-version
+
+# Stray shell-redirection artifacts (empty files with code-fragment names)
+/0
+/div
+/stacked
+/d.classList.toggle('active'
+/modal.classList.remove('open')
+
+# Design handoff archive (source material, not tracked)
+/Portfolio App Redesign.zip
