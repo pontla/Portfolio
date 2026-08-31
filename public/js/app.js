@@ -2174,6 +2174,38 @@ const App = {
     },
 
     setupEventListeners() {
+        // --- REPLIS SANS HANDLERS INLINE (compat CSP stricte) ---
+        // Image cassée : masquer et, si demandé, afficher le monogramme voisin.
+        // Les évènements `error` ne bouillonnent pas -> écoute en phase de capture.
+        document.addEventListener('error', (e) => {
+            const img = e.target;
+            if (!(img instanceof HTMLImageElement) || !img.dataset.fallback) return;
+            if (img.dataset.fallback === 'hide') {
+                img.style.visibility = 'hidden';
+            } else if (img.dataset.fallback === 'sibling') {
+                img.style.display = 'none';
+                if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+            }
+        }, true);
+
+        // Boutons « Afficher plus / moins » des insights (markup injecté par innerHTML).
+        document.addEventListener('click', (e) => {
+            const sumBtn = e.target.closest('.insights-summary-toggle');
+            if (sumBtn) {
+                const clamped = sumBtn.previousElementSibling.classList.toggle('is-clamped');
+                sumBtn.textContent = clamped ? 'Afficher plus' : 'Afficher moins';
+                return;
+            }
+            const grpBtn = e.target.closest('.insights-toggle-btn');
+            if (grpBtn) {
+                const more = grpBtn.parentElement.querySelector('.insights-more');
+                if (!more) return;
+                const expanded = more.style.display !== 'none';
+                more.style.display = expanded ? 'none' : 'block';
+                grpBtn.textContent = expanded ? 'Afficher plus' : 'Afficher moins';
+            }
+        });
+
         // --- STATS CAROUSEL DOTS (mobile) ---
         const statsGrid = document.getElementById('statsGrid');
         const statsDots = document.getElementById('statsDots');
@@ -2658,7 +2690,7 @@ const App = {
                 row.innerHTML = `
                     <div class="result-left">
                         <img class="result-logo" src="${this.getLogoUrl(sym)}" alt=""
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            data-fallback="sibling">
                         <div class="result-icon" style="display:none;">${sym.substring(0, 1)}</div>
                         <div class="result-info">
                             <span class="result-symbol">${sym}</span>
@@ -3368,7 +3400,7 @@ const App = {
                         <td data-label="Actif">
                             <div class="holding-asset-cell" data-symbol="${h.symbol}" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                                 <img class="perf-logo" src="${this.getLogoUrl(h.symbol)}" alt=""
-                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    data-fallback="sibling">
                                 <span class="perf-logo-fallback" style="display:none;">${h.symbol.substring(0, 1)}</span>
                                 <div style="display:flex; flex-direction:column; gap:2px;">
                                     <span style="font-weight:700; color:var(--txt);">${h.symbol}</span>
@@ -3416,7 +3448,7 @@ const App = {
                     <button class="holding-swipe-action quick-sell-btn" data-symbol="${h.symbol}" data-qty="${h.qty}" data-price="${h.currentPrice}">Vendre</button>
                     <div class="holding-card">
                         <div class="hc-row1 holding-asset-cell" data-symbol="${h.symbol}">
-                            <img class="hc-logo" src="${this.getLogoUrl(h.symbol)}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <img class="hc-logo" src="${this.getLogoUrl(h.symbol)}" alt="" data-fallback="sibling">
                             <span class="hc-logo-fb" style="display:none;">${h.symbol.substring(0, 1)}</span>
                             <div class="hc-id">
                                 <span class="hc-sym">${h.symbol}</span>
@@ -3596,7 +3628,7 @@ const App = {
             return `
                 <div class="perf-row">
                     <img class="perf-logo" src="${this.getLogoUrl(h.symbol)}" alt=""
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        data-fallback="sibling">
                     <span class="perf-logo-fallback" style="display:none;">${h.symbol.substring(0, 1)}</span>
                     <span class="perf-ticker">${h.symbol}</span>
                     <div class="perf-bar-track">
@@ -3633,7 +3665,7 @@ const App = {
                 return `
                     <div class="perf-row">
                         <img class="perf-logo" src="${this.getLogoUrl(m.symbol)}" alt=""
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            data-fallback="sibling">
                         <span class="perf-logo-fallback" style="display:none;">${m.symbol.substring(0, 1)}</span>
                         <span class="perf-ticker">${m.symbol}</span>
                         <div class="perf-bar-track">
@@ -3659,7 +3691,7 @@ const App = {
         listEl.innerHTML = items.length ? items.map(d => `
             <div class="perf-row">
                 <img class="perf-logo" src="${this.getLogoUrl(d.symbol)}" alt=""
-                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    data-fallback="sibling">
                 <span class="perf-logo-fallback" style="display:none;">${d.symbol.substring(0, 1)}</span>
                 <span class="perf-ticker">${d.symbol}</span>
                 <span style="flex:1; color:var(--text-secondary); font-size:13px;">${Utils.formatDateDisplay(d.estimatedDate)} (est.)</span>
@@ -3676,11 +3708,7 @@ const App = {
         if (text.length <= 220) return `<div class="insights-summary">${safe}</div>`;
         return `<div class="insights-summary">
             <div class="insights-summary-text is-clamped">${safe}</div>
-            <button type="button" class="insights-summary-toggle" onclick="
-                var t = this.previousElementSibling;
-                var clamped = t.classList.toggle('is-clamped');
-                this.textContent = clamped ? 'Afficher plus' : 'Afficher moins';
-            ">Afficher plus</button>
+            <button type="button" class="insights-summary-toggle">Afficher plus</button>
         </div>`;
     },
 
@@ -3693,15 +3721,14 @@ const App = {
             return dateB.localeCompare(dateA);
         });
 
-        return '<div class="insights-carousel">' + sorted.map((g, gIdx) => {
+        return '<div class="insights-carousel">' + sorted.map((g) => {
             const [firstItem, ...restItems] = g.items;
-            const uid = `insights-more-${gIdx}`;
 
             return `
             <div class="insights-group">
                 <div class="insights-group-header">
                     <img class="insights-logo" src="${this.getLogoUrl(g.symbol)}" alt=""
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        data-fallback="sibling">
                     <span class="insights-logo-fallback" style="display:none;">${g.symbol.substring(0, 1)}</span>
                     <span class="insights-group-title">${Utils.escapeHtml(g.symbol)}</span>
                     ${g.name ? `<span class="insights-group-name">${Utils.escapeHtml(g.name)}</span>` : ''}
@@ -3709,7 +3736,7 @@ const App = {
                 <div class="insights-item" style="border-bottom:none;">
                     <div class="insights-item-title">${Utils.escapeHtml(firstItem.title)}</div>
                 </div>
-                <div id="${uid}" style="display:none;">
+                <div class="insights-more" style="display:none;">
                     <div class="insights-item">
                         ${firstItem.detail ? `<div class="insights-item-detail">${Utils.escapeHtml(firstItem.detail)}</div>` : ''}
                     </div>
@@ -3721,12 +3748,7 @@ const App = {
                     `).join('')}
                 </div>
                 ${(firstItem.detail || restItems.length) ? `
-                    <button type="button" class="insights-toggle-btn" onclick="
-                        const el = document.getElementById('${uid}');
-                        const expanded = el.style.display !== 'none';
-                        el.style.display = expanded ? 'none' : 'block';
-                        this.textContent = expanded ? 'Afficher plus' : 'Afficher moins';
-                    ">Afficher plus</button>
+                    <button type="button" class="insights-toggle-btn">Afficher plus</button>
                 ` : ''}
             </div>
         `;
@@ -3951,7 +3973,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         listEl.innerHTML = items.length ? items.map(e => `
             <div class="perf-row">
                 <img class="perf-logo" src="${this.getLogoUrl(e.symbol)}" alt=""
-                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    data-fallback="sibling">
                 <span class="perf-logo-fallback" style="display:none;">${e.symbol.substring(0, 1)}</span>
                 <span class="perf-ticker">${e.symbol}</span>
                 <span style="flex:1; color:var(--text-secondary); font-size:13px;">${Utils.formatDateDisplay(e.date)}</span>
@@ -4414,7 +4436,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             suggest.innerHTML = lastResults.slice(0, 8).map((item, i) => {
                 const sym = item.displaySymbol || item.symbol;
                 return `<div class="rs-row${i === 0 ? ' active' : ''}" data-sym="${sym}">
-                    <img src="${this.getLogoUrl(sym)}" alt="" onerror="this.style.visibility='hidden'">
+                    <img src="${this.getLogoUrl(sym)}" alt="" data-fallback="hide">
                     <span class="rs-txt"><span class="rs-sym">${sym}</span><span class="rs-desc">${(item.description || sym)} · ${Utils.getExchangeName(sym)}</span></span>
                 </div>`;
             }).join('');

@@ -1,0 +1,6 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-z9FYhPbMqT3ALeOtUFneeWhmchbSS34bqMBN4NXOjZU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://img.logokit.com; connect-src 'self' https://fragrant-band-1476.jrichardeau-cloudflare.workers.dev https://ttphzfvgeufoblkqvdsl.supabase.co wss://ttphzfvgeufoblkqvdsl.supabase.co https://api.anthropic.com https://api.openai.com https://generativelanguage.googleapis.com https://api.x.ai https://api.groq.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()
