@@ -1046,6 +1046,113 @@ describe('AnalysisService._normalize', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// Bugs remontes par l'audit des calculs financiers
+// ---------------------------------------------------------------------------
+
+describe('PortfolioService.computeProfitAsOf : devise du prix de repli', () => {
+    it('une position en euros n est pas convertie deux fois', () => {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.fxRate = 1.08;
+        svc.fxRates = { EUR: 1.08 };
+        svc.trades = [
+            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AIR.PA', qty: 10, price: 100, amount: 1000, fees: 0, date: '2026-01-02' }
+        ];
+        // Ni historique ni prix live : `getPriceOnDate` retombe sur le prix passe
+        // en repli, qui doit etre exprime en euros comme les cours de AIR.PA.
+        svc.dailyPriceCache = {};
+        svc.marketPrices = {};
+
+        const out = svc.computeProfitAsOf('2026-01-10', 'USD');
+        // Repli = PRU : la position vaut exactement son cout, donc zero latent.
+        // Avant correction le PRU (stocke en USD) etait reconverti EUR -> USD :
+        // 1 166,4 au lieu de 1 080, soit +86,4 USD de plus-value fantome.
+        expect(out.totalPnL).toBeCloseTo(0, 6);
+    });
+});
+
+describe('AnalysisUtils.avgPositive : moyennes de multiples', () => {
+    const { AnalysisUtils: U } = app;
+
+    it('ecarte les exercices ou le multiple n a pas de sens', () => {
+        // Un exercice deficitaire (PER negatif) ecrasait la reference historique.
+        expect(U.avg([-50, 25, 28, 30, 26, 27])).toBeCloseTo(14.333, 3);
+        expect(U.avgPositive([-50, 25, 28, 30, 26, 27])).toBeCloseTo(27.2, 3);
+        expect(U.avgPositive([0, 20, 30])).toBe(25);
+        expect(U.avgPositive([-5, -8])).toBeNull();
+        expect(U.avgPositive([])).toBeNull();
+    });
+
+    it('_normalize : la moyenne historique ignore l exercice deficitaire', () => {
+        const { AnalysisService: S } = app;
+        const out = S._normalize({
+            symbol: 'X', nonUS: false, errors: [], fund: {}, qs: {},
+            ratios: [
+                { calendarYear: '2022', priceEarningsRatio: -50, enterpriseValueMultiple: -12 },
+                { calendarYear: '2023', priceEarningsRatio: 25, enterpriseValueMultiple: 20 },
+                { calendarYear: '2024', priceEarningsRatio: 29, enterpriseValueMultiple: 22 }
+            ],
+            income: [], cashflow: [], keyMetricsTtm: {}, ratiosTtm: {},
+            estimatesFmp: [], profileFmp: {}, reco: [], insider: {}, peersRaw: [],
+            earn: null, history: {}, dividends: []
+        });
+        expect(out.valuation.hist5y.pe).toBe(27);          // (25 + 29) / 2, pas 1,33
+        expect(out.valuation.hist5y.evEbitda).toBe(21);
+    });
+});
+
+describe('series de cours simulees (repli sans historique reel)', () => {
+    const { AnalysisService: S, APIService: A } = app;
+
+    const serie = (n) => {
+        const h = {};
+        for (let i = 0; i < n; i++) {
+            const d = new Date(Date.UTC(2025, 0, 1 + i)).toISOString().slice(0, 10);
+            h[d] = 100 + Math.sin(i / 5) * 10;
+        }
+        return h;
+    };
+
+    it('le marqueur reste invisible pour les consommateurs de la serie', () => {
+        const h = A.markSyntheticHistory(serie(3));
+        expect(Object.keys(h)).toHaveLength(3);            // aucune cle parasite
+        expect(JSON.parse(JSON.stringify(h))).toEqual({ ...h });
+        expect(A.isSyntheticHistory(h)).toBe(true);
+        expect(A.isSyntheticHistory(serie(3))).toBe(false);
+        expect(A.isSyntheticHistory(null)).toBe(false);
+    });
+
+    it('getDailyHistory marque la serie quand le proxy ne renvoie rien', async () => {
+        // Contexte neuf : le realm partage a un stub de getDailyHistory (cf. les
+        // tests du graphe), on veut ici la vraie fonction.
+        const { APIService: fresh } = loadApp();
+        // Le stub de fetch du contexte renvoie {} : historique vide -> repli simule.
+        const h = await fresh.getDailyHistory('ZZZZ', new Date('2025-01-01'), new Date('2025-03-01'), 100, 110);
+        expect(Object.keys(h).length).toBeGreaterThan(0);
+        expect(fresh.isSyntheticHistory(h)).toBe(true);
+        // Une reponse exploitable du proxy n'est evidemment pas marquee.
+        const { APIService: ok } = loadApp({
+            fetch: async () => ({ ok: true, status: 200, json: async () => ({ '2025-01-02': 10, '2025-01-03': 11 }) })
+        });
+        const reel = await ok.getDailyHistory('ZZZZ', new Date('2025-01-01'), new Date('2025-03-01'), 100, 110);
+        expect(ok.isSyntheticHistory(reel)).toBe(false);
+    });
+
+    it('aucune analyse technique n est deduite d une serie simulee', () => {
+        const reelle = serie(120);
+        const vraie = S._technicalBlock(reelle, { fiftyTwoWeekHigh: 120, fiftyTwoWeekLow: 80 }, {});
+        expect(vraie).not.toBeNull();
+        expect(vraie.rsi14).not.toBeNull();
+        expect(vraie.cross === null || typeof vraie.cross === 'string').toBe(true);
+
+        // Meme serie, marquee simulee : ni RSI, ni tendance, ni croisement date.
+        const simulee = A.markSyntheticHistory(serie(120));
+        expect(S._technicalBlock(simulee, {}, {})).toBeNull();
+    });
+});
+
 describe('AnalysisService._dividendBlock (phase 8)', () => {
     const { AnalysisService: S } = app;
 

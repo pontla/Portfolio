@@ -438,6 +438,11 @@ const Utils = {
 };
 
 // --- API SERVICE (proxy Cloudflare Worker -> Yahoo Finance, voir worker/proxy.js) ---
+// Marque une serie de cours generee faute d'historique reel (proxy en erreur ou
+// reponse vide). Symbol plutot que chaine : impossible de l'obtenir par accident
+// depuis des donnees d'API.
+const SYNTHETIC_HISTORY = Symbol('syntheticHistory');
+
 const APIService = {
     quoteCache: {},
     candleCache: {},
@@ -625,8 +630,24 @@ const APIService = {
         }
 
         const daily = this.generateRealisticDailyHistory(symbol, startDate, endDate, anchorPriceStart, currentPriceEnd);
+        // Marqueur non enumerable : `Object.keys` / `JSON.stringify` continuent de
+        // ne voir que des couples date -> cours, mais tout consommateur peut savoir
+        // que la serie est simulee. Elle reste utile pour interpoler la courbe du
+        // portefeuille entre deux points reels (elle est ancree sur le prix d'achat
+        // et le prix courant), jamais pour en deduire un fait de marche.
+        this.markSyntheticHistory(daily);
         this.candleCache[cacheKey] = daily;
         return daily;
+    },
+
+    markSyntheticHistory(history) {
+        Object.defineProperty(history, SYNTHETIC_HISTORY, { value: true, configurable: true });
+        return history;
+    },
+
+    // Une serie simulee ne doit alimenter aucun indicateur presente comme observe.
+    isSyntheticHistory(history) {
+        return !!(history && history[SYNTHETIC_HISTORY]);
     },
 
     async getDividends(symbol, from, to) {
@@ -792,6 +813,9 @@ const AnalysisUtils = {
         const x = list.filter(n => typeof n === 'number' && isFinite(n));
         return x.length ? x.reduce((a, b) => a + b, 0) / x.length : null;
     },
+    // Moyenne d'un multiple : les exercices ou il est nul ou negatif n'en font pas
+    // partie, la valeur n'y est pas interpretable (cf. hist5y).
+    avgPositive: (list) => AnalysisUtils.avg(list.filter(n => typeof n === 'number' && isFinite(n) && n > 0)),
     // CAGR en pourcent entre la 1re et la derniere valeur d'une serie.
     cagrPct: (first, last, years) =>
         (first > 0 && last > 0 && years > 0) ? (Math.pow(last / first, 1 / years) - 1) * 100 : null,
@@ -995,11 +1019,17 @@ const AnalysisService = {
             evEbitda: n(qs.enterpriseToEbitda) ?? n(kmTtm.enterpriseValueOverEBITDATTM) ?? n(rTtm.enterpriseValueMultipleTTM),
             evRevenue: n(qs.enterpriseToRevenue) ?? n(kmTtm.evToSalesTTM),
             fcfYield: pctU(n(kmTtm.freeCashFlowYieldTTM)) ?? ((fcfLatest != null && marketCap) ? fcfLatest / marketCap * 100 : null),
+            // Moyennes sur les seuls exercices ou le multiple a un sens. Un exercice
+            // deficitaire donne un PER negatif qui, moyenne avec des PER positifs,
+            // ecrase la reference : [-50, 25, 28, 30, 26, 27] donne 14,3 au lieu de
+            // 27,2, et la valeur ressort a tort tres chere face a son historique.
+            // Idem pour VE/EBITDA (EBITDA negatif) et l'actif net (fonds propres
+            // negatifs). Le CA, lui, ne peut pas etre negatif : `ps` reste tel quel.
             hist5y: {
-                pe: U.avg(ratiosAsc.map(r => n(r.priceEarningsRatio))),
-                pb: U.avg(ratiosAsc.map(r => n(r.priceToBookRatio))),
+                pe: U.avgPositive(ratiosAsc.map(r => n(r.priceEarningsRatio))),
+                pb: U.avgPositive(ratiosAsc.map(r => n(r.priceToBookRatio))),
                 ps: U.avg(ratiosAsc.map(r => n(r.priceToSalesRatio))),
-                evEbitda: U.avg(ratiosAsc.map(r => n(r.enterpriseValueMultiple)))
+                evEbitda: U.avgPositive(ratiosAsc.map(r => n(r.enterpriseValueMultiple)))
             }
         };
 
@@ -1509,6 +1539,9 @@ const AnalysisService = {
     },
 
     _technicalBlock(history, price, qs) {
+        // RSI, moyennes mobiles, tendance et croisements dates seraient du bruit
+        // presente comme une lecture du marche : on prefere ne rien afficher.
+        if (APIService.isSyntheticHistory(history)) return null;
         const n = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
         const dates = Object.keys(history || {}).sort()
             .filter(d => n(Number(history[d])) != null);
@@ -2390,11 +2423,14 @@ class PortfolioService {
         const yesterdayStr = Utils.getDateString(yesterday);
 
         const movers = stats.holdings.map(h => {
+            // Sans historique reel, la cloture de la veille est un point de marche
+            // aleatoire : annoncer "+1,87 % sur la seance" serait une invention.
+            if (APIService.isSyntheticHistory(this.dailyPriceCache[h.symbol])) return null;
             const currentPrice = h.currentPrice;
             const prevClose = this.getPriceOnDate(h.symbol, yesterdayStr, currentPrice);
             const dayChangePercent = prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
             return { symbol: h.symbol, currency: h.currency, currentPrice, dayChangePercent };
-        }).filter(m => Math.abs(m.dayChangePercent) > 0.001);
+        }).filter(m => m && Math.abs(m.dayChangePercent) > 0.001);
 
         const gainers = movers.filter(m => m.dayChangePercent > 0)
             .sort((a, b) => b.dayChangePercent - a.dayChangePercent).slice(0, 3);
@@ -2412,11 +2448,13 @@ class PortfolioService {
         const monthAgoStr = Utils.getDateString(monthAgo);
 
         const movers = stats.holdings.map(h => {
+            // Idem : pas de variation sur 30 jours a partir d'une serie simulee.
+            if (APIService.isSyntheticHistory(this.dailyPriceCache[h.symbol])) return null;
             const currentPrice = h.currentPrice;
             const pastPrice = this.getPriceOnDate(h.symbol, monthAgoStr, currentPrice);
             const changePercent = pastPrice > 0 ? ((currentPrice - pastPrice) / pastPrice) * 100 : 0;
             return { symbol: h.symbol, changePercent, weightPercent: h.weightPercent };
-        }).filter(m => Math.abs(m.changePercent) > 0.01);
+        }).filter(m => m && Math.abs(m.changePercent) > 0.01);
 
         const topGainers = movers.filter(m => m.changePercent > 0).sort((a, b) => b.changePercent - a.changePercent).slice(0, 3);
         const topLosers = movers.filter(m => m.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent).slice(0, 3);
@@ -2562,7 +2600,13 @@ class PortfolioService {
         Object.entries(holdings).forEach(([symbol, h]) => {
             if (h.qty <= 0.0001) return;
             const currency = Utils.getCurrency(symbol);
-            const priceOnDay = this.getPriceOnDate(symbol, dateStr, h.costUSD / h.qty);
+            // `getPriceOnDate` renvoie un cours en devise de cotation, reconverti en
+            // USD juste apres : le prix de repli doit donc etre natif lui aussi. Le
+            // PRU stocke est en USD, d'ou la conversion inverse -- sans elle la
+            // position etait convertie deux fois (+8 % de plus-value fantome sur
+            // une valeur en euros au taux de 1,08).
+            const fallbackNative = this.convertCurrency(h.costUSD / h.qty, 'USD', currency);
+            const priceOnDay = this.getPriceOnDate(symbol, dateStr, fallbackNative);
             holdingsValueUSD += this.convertCurrency(h.qty * priceOnDay, currency, 'USD');
             holdingsCostUSD += h.costUSD;
         });
