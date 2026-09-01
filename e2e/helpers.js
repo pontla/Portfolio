@@ -554,12 +554,22 @@ export async function bootApp(page, opts = {}) {
     // 3. Retire les attributs SRI du HTML : le stub Supabase servi ci-dessus ne peut
     //    pas satisfaire le hash `integrity` de la vraie lib CDN, le navigateur
     //    refuserait alors de l'exécuter.
+    //
+    //    Les en-têtes de la réponse d'origine sont conservés : la CSP du document
+    //    vient de là et de nulle part ailleurs. Un `fulfill` qui ne repasse que
+    //    le `content-type` livre une page sans aucune CSP — les tests valident
+    //    alors une application plus permissive que celle mise en ligne.
     await page.route(/localhost:8788\/($|index\.html)/, async (route) => {
         const res = await route.fetch();
         const html = (await res.text())
             .replace(/\s+integrity="[^"]*"/g, '')
             .replace(/\s+crossorigin="anonymous"/g, '');
-        await route.fulfill({ contentType: 'text/html; charset=utf-8', body: html });
+        const headers = { ...res.headers() };
+        // Le corps a changé de taille et n'est plus compressé.
+        delete headers['content-length'];
+        delete headers['content-encoding'];
+        headers['content-type'] = 'text/html; charset=utf-8';
+        await route.fulfill({ status: res.status(), headers, body: html });
     });
 
     await page.goto('/');

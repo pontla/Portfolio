@@ -104,7 +104,9 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 │           └── *.test.js                    # import direct, aucun stub de DOM
 ├── e2e/                      # Parcours Playwright
 ├── scripts/
-│   └── check-csp-hash.mjs    # Garde-fou : hash CSP ↔ script inline de index.html
+│   ├── check-csp-hash.mjs    # Garde-fou : hash CSP ↔ script inline de index.html
+│   ├── static-server.mjs     # Serveur d'assets pour les tests e2e
+│   └── static-server.test.js # Contrat du serveur, relevé sur le site déployé
 ├── eslint.config.mjs
 ├── .prettierrc.json
 └── README.md
@@ -120,12 +122,48 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 | `npm run check:csp` | Vérifie que les hash CSP correspondent aux scripts inline |
 | `npm test`          | Tests unitaires (vitest)                                  |
 | `npm run test:e2e`  | Parcours Playwright                                       |
+| `npm run serve`     | Sert `public/` sur le port 8788 (assets seuls)            |
 
 `public/index.html` est **exclu de Prettier** : la CSP de `public/_headers`
 autorise son script inline de thème par un hash `sha256`, que le moindre
 reformatage invaliderait — le navigateur bloquerait alors le script en
 production, sans qu'aucun test ne le voie. `npm run check:csp` garde cette
 correspondance sous surveillance.
+
+### Serveur des tests end-to-end
+
+La campagne Playwright ne passe plus par `wrangler dev` mais par
+`scripts/static-server.mjs`. Le Worker de ce dépôt n'a aucun code — `wrangler.toml`
+ne déclare que `[assets] directory = "./public"` — et faire tourner un runtime
+`workerd` complet pour servir des fichiers plats coûtait **6,1 s de démarrage**
+contre **0,35 s**, en s'effondrant parfois en cours de campagne (`ECONNREFUSED`
+au milieu d'une série de tests, une cause d'échec qui n'a rien à voir avec le
+code testé).
+
+Le serveur reproduit le contrat _observable_ de Cloudflare Workers static assets,
+relevé sur le site déployé et non déduit de la documentation :
+
+- `_headers` appliqué à toutes les réponses, **404 comprises** ;
+- `.assetsignore` respecté : tests, instantanés et `.d.ts` renvoient 404 ;
+- `_headers` et `_redirects` jamais servis, ce sont de la configuration ;
+- `/` sert `index.html`, tandis que `/index.html` et `/index` redirigent en 307 ;
+- aucun index de répertoire, aucun repli SPA : un chemin inconnu est un 404 sec.
+
+Il écoute sur `127.0.0.1` **et** `::1` : selon la machine, `localhost` résout
+vers l'une ou l'autre, et n'en servir qu'une produisait un `ECONNREFUSED`
+intermittent.
+
+Deux conséquences pour les tests. D'abord `scripts/static-server.test.js` vérifie
+sur le vrai `public/` qu'aucun fichier de test n'est servi — la régression déjà
+survenue en production, où l'instantané de la timeline était téléchargeable
+publiquement, échoue maintenant en local. Ensuite **la CSP de production est
+réellement active pendant la campagne** : le harnais e2e repasse les en-têtes de
+la réponse d'origine au lieu du seul `content-type`, ce qui fait qu'un
+`script-src` cassé fait tomber les tests au lieu de ne se voir qu'en ligne.
+
+Le hash du script inline reste, lui, hors de portée des tests e2e : ce script
+n'évite qu'un flash de thème avant peinture, et son blocage ne casse aucun
+parcours. C'est `npm run check:csp` qui le garde, et c'est sa seule raison d'être.
 
 Le moteur (`public/js/core/`) ne touche ni au DOM ni au stockage direct : il
 s'importe tel quel sous Node, ce qui rend sa couverture réellement mesurable

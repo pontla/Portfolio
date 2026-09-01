@@ -14,11 +14,14 @@ export default defineConfig({
         trace: 'on-first-retry',
     },
     projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+    // Serveur de fichiers plats plutôt que `wrangler dev` : le Worker n'a aucun
+    // code, seulement `[assets] directory = "./public"`. Le serveur reproduit le
+    // contrat observable de la plateforme (`_headers`, `.assetsignore`, 307 HTML),
+    // démarre en quelques millisecondes et ne s'effondre pas en cours de campagne.
     webServer: {
-        command: `npx wrangler dev --port ${PORT}`,
+        command: `node scripts/static-server.mjs --port ${PORT}`,
         url: `http://localhost:${PORT}`,
         reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-        env: { WRANGLER_SEND_METRICS: 'false' },
+        timeout: 30_000,
     },
 });
