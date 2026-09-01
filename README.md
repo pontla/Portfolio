@@ -99,6 +99,7 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 │           ├── portfolio.test.js            # calculs : P&L, validation, séries
 │           ├── portfolio-io.test.js         # persistance Supabase, CRUD, CSV
 │           ├── portfolio-aggregates.test.js # variations, dividendes, résultats
+│           ├── portfolio-timeline.test.js   # référence figée de la série quotidienne
 │           └── *.test.js                    # import direct, aucun stub de DOM
 ├── e2e/                      # Parcours Playwright
 ├── scripts/
@@ -134,6 +135,18 @@ plus cher — est couvert à **98 % des instructions et 85 % des branches**. Son
 double Supabase (`portfolio-io.test.js`) imite les chaînages de PostgREST et
 enregistre les appels, ce qui permet de vérifier ce qui partirait réellement au
 serveur, pas seulement l'état local après coup.
+
+`getHistoricalTimeline` est calculée en **une seule passe** sur les transactions
+triées, via un curseur qui avance jour après jour. La version précédente
+refiltrait et rejouait tout l'historique à chaque jour, et rappelait
+`computeProfitAsOf` (qui retriait à son tour) : le coût était le produit des
+jours par les transactions. Mesuré dans le navigateur, sur 400 transactions et
+3 ans d'historique : **4 631 ms → 152 ms**. Le coût ne dépend plus du nombre de
+transactions (67 ms pour 30 comme pour 400, sur 600 jours), mais seulement du
+nombre de jours et de lignes détenues. `portfolio-timeline.test.js` fige la
+sortie de l'ancienne implémentation en instantanés, sur treize portefeuilles de
+référence et quatre plages, pour que la refonte soit prouvée équivalente et pas
+seulement plus rapide.
 
 Les fragments de `public/js/ui/` sont fusionnés dans un unique objet `App` par
 `Object.assign` : ils partagent donc le même `this`, et l'état commun est
