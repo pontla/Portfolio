@@ -118,7 +118,7 @@ test('mobile 390 px : toutes les cartes tiennent sans débordement horizontal', 
 
     // aucune carte ne dépasse la largeur du viewport
     const widths = await page.locator('#researchContent .card').evaluateAll(
-        (els) => els.filter(e => e.offsetParent !== null).map(e => e.getBoundingClientRect().right)
+        (els) => els.filter(e => /** @type {HTMLElement} */ (e).offsetParent !== null).map(e => e.getBoundingClientRect().right)
     );
     for (const right of widths) expect(right).toBeLessThanOrEqual(391);
 });

@@ -1763,7 +1763,7 @@ describe('AnalysisService.buildAiPayload (phase 13)', () => {
 
     it('valeur sans dividende : rien n est presente comme une metrique manquante', () => {
         const a = richAnalysis();
-        a.dividend = { paysDividend: false, yieldPct: null, avgYield5y: null, payoutRatio: null };
+        a.dividend = /** @type {any} */ ({ paysDividend: false, yieldPct: null, avgYield5y: null, payoutRatio: null });
         const p = S.buildAiPayload(a, []);
 
         expect(p.verseUnDividende).toBe(false);

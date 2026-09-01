@@ -23,6 +23,7 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 * **Typographie :** `Archivo` (UI, titres, labels) & `Roboto Mono` (données numériques tabulaires) via Google Fonts.
 * **Base de données :** PostgreSQL (`Dev/db/schema.sql`).
 * **PWA :** Support natif via `manifest.json`.
+* **Typage :** TypeScript en `checkJs` + JSDoc, `noEmit` (`npm run typecheck`, bloquant en CI). Aucun fichier `.ts`, aucun bundler : le code livré au navigateur reste le JS source. `chart.js` et `@supabase/supabase-js` sont des devDependencies **de typage seul**, épinglées sur les mêmes versions que les balises `<script>`.
 
 ---
 

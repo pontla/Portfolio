@@ -309,7 +309,7 @@ test('graphe de cours : légende des moyennes mobiles et bascule d’affichage',
 
     // La pastille reprend la couleur réellement tracée sur le graphe.
     const swatch = await page.evaluate(() => {
-        const el = document.querySelector('#researchMaLegend [data-ma-swatch="ma50"]');
+        const el = /** @type {HTMLElement} */ (document.querySelector('#researchMaLegend [data-ma-swatch="ma50"]'));
         return { inline: el.style.borderTopColor, chart: App.researchChart.data.datasets[1].borderColor };
     });
     expect(swatch.inline).not.toBe('');

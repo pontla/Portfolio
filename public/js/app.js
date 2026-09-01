@@ -245,6 +245,7 @@ const Utils = {
         return d;
     },
 
+    /** @param {Date|string} [dateObj] */
     getDateString: (dateObj = new Date()) => {
         const d = Utils.parseDate(dateObj);
         const year = d.getFullYear();
@@ -309,7 +310,7 @@ const Utils = {
         if (num === null || num === undefined || isNaN(num)) return '—';
         const abs = Math.abs(num);
         const sign = num < 0 ? '−' : '';
-        const units = [[1e12, 'T'], [1e9, 'Md'], [1e6, 'M'], [1e3, 'k']];
+        const units = /** @type {[number, string][]} */ ([[1e12, 'T'], [1e9, 'Md'], [1e6, 'M'], [1e3, 'k']]);
         let body;
         const hit = units.find(([v]) => abs >= v);
         if (hit) {
@@ -590,7 +591,7 @@ const APIService = {
 
     async getExchangeRates() {
         const currencies = Object.keys(this.FX_FALLBACK);
-        const rates = { USD: 1 };
+        const rates = /** @type {Record<string, number|null>} */ ({ USD: 1 });
         await Promise.all(currencies.map(async (cur) => {
             rates[cur] = await this.getExchangeRate(cur);
         }));
@@ -1636,7 +1637,7 @@ class PortfolioService {
         this.marketPrices = {};
         this.dailyPriceCache = {};
         this.fxRate = 1.08;
-        this.fxRates = { USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73 };
+        this.fxRates = /** @type {Record<string, number|null>} */ ({ USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73 });
         this.userId = null;
         // Config IA liee au compte (table user_settings). aiProvider = fournisseur
         // choisi (non secret) ; aiConfigured = fournisseurs pour lesquels une cle
@@ -1872,7 +1873,7 @@ class PortfolioService {
         const today = new Date();
 
         await Promise.all(uniqueSymbols.map(async (sym) => {
-            const symTrades = this.trades.filter(t => t.symbol === sym && t.type === 'BUY').sort((a, b) => Utils.parseDate(a.date) - Utils.parseDate(b.date));
+            const symTrades = this.trades.filter(t => t.symbol === sym && t.type === 'BUY').sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime());
             const anchorBuyPrice = symTrades.length > 0 ? symTrades[0].price : (this.marketPrices[sym] || 100);
             const currentPrice = this.marketPrices[sym] || anchorBuyPrice;
 
@@ -2110,7 +2111,7 @@ class PortfolioService {
         const headers = ['date', 'type', 'symbol', 'qty', 'price', 'currency', 'fees', 'amount', 'portfolio'];
         const lines = [headers.join(';')];
 
-        this.trades.slice().sort((a, b) => Utils.parseDate(a.date) - Utils.parseDate(b.date)).forEach(t => {
+        this.trades.slice().sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime()).forEach(t => {
             const port = this.getPortfolioById(t.portfolioId);
             const currency = Utils.getCurrency(t.symbol);
             lines.push([
@@ -2208,7 +2209,7 @@ class PortfolioService {
         for (const symbol of symbols) {
             const buys = this.trades
                 .filter(t => t.symbol === symbol && t.type === 'BUY')
-                .sort((a, b) => Utils.parseDate(a.date) - Utils.parseDate(b.date));
+                .sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime());
             if (!buys.length) continue;
 
             const from = buys[0].date;
@@ -2384,6 +2385,7 @@ class PortfolioService {
                 gainPercent,
                 valueUSD,
                 currency: data.currency,
+                weightPercent: 0,
                 portfolios: Array.from(data.portfolios || [])
             };
         }).filter(Boolean);
@@ -2900,7 +2902,7 @@ const App = {
         try { localStorage.setItem(CONFIG.THEME_STORAGE, t); } catch (e) { /* ignore */ }
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute('content', t === 'light' ? '#f4f5f7' : '#0a0b0e');
-        document.querySelectorAll('#themeSegmented .theme-seg-btn').forEach(b => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#themeSegmented .theme-seg-btn')).forEach(b => {
             b.setAttribute('aria-checked', b.dataset.themeChoice === t ? 'true' : 'false');
         });
     },
@@ -2912,7 +2914,7 @@ const App = {
         const seg = document.getElementById('themeSegmented');
         if (seg && !seg._bound) {
             seg._bound = true;
-            seg.querySelectorAll('.theme-seg-btn').forEach(btn => {
+            /** @type {NodeListOf<HTMLElement>} */ (seg.querySelectorAll('.theme-seg-btn')).forEach(btn => {
                 btn.onclick = () => this.applyTheme(btn.dataset.themeChoice);
             });
         }
@@ -3047,7 +3049,7 @@ const App = {
     },
 
     setupAuthScreen(startInRecovery = false) {
-        const authForm = document.getElementById('authForm');
+        const authForm = /** @type {HTMLFormElement} */ (document.getElementById('authForm'));
         const authTitle = document.getElementById('authTitle');
         const authSubmitBtn = document.getElementById('authSubmitBtn');
         const authToggleBtn = document.getElementById('authToggleBtn');
@@ -3056,8 +3058,8 @@ const App = {
         const authInfo = document.getElementById('authInfo');
         const emailGroup = document.getElementById('authEmailGroup');
         const passwordGroup = document.getElementById('authPasswordGroup');
-        const emailInput = authForm.querySelector('input[name="email"]');
-        const passwordInput = authForm.querySelector('input[name="password"]');
+        const emailInput = /** @type {HTMLInputElement} */ (authForm.querySelector('input[name="email"]'));
+        const passwordInput = /** @type {HTMLInputElement} */ (authForm.querySelector('input[name="password"]'));
         let mode = startInRecovery ? 'recovery' : 'signin';
 
         const applyMode = () => {
@@ -3151,7 +3153,7 @@ const App = {
                 img.style.visibility = 'hidden';
             } else if (img.dataset.fallback === 'sibling') {
                 img.style.display = 'none';
-                if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+                if (img.nextElementSibling) /** @type {HTMLElement} */ (img.nextElementSibling).style.display = 'flex';
             }
         }, true);
 
@@ -3166,15 +3168,15 @@ const App = {
 
         // Boutons « Afficher plus / moins » des insights (markup injecté par innerHTML).
         document.addEventListener('click', (e) => {
-            const sumBtn = e.target.closest('.insights-summary-toggle');
+            const sumBtn = /** @type {Element} */ (e.target).closest('.insights-summary-toggle');
             if (sumBtn) {
                 const clamped = sumBtn.previousElementSibling.classList.toggle('is-clamped');
                 sumBtn.textContent = clamped ? 'Afficher plus' : 'Afficher moins';
                 return;
             }
-            const grpBtn = e.target.closest('.insights-toggle-btn');
+            const grpBtn = /** @type {Element} */ (e.target).closest('.insights-toggle-btn');
             if (grpBtn) {
-                const more = grpBtn.parentElement.querySelector('.insights-more');
+                const more = /** @type {HTMLElement} */ (grpBtn.parentElement.querySelector('.insights-more'));
                 if (!more) return;
                 const expanded = more.style.display !== 'none';
                 more.style.display = expanded ? 'none' : 'block';
@@ -3188,7 +3190,7 @@ const App = {
         if (statsGrid && statsDots) {
             const dots = statsDots.querySelectorAll('.dot');
             statsGrid.addEventListener('scroll', () => {
-                const card = statsGrid.querySelector('.stat-card');
+                const card = /** @type {HTMLElement} */ (statsGrid.querySelector('.stat-card'));
                 const step = card ? card.offsetWidth + 12 : statsGrid.clientWidth || 1;
                 const idx = Math.max(0, Math.min(dots.length - 1, Math.round(statsGrid.scrollLeft / step)));
                 dots.forEach((d, i) => d.classList.toggle('active', i === idx));
@@ -3201,7 +3203,7 @@ const App = {
         const openCreateBtn = document.getElementById('openCreatePortfolioBtn');
         const portfolioModal = document.getElementById('portfolioModal');
         const closePortfolioModalBtn = document.getElementById('closePortfolioModalBtn');
-        const portfolioForm = document.getElementById('portfolioForm');
+        const portfolioForm = /** @type {HTMLFormElement} */ (document.getElementById('portfolioForm'));
         const portfolioModalTitle = document.getElementById('portfolioModalTitle');
 
         if (switcherBtn && switcherContainer) {
@@ -3211,7 +3213,7 @@ const App = {
             };
 
             document.addEventListener('click', (e) => {
-                if (!switcherContainer.contains(e.target)) {
+                if (!switcherContainer.contains(/** @type {Node} */ (e.target))) {
                     switcherContainer.classList.remove('open');
                 }
             });
@@ -3232,7 +3234,7 @@ const App = {
                 switcherContainer.classList.remove('open');
                 portfolioModalTitle.textContent = 'Nouveau Portefeuille';
                 portfolioForm.reset();
-                document.getElementById('portfolioEditId').value = '';
+                /** @type {HTMLInputElement} */ (document.getElementById('portfolioEditId')).value = '';
                 document.getElementById('portfolioSubmitBtn').textContent = 'Créer le portefeuille';
                 portfolioModal.classList.add('open');
                 document.getElementById('portfolioNameInput').focus();
@@ -3248,10 +3250,10 @@ const App = {
             portfolioForm.onsubmit = async (e) => {
                 e.preventDefault();
                 const fd = new FormData(portfolioForm);
-                const editId = fd.get('portfolioEditId');
-                const name = fd.get('portfolioName');
-                const color = fd.get('portfolioColor');
-                const icon = fd.get('portfolioIcon') || '';
+                const editId = /** @type {string} */ (fd.get('portfolioEditId'));
+                const name = /** @type {string} */ (fd.get('portfolioName'));
+                const color = /** @type {string} */ (fd.get('portfolioColor'));
+                const icon = /** @type {string} */ (fd.get('portfolioIcon')) || '';
 
                 try {
                     if (editId) {
@@ -3277,11 +3279,11 @@ const App = {
         const settingsModal = document.getElementById('settingsModal');
         const closeSettings = document.getElementById('closeSettingsBtn');
         const reloadPricesBtn = document.getElementById('reloadPricesBtn');
-        const syncDividendsBtn = document.getElementById('syncDividendsBtn');
+        const syncDividendsBtn = /** @type {HTMLButtonElement} */ (document.getElementById('syncDividendsBtn'));
         const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
         const exportCsvBtn = document.getElementById('exportCsvBtn');
         const importCsvBtn = document.getElementById('importCsvBtn');
-        const importCsvInput = document.getElementById('importCsvInput');
+        const importCsvInput = /** @type {HTMLInputElement} */ (document.getElementById('importCsvInput'));
         const logoutBtn = document.getElementById('logoutBtn');
 
         if (settingsBtn && settingsModal) {
@@ -3294,7 +3296,7 @@ const App = {
                 this.service.refreshPrices();
             };
         }
-        const refreshDataBtn = document.getElementById('refreshDataBtn');
+        const refreshDataBtn = /** @type {HTMLButtonElement} */ (document.getElementById('refreshDataBtn'));
         if (refreshDataBtn) {
             refreshDataBtn.onclick = async () => {
                 if (refreshDataBtn.classList.contains('is-loading')) return;
@@ -3377,10 +3379,10 @@ const App = {
         // Fournisseur IA (résumé IA) : lié au compte. La clé API est chiffrée et
         // stockée côté worker (POST /ai/key) et n'est jamais rechargée ici ; le
         // champ affiche seulement si une clé est déjà enregistrée.
-        const aiProviderSelect = document.getElementById('aiProviderSelect');
-        const aiKeyInput = document.getElementById('aiKeyInput');
-        const saveAiKeyBtn = document.getElementById('saveAiKeyBtn');
-        const clearAiKeyBtn = document.getElementById('clearAiKeyBtn');
+        const aiProviderSelect = /** @type {HTMLSelectElement} */ (document.getElementById('aiProviderSelect'));
+        const aiKeyInput = /** @type {HTMLInputElement} */ (document.getElementById('aiKeyInput'));
+        const saveAiKeyBtn = /** @type {HTMLButtonElement} */ (document.getElementById('saveAiKeyBtn'));
+        const clearAiKeyBtn = /** @type {HTMLButtonElement} */ (document.getElementById('clearAiKeyBtn'));
 
         const refreshAiKeyInputForProvider = () => {
             if (!aiProviderSelect || !aiKeyInput) return;
@@ -3460,22 +3462,22 @@ const App = {
         const modal = document.getElementById('transactionModal');
         const openBtn = document.getElementById('addTransactionBtn');
         const closeBtn = document.getElementById('closeModalBtn');
-        const form = document.getElementById('transactionForm');
+        const form = /** @type {HTMLFormElement} */ (document.getElementById('transactionForm'));
         const modalTitle = document.getElementById('transactionModalTitle');
         if (form.elements['date']) form.elements['date'].max = Utils.getDateString();
 
         const symbolGroup = document.getElementById('symbolGroup');
-        const symbolInput = document.getElementById('symbolInputField');
+        const symbolInput = /** @type {HTMLInputElement} */ (document.getElementById('symbolInputField'));
         const qtyPriceRow = document.getElementById('qtyPriceRow');
-        const qtyInput = document.getElementById('qtyInputField');
-        const priceInput = document.getElementById('priceInputField');
+        const qtyInput = /** @type {HTMLInputElement} */ (document.getElementById('qtyInputField'));
+        const priceInput = /** @type {HTMLInputElement} */ (document.getElementById('priceInputField'));
         const amountGroup = document.getElementById('amountGroup');
-        const amountInput = document.getElementById('amountInputField');
+        const amountInput = /** @type {HTMLInputElement} */ (document.getElementById('amountInputField'));
         const amountLabel = document.getElementById('amountLabel');
         const priceCurrencyGroup = document.getElementById('priceCurrencyGroup');
-        const priceCurrencyField = document.getElementById('priceCurrencyField');
+        const priceCurrencyField = /** @type {HTMLSelectElement} */ (document.getElementById('priceCurrencyField'));
         const feesGroup = document.getElementById('feesGroup');
-        const feesInput = document.getElementById('feesInputField');
+        const feesInput = /** @type {HTMLInputElement} */ (document.getElementById('feesInputField'));
 
         const updateFormFieldsForType = (type) => {
             if (type === 'DEPOSIT' || type === 'WITHDRAWAL') {
@@ -3524,7 +3526,7 @@ const App = {
 
         form.querySelectorAll('input[name="type"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
-                updateFormFieldsForType(e.target.value);
+                updateFormFieldsForType(/** @type {HTMLInputElement} */ (e.target).value);
             });
         });
 
@@ -3539,7 +3541,7 @@ const App = {
             updateFormFieldsForType('BUY');
 
             // Select active portfolio in dropdown if not global
-            const portSelect = document.getElementById('targetPortfolioSelect');
+            const portSelect = /** @type {HTMLSelectElement} */ (document.getElementById('targetPortfolioSelect'));
             if (portSelect && this.service.activePortfolioId !== 'GLOBAL') {
                 portSelect.value = this.service.activePortfolioId;
             }
@@ -3562,15 +3564,15 @@ const App = {
         form.onsubmit = async (e) => {
             e.preventDefault();
             const fd = new FormData(form);
-            const type = fd.get('type');
-            const dateValue = fd.get('date');
-            const symbol = fd.get('symbol') || '$CASH';
+            const type = /** @type {string} */ (fd.get('type'));
+            const dateValue = /** @type {string} */ (fd.get('date'));
+            const symbol = /** @type {string} */ (fd.get('symbol')) || '$CASH';
 
-            let price = parseFloat(fd.get('price')) || 0;
-            let fees = parseFloat(fd.get('fees')) || 0;
-            let amount = parseFloat(fd.get('amount')) || 0;
+            let price = parseFloat(/** @type {string} */ (fd.get('price'))) || 0;
+            let fees = parseFloat(/** @type {string} */ (fd.get('fees'))) || 0;
+            let amount = parseFloat(/** @type {string} */ (fd.get('amount'))) || 0;
             if (type === 'BUY' || type === 'SELL') {
-                const enteredCurrency = fd.get('priceCurrency') || Utils.getCurrency(symbol);
+                const enteredCurrency = /** @type {string} */ (fd.get('priceCurrency')) || Utils.getCurrency(symbol);
                 const nativeCurrency = Utils.getCurrency(symbol);
                 if (enteredCurrency !== nativeCurrency) {
                     price = this.service.convertCurrency(price, enteredCurrency, nativeCurrency);
@@ -3626,7 +3628,7 @@ const App = {
         // SYMBOL SEARCH MODAL
         const searchModal = document.getElementById('symbolSearchModal');
         const closeSearchBtn = document.getElementById('closeSearchBtn');
-        const searchInput = document.getElementById('globalSearchInput');
+        const searchInput = /** @type {HTMLInputElement} */ (document.getElementById('globalSearchInput'));
         const resultsList = document.getElementById('searchResultsList');
 
         symbolInput.addEventListener('blur', () => {
@@ -3649,7 +3651,7 @@ const App = {
 
         let searchTimeout;
         searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.trim();
+            const query = /** @type {HTMLInputElement} */ (e.target).value.trim();
             if (query.length < 1) return;
 
             clearTimeout(searchTimeout);
@@ -3708,7 +3710,7 @@ const App = {
         // Currency Toggle
         const currencyToggle = document.getElementById('currencyToggle');
         if (currencyToggle) {
-            currencyToggle.querySelectorAll('.toggle-btn').forEach(btn => {
+            /** @type {NodeListOf<HTMLElement>} */ (currencyToggle.querySelectorAll('.toggle-btn')).forEach(btn => {
                 btn.onclick = () => {
                     currencyToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
@@ -3720,7 +3722,7 @@ const App = {
         }
 
         // Value / Perf Toggle
-        document.querySelectorAll('.toggle-group:not(#currencyToggle) .toggle-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.toggle-group:not(#currencyToggle) .toggle-btn')).forEach(btn => {
             btn.onclick = () => {
                 btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
@@ -3730,7 +3732,7 @@ const App = {
         });
 
         // Benchmarks
-        document.querySelectorAll('.benchmark-checkbox-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.benchmark-checkbox-btn')).forEach(btn => {
             btn.onclick = () => {
                 btn.classList.toggle('active');
                 const symbol = btn.dataset.symbol;
@@ -3754,7 +3756,7 @@ const App = {
         // Performance list filter
         const perfFilterGroup = document.getElementById('perfFilterGroup');
         if (perfFilterGroup) {
-            perfFilterGroup.querySelectorAll('.filter-btn').forEach(btn => {
+            /** @type {NodeListOf<HTMLElement>} */ (perfFilterGroup.querySelectorAll('.filter-btn')).forEach(btn => {
                 btn.onclick = () => {
                     perfFilterGroup.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
@@ -3765,7 +3767,7 @@ const App = {
         }
 
         // Range Buttons
-        document.querySelectorAll('#timeRangeSelector .range-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#timeRangeSelector .range-btn')).forEach(btn => {
             btn.onclick = () => {
                 document.querySelectorAll('#timeRangeSelector .range-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
@@ -3775,7 +3777,7 @@ const App = {
         });
 
         // Profit chart range buttons
-        document.querySelectorAll('#profitRangeSelector .range-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#profitRangeSelector .range-btn')).forEach(btn => {
             btn.onclick = () => {
                 document.querySelectorAll('#profitRangeSelector .range-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
@@ -3785,10 +3787,10 @@ const App = {
         });
 
         // Navigation Tabs — sous-nav, nav basse et menu lateral pilotent le meme etat
-        document.querySelectorAll('.tab-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.tab-btn')).forEach(btn => {
             btn.onclick = () => {
                 const tab = btn.dataset.tab;
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.tab-btn')).forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 const tabTarget = document.getElementById(`view-${tab}`);
                 if (tabTarget) tabTarget.classList.add('active');
@@ -3805,7 +3807,7 @@ const App = {
         // Dynamic Clicks (Delete trade, edit trade, quick sell, edit portfolio, delete portfolio)
         document.addEventListener('click', async (e) => {
             // Menu "..." des cartes de transaction (mobile)
-            const txMenuBtn = e.target.closest('.tx-menu-btn');
+            const txMenuBtn = /** @type {Element} */ (e.target).closest('.tx-menu-btn');
             document.querySelectorAll('.tx-card.menu-open').forEach(c => {
                 if (!txMenuBtn || c !== txMenuBtn.closest('.tx-card')) c.classList.remove('menu-open');
             });
@@ -3815,7 +3817,7 @@ const App = {
                 return;
             }
 
-            const editTradeBtn = e.target.closest('.edit-trade-btn');
+            const editTradeBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.edit-trade-btn'));
             if (editTradeBtn) {
                 const trade = this.service.trades.find(t => t.id === editTradeBtn.dataset.id);
                 if (trade) {
@@ -3833,14 +3835,14 @@ const App = {
                     feesInput.value = trade.fees || '';
                     amountInput.value = trade.amount;
 
-                    const portSelect = document.getElementById('targetPortfolioSelect');
+                    const portSelect = /** @type {HTMLSelectElement} */ (document.getElementById('targetPortfolioSelect'));
                     if (portSelect) portSelect.value = trade.portfolioId;
 
                     modal.classList.add('open');
                 }
             }
 
-            const delBtn = e.target.closest('.delete-trade-btn');
+            const delBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.delete-trade-btn'));
             if (delBtn) {
                 if (confirm('Voulez-vous vraiment supprimer cette transaction ?')) {
                     try {
@@ -3851,12 +3853,12 @@ const App = {
                 }
             }
 
-            const assetCell = e.target.closest('.holding-asset-cell');
+            const assetCell = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.holding-asset-cell'));
             if (assetCell) {
                 this.goToResearch(assetCell.dataset.symbol);
             }
 
-            const sellBtn = e.target.closest('.quick-sell-btn');
+            const sellBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.quick-sell-btn'));
             if (sellBtn) {
                 const sym = sellBtn.dataset.symbol;
                 const qty = sellBtn.dataset.qty;
@@ -3877,7 +3879,7 @@ const App = {
             }
 
             // Edit portfolio
-            const editPortBtn = e.target.closest('.edit-portfolio-btn');
+            const editPortBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.edit-portfolio-btn'));
             if (editPortBtn) {
                 e.stopPropagation();
                 switcherContainer.classList.remove('open');
@@ -3885,12 +3887,12 @@ const App = {
                 const port = this.service.getPortfolioById(pId);
                 if (port) {
                     portfolioModalTitle.textContent = 'Modifier le portefeuille';
-                    document.getElementById('portfolioEditId').value = port.id;
-                    document.getElementById('portfolioNameInput').value = port.name;
-                    const radio = document.querySelector(`input[name="portfolioColor"][value="${port.color}"]`);
+                    /** @type {HTMLInputElement} */ (document.getElementById('portfolioEditId')).value = port.id;
+                    /** @type {HTMLInputElement} */ (document.getElementById('portfolioNameInput')).value = port.name;
+                    const radio = /** @type {HTMLInputElement} */ (document.querySelector(`input[name="portfolioColor"][value="${port.color}"]`));
                     if (radio) radio.checked = true;
                     const curIcon = Utils.portfolioIconOverrides()[port.id] || '';
-                    const iconRadio = document.querySelector(`input[name="portfolioIcon"][value="${curIcon}"]`);
+                    const iconRadio = /** @type {HTMLInputElement} */ (document.querySelector(`input[name="portfolioIcon"][value="${curIcon}"]`));
                     if (iconRadio) iconRadio.checked = true;
                     document.getElementById('portfolioSubmitBtn').textContent = 'Sauvegarder';
                     portfolioModal.classList.add('open');
@@ -3898,7 +3900,7 @@ const App = {
             }
 
             // Delete portfolio
-            const delPortBtn = e.target.closest('.delete-portfolio-btn');
+            const delPortBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.delete-portfolio-btn'));
             if (delPortBtn) {
                 e.stopPropagation();
                 const pId = delPortBtn.dataset.id;
@@ -3913,7 +3915,7 @@ const App = {
             }
 
             // Switch to specific portfolio
-            const portItem = e.target.closest('.portfolio-item-select');
+            const portItem = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.portfolio-item-select'));
             if (portItem) {
                 const pId = portItem.dataset.id;
                 this.service.setActivePortfolio(pId);
@@ -3922,9 +3924,9 @@ const App = {
         });
 
         // --- TRANSACTIONS FILTERS (feuille de filtres) ---
-        const txSearchInput = document.getElementById('txSearchInput');
-        const txFromFilter = document.getElementById('txFromFilter');
-        const txToFilter = document.getElementById('txToFilter');
+        const txSearchInput = /** @type {HTMLInputElement} */ (document.getElementById('txSearchInput'));
+        const txFromFilter = /** @type {HTMLInputElement} */ (document.getElementById('txFromFilter'));
+        const txToFilter = /** @type {HTMLInputElement} */ (document.getElementById('txToFilter'));
         const txFilterModal = document.getElementById('txFilterModal');
         const txFilterOpenBtn = document.getElementById('txFilterOpenBtn');
         const txFilterResetBtn = document.getElementById('txFilterResetBtn');
@@ -4231,7 +4233,7 @@ const App = {
         if (!list) return;
         const OPEN = -96;
         list.querySelectorAll('.holding-swipe').forEach(sw => {
-            const card = sw.querySelector('.holding-card');
+            const card = /** @type {HTMLElement} */ (sw.querySelector('.holding-card'));
             if (!card) return;
             let x0 = 0, y0 = 0, dx = 0, open = false, active = false, decided = false, horiz = false;
             const set = (v) => { card.style.transform = `translateX(${v}px)`; };
@@ -4239,19 +4241,19 @@ const App = {
                 list.querySelectorAll('.holding-swipe.is-open').forEach(o => {
                     if (o === sw) return;
                     o.classList.remove('is-open');
-                    const c = o.querySelector('.holding-card');
+                    const c = /** @type {HTMLElement} */ (o.querySelector('.holding-card'));
                     if (c) c.style.transform = 'translateX(0)';
                 });
             };
             card.addEventListener('touchstart', (e) => {
-                const t = e.touches[0];
+                const t = /** @type {TouchEvent} */ (e).touches[0];
                 x0 = t.clientX; y0 = t.clientY; dx = 0;
                 active = true; decided = false; horiz = false;
                 sw.classList.add('dragging');
             }, { passive: true });
             card.addEventListener('touchmove', (e) => {
                 if (!active) return;
-                const t = e.touches[0];
+                const t = /** @type {TouchEvent} */ (e).touches[0];
                 dx = t.clientX - x0;
                 const dy = t.clientY - y0;
                 if (!decided) {
@@ -4280,7 +4282,7 @@ const App = {
             card.addEventListener('touchend', end);
             card.addEventListener('touchcancel', end);
             sw.addEventListener('click', (e) => {
-                if (e.target.closest('.holding-swipe-action')) return;
+                if (/** @type {Element} */ (e.target).closest('.holding-swipe-action')) return;
                 if (open) {
                     e.preventDefault();
                     e.stopImmediatePropagation();
@@ -4305,17 +4307,17 @@ const App = {
         if (chartTitleEl) chartTitleEl.textContent = this.service.getActivePortfolio().name;
 
         // Sync Range Buttons Active State
-        document.querySelectorAll('#timeRangeSelector .range-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#timeRangeSelector .range-btn')).forEach(btn => {
             btn.classList.toggle('active', btn.dataset.range === this.chartState.range);
         });
-        document.querySelectorAll('#profitRangeSelector .range-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#profitRangeSelector .range-btn')).forEach(btn => {
             btn.classList.toggle('active', btn.dataset.range === this.chartState.profitRange);
         });
 
         // Sync Currency Toggle UI
         const currencyToggle = document.getElementById('currencyToggle');
         if (currencyToggle) {
-            currencyToggle.querySelectorAll('.toggle-btn').forEach(b => {
+            /** @type {NodeListOf<HTMLElement>} */ (currencyToggle.querySelectorAll('.toggle-btn')).forEach(b => {
                 b.classList.toggle('active', b.dataset.currency === curr);
             });
         }
@@ -4470,7 +4472,7 @@ const App = {
             const isPerf = this.chartState.mode === 'PERF';
             const badgeStats = isPerf ? timelineData.rangeStats : timelineData.valueRangeStats;
             Object.entries(badgeStats).forEach(([rangeKey, val]) => {
-                const el = document.querySelector(`[data-range-val="${rangeKey}"]`);
+                const el = /** @type {HTMLElement} */ (document.querySelector(`[data-range-val="${rangeKey}"]`));
                 if (el) {
                     const isPositive = val >= 0;
                     const fmt = (v) => isPerf
@@ -4971,7 +4973,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     },
 
     initProfitChart() {
-        const canvas = document.getElementById('profitChart');
+        const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('profitChart'));
         if (!canvas) return;
 
         const ctx = canvas.getContext('2d');
@@ -5077,7 +5079,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
 
     initAnalysisCharts() {
         const makeDoughnut = (canvasId) => {
-            const canvas = document.getElementById(canvasId);
+            const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById(canvasId));
             if (!canvas) return null;
             return new Chart(canvas.getContext('2d'), {
                 type: 'doughnut',
@@ -5219,7 +5221,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     },
 
     initChart() {
-        const canvas = document.getElementById('portfolioChart');
+        const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('portfolioChart'));
         if (!canvas) return;
 
         const ctx = canvas.getContext('2d');
@@ -5291,11 +5293,11 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                             color: ink.tick,
                             font: { size: 11 },
                             callback: (value) => {
-                                if (this.chartState.mode === 'PERF') return value.toFixed(1) + '%';
-                                if (Math.abs(value) >= 1000) {
-                                    return (value / 1000).toFixed(1) + 'k ' + (this.chartState.currency === 'EUR' ? '€' : '$');
+                                if (this.chartState.mode === 'PERF') return Number(value).toFixed(1) + '%';
+                                if (Math.abs(Number(value)) >= 1000) {
+                                    return (Number(value) / 1000).toFixed(1) + 'k ' + (this.chartState.currency === 'EUR' ? '€' : '$');
                                 }
-                                return value.toFixed(0) + ' ' + (this.chartState.currency === 'EUR' ? '€' : '$');
+                                return Number(value).toFixed(0) + ' ' + (this.chartState.currency === 'EUR' ? '€' : '$');
                             }
                         }
                     }
@@ -5420,7 +5422,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
 
     // ===== EXPLORER / ANALYSE D'UNE VALEUR =====
     initResearch() {
-        const input = document.getElementById('researchSearchInput');
+        const input = /** @type {HTMLInputElement} */ (document.getElementById('researchSearchInput'));
         const suggest = document.getElementById('researchSuggest');
         if (!input || this._researchReady) return;
         this._researchReady = true;
@@ -5462,18 +5464,18 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         });
         input.addEventListener('blur', () => setTimeout(closeSuggest, 150));
         suggest.addEventListener('mousedown', (e) => {
-            const row = e.target.closest('.rs-row');
+            const row = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.rs-row'));
             if (row) { closeSuggest(); this.runResearch(row.dataset.sym); }
         });
 
         document.getElementById('researchQuick').addEventListener('click', (e) => {
-            const btn = e.target.closest('button[data-sym]');
+            const btn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('button[data-sym]'));
             if (btn) this.runResearch(btn.dataset.sym);
         });
 
-        document.getElementById('researchRange').querySelectorAll('.range-btn').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.getElementById('researchRange').querySelectorAll('.range-btn')).forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('#researchRange .range-btn').forEach(b => b.classList.toggle('active', b === btn));
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#researchRange .range-btn')).forEach(b => b.classList.toggle('active', b === btn));
                 this.chartState.researchRange = btn.dataset.range || '1Y';
                 if (this.researchSymbol) this.renderResearchChart(this.researchSymbol);
             });
@@ -5483,7 +5485,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         const maLegend = document.getElementById('researchMaLegend');
         if (maLegend) {
             maLegend.addEventListener('click', (e) => {
-                const btn = e.target.closest('.ma-toggle');
+                const btn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.ma-toggle'));
                 if (!btn || !btn.dataset.ma) return;
                 const key = btn.dataset.ma;
                 this.researchMaVisible[key] = !this.researchMaVisible[key];
@@ -5498,7 +5500,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         if (addBtn) addBtn.onclick = () => {
             (document.getElementById('addTransactionBtn') || document.getElementById('addTransactionFab'))?.click();
             setTimeout(() => {
-                const si = document.getElementById('symbolInputField');
+                const si = /** @type {HTMLInputElement} */ (document.getElementById('symbolInputField'));
                 if (si && this.researchSymbol) { si.value = this.researchSymbol; si.dispatchEvent(new Event('blur')); }
             }, 60);
         };
@@ -5509,7 +5511,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         symbol = (symbol || '').trim().toUpperCase();
         if (!symbol) return;
         this.researchSymbol = symbol;
-        document.querySelector('.tab-btn[data-tab="research"]')?.click();
+        /** @type {HTMLElement} */ (document.querySelector('.tab-btn[data-tab="research"]'))?.click();
         this.runResearch(symbol);
     },
 
@@ -5549,14 +5551,14 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
 
         document.getElementById('researchEmpty').hidden = true;
         document.getElementById('researchContent').hidden = false;
-        const input = document.getElementById('researchSearchInput');
+        const input = /** @type {HTMLInputElement} */ (document.getElementById('researchSearchInput'));
         if (input) input.value = '';
 
         const cur = Utils.getCurrency(symbol);
         document.getElementById('researchSymbol').textContent = symbol;
         document.getElementById('researchName').textContent = this.assetNameCache[symbol] || 'Chargement…';
         document.getElementById('researchMeta').textContent = '';
-        document.getElementById('researchLogo').src = this.getLogoUrl(symbol);
+        /** @type {HTMLImageElement} */ (document.getElementById('researchLogo')).src = this.getLogoUrl(symbol);
         document.getElementById('researchLogo').style.visibility = '';
 
         // Le calendrier de resultats n'est plus appele ici : AnalysisService le
@@ -5649,7 +5651,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
 
     showResearchDeepCta() {
         const card = document.getElementById('researchDeepCard');
-        const btn = document.getElementById('researchDeepBtn');
+        const btn = /** @type {HTMLButtonElement} */ (document.getElementById('researchDeepBtn'));
         if (!card || !btn) return;
         card.hidden = false;
         btn.disabled = false;
@@ -5666,7 +5668,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     async runDeepAnalysis() {
         const symbol = this.researchSymbol;
         if (!symbol || this.deepAnalysisRunning) return;
-        const btn = document.getElementById('researchDeepBtn');
+        const btn = /** @type {HTMLButtonElement} */ (document.getElementById('researchDeepBtn'));
         const msg = document.getElementById('researchDeepMsg');
         this.deepAnalysisRunning = true;
         if (btn) { btn.disabled = true; btn.textContent = 'Analyse en cours…'; }
@@ -6504,7 +6506,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     async refreshResearchAiAnalysis(force = false) {
         const card = document.getElementById('researchAiCard');
         const body = document.getElementById('researchAiBody');
-        const btn = document.getElementById('researchAiRefreshBtn');
+        const btn = /** @type {HTMLButtonElement} */ (document.getElementById('researchAiRefreshBtn'));
         const a = this.researchAnalysis;
         const symbol = this.researchSymbol;
         if (!card || !body || !a || !symbol) return;
@@ -6816,13 +6818,13 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         box.hidden = !any;
         if (!any) return;
 
-        box.querySelectorAll('.ma-toggle').forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (box.querySelectorAll('.ma-toggle')).forEach(btn => {
             const key = btn.dataset.ma;
             btn.hidden = !available[key];
             const on = !!this.researchMaVisible[key];
             btn.classList.toggle('active', on);
             btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-            const swatch = btn.querySelector('.ma-swatch');
+            const swatch = /** @type {HTMLElement} */ (btn.querySelector('.ma-swatch'));
             // Couleur posee seulement quand la courbe est visible : masquee, le
             // trait reprend le gris defini en CSS.
             if (swatch) swatch.style.borderTopColor = on ? colors[key] : '';
@@ -6928,7 +6930,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     },
 
     async renderResearchChart(symbol) {
-        const canvas = document.getElementById('researchChart');
+        const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('researchChart'));
         if (!canvas) return;
         const range = this.chartState.researchRange || '1Y';
         const months = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '5Y': 60 }[range] || 12;

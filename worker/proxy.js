@@ -27,6 +27,11 @@
  * Secret requis pour /ai/* : AI_ENC_KEY (32 octets base64) -> `wrangler secret put AI_ENC_KEY -c wrangler.proxy.toml`.
  */
 
+/**
+ * Erreur portant le statut HTTP a renvoyer (lu par le handler `fetch`).
+ * @typedef {Error & { statusCode?: number }} HttpError
+ */
+
 const YAHOO_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 };
@@ -68,7 +73,7 @@ async function enforceRateLimit(request, env) {
     const key = `rl:ip:${new Date().toISOString().slice(0, 10)}:${ip}`;
     const count = parseInt(await kv.get(key)) || 0;
     if (count >= RATE_LIMIT_PER_DAY) {
-        const err = new Error('Quota quotidien atteint pour cette IP');
+        const err = /** @type {HttpError} */ (new Error('Quota quotidien atteint pour cette IP'));
         err.statusCode = 429;
         throw err;
     }
@@ -381,7 +386,7 @@ async function fetchQuoteSummary(symbol) {
     const modules = 'defaultKeyStatistics,financialData,summaryDetail,recommendationTrend,earningsTrend,price,assetProfile';
     const base = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
     const run = async (withAuth) => {
-        const headers = { ...YAHOO_HEADERS };
+        const headers = /** @type {Record<string, string>} */ ({ ...YAHOO_HEADERS });
         let u = base;
         if (withAuth) {
             const a = await getYahooAuth();
@@ -573,7 +578,7 @@ async function handleFinnhubExtra(kind, symbol, apiKey) {
 async function httpErr(name, res) {
     let detail = '';
     try { detail = (await res.text()).slice(0, 200); } catch (e) { /* corps illisible */ }
-    const err = new Error(`${name} API HTTP ${res.status}${detail ? ' : ' + detail : ''}`);
+    const err = /** @type {HttpError} */ (new Error(`${name} API HTTP ${res.status}${detail ? ' : ' + detail : ''}`));
     err.statusCode = 502;
     return err;
 }
@@ -667,7 +672,7 @@ const AI_PROVIDERS = {
 };
 
 function authError(msg) {
-    const err = new Error(msg);
+    const err = /** @type {HttpError} */ (new Error(msg));
     err.statusCode = 401;
     return err;
 }
@@ -738,7 +743,7 @@ async function writeAiConfig(request, env, userId, body) {
         { user_id: userId, updated_at: new Date().toISOString(), ...body });
     if (!res.ok) {
         const detail = await res.text().catch(() => '');
-        const err = new Error(`Enregistrement du compte echoue (HTTP ${res.status}) ${detail.slice(0, 300)}`);
+        const err = /** @type {HttpError} */ (new Error(`Enregistrement du compte echoue (HTTP ${res.status}) ${detail.slice(0, 300)}`));
         err.statusCode = 502;
         throw err;
     }
@@ -750,7 +755,7 @@ async function enforceUserAiQuota(env, userId) {
     const key = `airl:${userId}:${new Date().toISOString().slice(0, 10)}`;
     const count = parseInt(await kv.get(key)) || 0;
     if (count >= 50) {
-        const err = new Error('Quota quotidien de resumes IA atteint');
+        const err = /** @type {HttpError} */ (new Error('Quota quotidien de resumes IA atteint'));
         err.statusCode = 429;
         throw err;
     }
@@ -842,7 +847,7 @@ async function enforceStockAnalysisRefresh(env, userId, symbol) {
     if (!kv) return;
     const key = `stockairl:${userId}:${symbol}`;
     if (await kv.get(key)) {
-        const err = new Error('Analyse deja regeneree recemment : reessayez dans une heure');
+        const err = /** @type {HttpError} */ (new Error('Analyse deja regeneree recemment : reessayez dans une heure'));
         err.statusCode = 429;
         throw err;
     }
@@ -883,7 +888,7 @@ async function handleAiStockAnalysis(request, env) {
     // lui-meme, il ne dispose que des donnees deja calculees par l'application.
     const text = await AI_PROVIDERS[provider].call(apiKey, `${STOCK_ANALYSIS_SYSTEM_PROMPT}\n\nDONNEES DE LA VALEUR (JSON) :\n${payload}`, false);
     if (!text || !text.trim()) {
-        const err = new Error('Reponse vide du fournisseur IA');
+        const err = /** @type {HttpError} */ (new Error('Reponse vide du fournisseur IA'));
         err.statusCode = 502;
         throw err;
     }

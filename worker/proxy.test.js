@@ -5,6 +5,11 @@ function jsonFetchResponse(body, ok = true, status = 200) {
     return { ok, status, json: async () => body };
 }
 
+/**
+ * @param {{ symbol?: string, regularMarketPrice?: number, currency?: string,
+ *          timestamps?: number[], closes?: (number|null)[],
+ *          dividends?: Record<string, { date: number, amount: number }> }} [opts]
+ */
 function chartResult({ symbol = 'AAPL', regularMarketPrice, currency = 'USD', timestamps = [], closes = [], dividends } = {}) {
     return {
         chart: {
@@ -138,6 +143,11 @@ describe('/ai/* : cles IA jamais exposees au navigateur', () => {
         };
     }
 
+    /**
+     * @param {string} path
+     * @param {{ method?: string, env?: Record<string, any>,
+     *          headers?: Record<string, string>, body?: any }} [opts]
+     */
     const aiCall = (path, { method = 'POST', env, headers = {}, body } = {}) =>
         worker.fetch(new Request(`https://proxy.test${path}`, {
             method,

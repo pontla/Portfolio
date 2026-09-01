@@ -1,0 +1,19 @@
+{
+    // Le service worker tourne dans un autre global (ServiceWorkerGlobalScope) :
+    // sa lib est incompatible avec le "DOM" du tsconfig principal, d'ou une config
+    // dediee. Meme regle : verification seule, aucun emit.
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ES2022", "WebWorker"],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "types": [],
+        "strict": false,
+        "noImplicitAny": false
+    },
+    "include": ["public/sw.js"]
+}

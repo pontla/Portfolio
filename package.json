@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.sw.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "deploy": "wrangler deploy",
@@ -10,7 +11,11 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@supabase/supabase-js": "2.112.4",
+    "@types/node": "^26.4.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "chart.js": "4.5.1",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "^4.127.1"
   },

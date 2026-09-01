@@ -9,21 +9,21 @@ const APP_SHELL = [
     '/icons/icon-512.png'
 ];
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', /** @param {ExtendableEvent} event */ (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self)).skipWaiting())
     );
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', /** @param {ExtendableEvent} event */ (event) => {
     event.waitUntil(
         caches.keys()
             .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
-            .then(() => self.clients.claim())
+            .then(() => /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self)).clients.claim())
     );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', /** @param {FetchEvent} event */ (event) => {
     const { request } = event;
     if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
 
