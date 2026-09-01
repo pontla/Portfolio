@@ -4,3 +4,6 @@
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
 # GitHub applique ce fichier automatiquement dans sa vue blame.
+
+# style: applique Prettier a l ensemble du depot
+1517e7fe5332ea4da665fb0a7383028112169925
