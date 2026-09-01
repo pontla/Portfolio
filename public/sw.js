@@ -1,10 +1,20 @@
-const CACHE_NAME = 'portfolio-shell-v3';
+const CACHE_NAME = 'portfolio-shell-v4';
 const APP_SHELL = [
     '/',
     '/index.html',
     '/style.css',
     '/js/app.js',
     '/js/icons.js',
+    '/js/ui/shell.js',
+    '/js/ui/events.js',
+    '/js/ui/overview.js',
+    '/js/ui/transactions.js',
+    '/js/ui/holdings.js',
+    '/js/ui/insights.js',
+    '/js/ui/charts.js',
+    '/js/ui/research.js',
+    '/js/ui/research-fundamentals.js',
+    '/js/ui/research-market.js',
     '/js/core/config.js',
     '/js/core/platform.js',
     '/js/core/supabase.js',

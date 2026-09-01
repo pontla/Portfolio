@@ -67,10 +67,21 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 │   ├── sw.js                 # Service worker (réseau d'abord sur le code)
 │   ├── icons/                # Icônes PWA
 │   └── js/
-│       ├── app.js            # Contrôleur UI : rendu, événements, amorçage
+│       ├── app.js            # Assemblage : état partagé + fusion des fragments UI
 │       ├── app.test.js       # Tests du contrôleur (stubs DOM + import dynamique)
 │       ├── icons.js          # Registre d'icônes SVG inline
 │       ├── globals.d.ts      # Globales CDN & propriétés ad hoc sur les nœuds DOM
+│       ├── ui/               # Fragments de l'objet App, un par écran
+│       │   ├── shell.js      # Thème, menu latéral, accueil, authentification
+│       │   ├── events.js     # Câblage des événements, découpé par écran
+│       │   ├── overview.js   # Cartes de synthèse, positions, palmarès
+│       │   ├── transactions.js
+│       │   ├── holdings.js
+│       │   ├── insights.js   # Résumé IA, dividendes, résultats à venir
+│       │   ├── charts.js     # Chart.js : valeur, plus-values, donuts
+│       │   ├── research.js   # Explorer : recherche, orchestration, graphe
+│       │   ├── research-fundamentals.js
+│       │   └── research-market.js
 │       └── core/             # Moteur financier — aucune dépendance au DOM
 │           ├── config.js     # Constantes
 │           ├── platform.js   # Stockage local & bus d'événements, tolérants à l'absence
@@ -88,3 +99,7 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 Le moteur (`public/js/core/`) ne touche ni au DOM ni au stockage direct : il
 s'importe tel quel sous Node, ce qui rend sa couverture réellement mesurable
 (`npx vitest run --coverage`).
+
+Les fragments de `public/js/ui/` sont fusionnés dans un unique objet `App` par
+`Object.assign` : ils partagent donc le même `this`, et l'état commun est
+déclaré à un seul endroit, dans `app.js`.
