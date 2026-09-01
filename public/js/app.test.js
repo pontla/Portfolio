@@ -1356,6 +1356,55 @@ describe('AnalysisService : score global (phase 11)', () => {
         expect(hlt.value).toBeLessThan(100);
     });
 
+    // Bug corrige : une perte divisee par des fonds propres negatifs ressort en
+    // ROE positif et enorme, note 100/100 sur une societe qui detruit du capital.
+    it('_scoreBlock : ROE ininterpretable sur fonds propres negatifs', () => {
+        const out = S._scoreBlock({
+            valuation: { peTTM: 15, evEbitda: 10, pb: -3.2 },   // P/B negatif = actif net negatif
+            growth: {}, sentiment: {}, technical: {},
+            health: { debtToEquity: -1.8, currentRatio: 2, interestCoverage: 12, fcfTrend: 'stable' },
+            profitability: { roe: 180, roa: -6, netMargin: -15, operatingMargin: -12 },
+            price: {}
+        });
+        const prof = out.subs.find(s => s.key === 'profitability');
+        expect(prof.note).not.toContain('ROE');
+        expect(prof.used).toBe(2);           // seules les deux marges sont notees
+        expect(prof.value).toBe(0);          // marges negatives : rentabilite nulle
+        expect(out.signal).not.toBe('Achat');
+    });
+
+    // Detection sans P/B ni dette / fonds propres : un ROE positif ne peut pas
+    // coexister avec une marge nette negative.
+    it('_scoreBlock : ROE positif et marge nette negative -> incoherence detectee', () => {
+        const out = S._scoreBlock({
+            valuation: { peTTM: 15, evEbitda: 10 },
+            growth: {}, health: {}, sentiment: {}, technical: {},
+            profitability: { roe: 95, roic: 40, netMargin: -8 },
+            price: {}
+        });
+        const prof = out.subs.find(s => s.key === 'profitability');
+        expect(prof.used).toBe(1);           // ROE et ROIC ecartes, reste la marge nette
+        expect(prof.value).toBe(0);
+    });
+
+    it('_profitabilityFlags : une rentabilite saine reste notee normalement', () => {
+        const flags = S._profitabilityFlags({
+            valuation: { pb: 8 }, health: { debtToEquity: 1.2 },
+            profitability: { roe: 35, roic: 22, netMargin: 25 }
+        });
+        expect(flags.negativeEquity).toBe(false);
+        expect(flags.roeReliable).toBe(true);
+        expect(flags.roicReliable).toBe(true);
+        // Fonds propres negatifs mais societe profitable (rachats d'actions) :
+        // le ROE reste ecarte, ce n'est ni un bon ni un mauvais signal.
+        const buyback = S._profitabilityFlags({
+            valuation: { pb: -12 }, health: {},
+            profitability: { roe: 240, roic: 25, netMargin: 22 }
+        });
+        expect(buyback.roeReliable).toBe(false);
+        expect(buyback.roicReliable).toBe(true);   // capital investi toujours positif
+    });
+
     it('_scoreBlock : moins de 2 dimensions notables -> pas de score global', () => {
         const out = S._scoreBlock({
             valuation: {}, growth: {}, health: {}, sentiment: {}, technical: {},
@@ -1394,6 +1443,19 @@ describe('AnalysisService.buildAiPayload (phase 13)', () => {
                 { key: 'growth', label: 'Croissance', weight: 0.2, value: null, note: 'Données insuffisantes pour noter cette dimension.', used: 0, total: 3 }
             ]
         }
+    });
+
+    it('un ROE fausse par des fonds propres negatifs est envoye comme non significatif', () => {
+        const a = richAnalysis();
+        a.valuation.pb = -12;              // actif net negatif
+        a.profitability.roe = 240;
+        const out = S.buildAiPayload(a, []);
+        // Ni le chiffre trompeur, ni un simple trou dans les donnees : le modele
+        // recoit la raison, pour pouvoir la citer comme limite de l'analyse.
+        expect(out.metriques.rentabilite['ROE (%)']).toBe('non significatif (fonds propres négatifs)');
+        expect(out.nonDisponible).not.toContain('ROE (%)');
+        // Le capital investi reste positif ici : le ROIC n'est pas touche.
+        expect(out.metriques.rentabilite['ROIC (%)']).toBe(40);
     });
 
     it('reprend identite, score, sous-scores et metriques arrondies', () => {

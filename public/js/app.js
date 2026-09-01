@@ -1195,6 +1195,24 @@ const AnalysisService = {
         return { value, note: notes.join(' ; '), used: kept.length, total: list.length };
     },
 
+    // Un ratio de rentabilite dont le denominateur est negatif change de signe et
+    // devient ininterpretable. On le detecte pour l'ecarter partout de la meme
+    // facon : notation, donnees envoyees au modele, affichage.
+    _profitabilityFlags(a) {
+        const v = (a && a.valuation) || {}, h = (a && a.health) || {}, p = (a && a.profitability) || {};
+        // Fonds propres negatifs (pertes accumulees ou rachats d'actions massifs) :
+        // une perte divisee par des fonds propres negatifs ressort en ROE positif,
+        // souvent enorme. Trois indices, dont la contradiction de signe avec la
+        // marge nette, qui ne demande aucune donnee supplementaire.
+        const negativeEquity = (v.pb != null && v.pb < 0)
+            || (h.debtToEquity != null && h.debtToEquity < 0)
+            || (p.roe > 0 && p.netMargin < 0);
+        // Meme symptome sur le capital investi, plus rare : celui-ci reste positif
+        // tant que la dette compense les fonds propres negatifs.
+        const roicBroken = p.roic > 0 && p.netMargin < 0;
+        return { negativeEquity, roeReliable: !negativeEquity, roicReliable: !roicBroken };
+    },
+
     _scoreBlock(b) {
         const L = (v, lo, hi) => this._scoreLinear(v, lo, hi);
         const LP = (v, lo, hi) => this._scoreLinearPositive(v, lo, hi);
@@ -1241,9 +1259,14 @@ const AnalysisService = {
             { score: fcfTrendScore == null ? null : fcfTrendScore, note: h.fcfTrend ? `free cash-flow ${h.fcfTrend}` : null }
         ]);
 
+        // ROE et ROIC ecartes (et non notes 0) quand leur denominateur est negatif :
+        // le ratio ne dit alors rien de la rentabilite reelle, ni en bien ni en mal
+        // -- une societe tres profitable qui rachete massivement ses actions est
+        // dans ce cas. Les marges, insensibles au bilan, portent le sous-score.
+        const prof = this._profitabilityFlags(b);
         const profitability = this._scoreCriteria([
-            { score: L(p.roe, 5, 30), note: p.roe == null ? null : `ROE de ${pct(p.roe)}` },
-            { score: L(p.roic, 4, 20), note: p.roic == null ? null : `ROIC de ${pct(p.roic)}` },
+            { score: prof.roeReliable ? L(p.roe, 5, 30) : null, note: (p.roe == null || !prof.roeReliable) ? null : `ROE de ${pct(p.roe)}` },
+            { score: prof.roicReliable ? L(p.roic, 4, 20) : null, note: (p.roic == null || !prof.roicReliable) ? null : `ROIC de ${pct(p.roic)}` },
             { score: L(p.netMargin, 2, 25), note: p.netMargin == null ? null : `marge nette de ${pct(p.netMargin)}` },
             { score: L(p.operatingMargin, 4, 30), note: p.operatingMargin == null ? null : `marge opérationnelle de ${pct(p.operatingMargin)}` }
         ]);
@@ -1297,6 +1320,7 @@ const AnalysisService = {
         // Meme garde que _scoreBlock : un objectif nul ou negatif n'en est pas un.
         const targetMean = (s.targetMean != null && s.targetMean > 0) ? s.targetMean : null;
         const upside = (price && targetMean) ? (targetMean - price) / price * 100 : null;
+        const prof = this._profitabilityFlags(a);
         return {
             valorisation: {
                 'PER (12 derniers mois)': v.peTTM,
@@ -1323,9 +1347,11 @@ const AnalysisService = {
                 'Tendance du free cash-flow': h.fcfTrend
             },
             rentabilite: {
-                'ROE (%)': p.roe,
+                // Signale explicitement au modele pourquoi le ratio est ecarte,
+                // plutot que de le laisser croire a une donnee simplement absente.
+                'ROE (%)': prof.roeReliable ? p.roe : (p.roe == null ? null : 'non significatif (fonds propres négatifs)'),
                 'ROA (%)': p.roa,
-                'ROIC (%)': p.roic,
+                'ROIC (%)': prof.roicReliable ? p.roic : (p.roic == null ? null : 'non significatif (capital investi négatif)'),
                 'Marge brute (%)': p.grossMargin,
                 'Marge opérationnelle (%)': p.operatingMargin,
                 'Marge nette (%)': p.netMargin
@@ -5851,16 +5877,24 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
             `<div class="research-kv"><span class="k">${label} ${this._kvHelp(tip)}</span>` +
             `<span class="v">${valueStr == null ? ND : valueStr}</span>${tag}</div>`;
 
+        // Un denominateur negatif rend le ROE (et parfois le ROIC) trompeur : on
+        // affiche la raison au lieu d'un pourcentage flatteur assorti d'une
+        // pastille verte, pour rester coherent avec la notation et l'analyse IA.
+        const prof = AnalysisService._profitabilityFlags(a);
+        const NS = 'Non significatif';
+
         grid.innerHTML =
-            kv('ROE', pct(p.roe),
-                'Résultat net rapporté aux capitaux propres : ce que la société génère avec l\'argent des actionnaires. Au-dessus de 15 % durablement, c\'est solide.',
-                this._healthFlag(p.roe, 15, 8, 'high')) +
+            kv('ROE', prof.roeReliable ? pct(p.roe) : (p.roe == null ? null : NS),
+                'Résultat net rapporté aux capitaux propres : ce que la société génère avec l\'argent des actionnaires. Au-dessus de 15 % durablement, c\'est solide.' +
+                (prof.roeReliable ? '' : ' Ici les fonds propres sont négatifs : le ratio change de signe et n\'est plus interprétable.'),
+                prof.roeReliable ? this._healthFlag(p.roe, 15, 8, 'high') : '') +
             kv('ROA', pct(p.roa),
                 'Résultat net rapporté au total du bilan : rentabilité de l\'ensemble des actifs, dette comprise. Moins flatteur que le ROE mais moins manipulable.',
                 this._healthFlag(p.roa, 8, 3, 'high')) +
-            kv('ROIC', pct(p.roic),
-                'Rentabilité du capital réellement investi (dette + fonds propres). S\'il dépasse durablement le coût du capital (~8-10 %), la société crée de la valeur.',
-                this._healthFlag(p.roic, 12, 6, 'high')) +
+            kv('ROIC', prof.roicReliable ? pct(p.roic) : (p.roic == null ? null : NS),
+                'Rentabilité du capital réellement investi (dette + fonds propres). S\'il dépasse durablement le coût du capital (~8-10 %), la société crée de la valeur.' +
+                (prof.roicReliable ? '' : ' Ici le capital investi est négatif : le ratio n\'est plus interprétable.'),
+                prof.roicReliable ? this._healthFlag(p.roic, 12, 6, 'high') : '') +
             kv('Marge brute', pct(p.grossMargin),
                 'Part du chiffre d\'affaires restante après le coût de production. Une marge brute élevée et stable est un bon indice de pouvoir de fixation des prix.') +
             kv('Marge opérationnelle', pct(p.operatingMargin),
