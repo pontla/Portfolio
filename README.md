@@ -24,6 +24,7 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 * **Base de données :** PostgreSQL (`Dev/db/schema.sql`).
 * **PWA :** Support natif via `manifest.json`.
 * **Typage :** TypeScript en `checkJs` + JSDoc, `noEmit` (`npm run typecheck`, bloquant en CI). Aucun fichier `.ts`, aucun bundler : le code livré au navigateur reste le JS source. `chart.js` et `@supabase/supabase-js` sont des devDependencies **de typage seul**, épinglées sur les mêmes versions que les balises `<script>`.
+* **Qualité :** ESLint (flat config, globales déclarées par zone) + Prettier, tous deux bloquants en CI (`npm run lint`, `npm run format:check`). Le formatage appartient à Prettier, ESLint ne juge que la correction.
 
 ---
 
@@ -93,8 +94,29 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 │           ├── portfolio.js  # P&L, allocations, séries historiques
 │           └── *.test.js     # Tests par import direct (pas de stub de DOM)
 ├── e2e/                      # Parcours Playwright
+├── scripts/
+│   └── check-csp-hash.mjs    # Garde-fou : hash CSP ↔ script inline de index.html
+├── eslint.config.mjs
+├── .prettierrc.json
 └── README.md
 ```
+
+### Vérifications locales
+
+| Commande | Rôle |
+| --- | --- |
+| `npm run lint` | ESLint, zéro avertissement toléré |
+| `npm run format` | Prettier en écriture (`format:check` en lecture seule) |
+| `npm run typecheck` | `tsc --noEmit` sur l'app et sur le service worker |
+| `npm run check:csp` | Vérifie que les hash CSP correspondent aux scripts inline |
+| `npm test` | Tests unitaires (vitest) |
+| `npm run test:e2e` | Parcours Playwright |
+
+`public/index.html` est **exclu de Prettier** : la CSP de `public/_headers`
+autorise son script inline de thème par un hash `sha256`, que le moindre
+reformatage invaliderait — le navigateur bloquerait alors le script en
+production, sans qu'aucun test ne le voie. `npm run check:csp` garde cette
+correspondance sous surveillance.
 
 Le moteur (`public/js/core/`) ne touche ni au DOM ni au stockage direct : il
 s'importe tel quel sous Node, ce qui rend sa couverture réellement mesurable

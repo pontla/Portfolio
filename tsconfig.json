@@ -17,5 +17,5 @@
         "useUnknownInCatchVariables": false,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["public/js/**/*.js", "public/js/**/*.d.ts", "worker/**/*.js", "e2e/**/*.js"]
+    "include": ["public/js/**/*.js", "public/js/**/*.d.ts", "worker/**/*.js", "e2e/**/*.js", "scripts/**/*.mjs"]
 }

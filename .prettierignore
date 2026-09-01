@@ -1,0 +1,17 @@
+node_modules/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.wrangler/
+package-lock.json
+
+# La CSP (public/_headers) autorise le script inline de theme par son hash
+# sha256. Le reformater invaliderait le hash et le navigateur bloquerait le
+# script en production. Voir scripts/check-csp-hash.mjs.
+public/index.html
+
+# Fichiers d'instructions, pas du code : on ne les reformate pas.
+CLAUDE.md
+.claude/
+.mcp.json
