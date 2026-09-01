@@ -1284,6 +1284,78 @@ describe('AnalysisService : score global (phase 11)', () => {
         expect(JSON.stringify(out)).not.toContain('NaN');
     });
 
+    // Bug corrige : sur un critere note en sens inverse (`lo` > `hi`), une valeur
+    // negative sortait du segment par le haut et etait clampee a 100/100. Une
+    // societe en perte decrochait ainsi la note maximale en valorisation.
+    it('_scoreLinearPositive : un multiple negatif vaut 0, pas 100', () => {
+        expect(S._scoreLinear(-12, 45, 10)).toBe(100);          // comportement brut, d'ou la garde
+        expect(S._scoreLinearPositive(-12, 45, 10)).toBe(0);    // PER negatif = perte
+        expect(S._scoreLinearPositive(0, 45, 10)).toBe(0);
+        expect(S._scoreLinearPositive(10, 45, 10)).toBe(100);   // cas normal inchange
+        expect(S._scoreLinearPositive(45, 45, 10)).toBe(0);
+        expect(S._scoreLinearPositive(null, 45, 10)).toBeNull();
+        expect(S._scoreLinearPositive(NaN, 45, 10)).toBeNull();
+    });
+
+    it('_scoreBlock : societe en perte -> valorisation basse, pas maximale', () => {
+        const out = S._scoreBlock({
+            // PER, PEG et VE/EBITDA negatifs : perte nette ET EBITDA negatif.
+            valuation: { peTTM: -12, peg: -2, evEbitda: -8, fcfYield: -3, hist5y: { pe: 20 } },
+            growth: { revenueGrowthYoyPct: 30, revenueCagrPct: 25, epsCagrPct: 30 },
+            health: { netDebtToEbitda: -3, debtToEquity: 0.4, currentRatio: 2, interestCoverage: 12, fcfTrend: 'stable' },
+            profitability: { roe: -10, roic: -8, netMargin: -15, operatingMargin: -12 },
+            sentiment: {}, technical: {}, price: { current: 100 }
+        });
+        const val = out.subs.find(s => s.key === 'valuation');
+        expect(val.value).toBe(0);
+        expect(val.note).toContain('bénéfice négatif');
+        // Le PER negatif rend la comparaison a l'historique ininterpretable :
+        // le critere est ecarte au lieu d'etre note a l'envers.
+        expect(val.used).toBe(4);
+        // Dette nette / EBITDA : sans EBITDA positif le ratio ne veut rien dire,
+        // il ne doit pas passer pour une tresorerie nette confortable.
+        const hlt = out.subs.find(s => s.key === 'health');
+        expect(hlt.used).toBe(4);          // 5 criteres moins la dette nette / EBITDA
+        expect(hlt.note).not.toContain("l'EBITDA");
+        expect(out.signal).not.toBe('Achat');
+    });
+
+    it('_scoreBlock : un VE/EBITDA negatif est signale et note 0', () => {
+        const out = S._scoreBlock({
+            valuation: { evEbitda: -8 },
+            growth: {}, health: {}, sentiment: {}, technical: {},
+            profitability: { roe: 25 }, price: {}
+        });
+        const val = out.subs.find(s => s.key === 'valuation');
+        expect(val.value).toBe(0);
+        expect(val.note).toContain('EBITDA négatif');
+    });
+
+    it('_scoreBlock : tresorerie nette et zero dette restent des points forts', () => {
+        const out = S._scoreBlock({
+            // EBITDA positif : la dette nette negative est bien une tresorerie nette.
+            valuation: { peTTM: 15, evEbitda: 10 },
+            growth: {}, sentiment: {}, technical: {},
+            health: { netDebtToEbitda: -1.5, debtToEquity: 0, currentRatio: 3, interestCoverage: 40, fcfTrend: 'croissant' },
+            profitability: { roe: 25 }, price: {}
+        });
+        const hlt = out.subs.find(s => s.key === 'health');
+        expect(hlt.value).toBe(100);
+        expect(hlt.used).toBe(5);
+    });
+
+    it('_scoreBlock : fonds propres negatifs notes 0 sur la dette', () => {
+        const out = S._scoreBlock({
+            valuation: { peTTM: 15, evEbitda: 10 },
+            growth: {}, sentiment: {}, technical: {},
+            health: { debtToEquity: -1.8, currentRatio: 2, interestCoverage: 12, fcfTrend: 'stable' },
+            profitability: { roe: 25 }, price: {}
+        });
+        const hlt = out.subs.find(s => s.key === 'health');
+        expect(hlt.note).toContain('fonds propres négatifs');
+        expect(hlt.value).toBeLessThan(100);
+    });
+
     it('_scoreBlock : moins de 2 dimensions notables -> pas de score global', () => {
         const out = S._scoreBlock({
             valuation: {}, growth: {}, health: {}, sentiment: {}, technical: {},

@@ -1171,6 +1171,17 @@ const AnalysisService = {
         return Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
     },
 
+    // Meme note, pour un multiple qui n'a de sens que positif (PER, PEG,
+    // VE/EBITDA, dette / fonds propres). Ces criteres sont notes en sens
+    // inverse (`lo` > `hi`), donc une valeur negative -- perte, EBITDA negatif,
+    // fonds propres negatifs -- serait clampee a 100/100 alors que c'est le
+    // pire cas possible. On la note donc 0 plutot que de l'ecarter : une perte
+    // est une mauvaise nouvelle, pas une donnee manquante.
+    _scoreLinearPositive(v, lo, hi) {
+        if (v == null || !isFinite(v)) return null;
+        return v <= 0 ? 0 : this._scoreLinear(v, lo, hi);
+    },
+
     // Moyenne des criteres disponibles + justification en une ligne, construite
     // a partir du critere le plus favorable et du plus defavorable (chiffres
     // reels, jamais de commentaire generique).
@@ -1186,6 +1197,7 @@ const AnalysisService = {
 
     _scoreBlock(b) {
         const L = (v, lo, hi) => this._scoreLinear(v, lo, hi);
+        const LP = (v, lo, hi) => this._scoreLinearPositive(v, lo, hi);
         const nf = (x, d = 1) => new Intl.NumberFormat('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }).format(x);
         const mult = (x) => nf(x) + ' ×';
         const pct = (x) => Utils.formatPercent(x, false);
@@ -1194,12 +1206,14 @@ const AnalysisService = {
         const h5 = v.hist5y || {};
 
         // Valorisation : bornes calees sur les extremes usuels des grandes capis.
-        const peVsHist = (v.peTTM != null && h5.pe) ? v.peTTM / h5.pe : null;
+        // Le rapport a l'historique n'a de sens qu'entre deux PER positifs :
+        // sinon son signe s'inverse et la comparaison devient trompeuse.
+        const peVsHist = (v.peTTM > 0 && h5.pe > 0) ? v.peTTM / h5.pe : null;
         const valuation = this._scoreCriteria([
-            { score: L(v.peTTM, 45, 10), note: v.peTTM == null ? null : `PER de ${mult(v.peTTM)}` },
-            { score: L(peVsHist, 1.5, 0.7), note: peVsHist == null ? null : `PER ${peVsHist >= 1 ? 'au-dessus' : 'en dessous'} de sa moyenne 5 ans (${mult(h5.pe)})` },
-            { score: L(v.peg, 3, 1), note: v.peg == null ? null : `PEG de ${mult(v.peg)}` },
-            { score: L(v.evEbitda, 25, 8), note: v.evEbitda == null ? null : `VE/EBITDA de ${mult(v.evEbitda)}` },
+            { score: LP(v.peTTM, 45, 10), note: v.peTTM == null ? null : `PER de ${mult(v.peTTM)}${v.peTTM <= 0 ? ' (bénéfice négatif)' : ''}` },
+            { score: LP(peVsHist, 1.5, 0.7), note: peVsHist == null ? null : `PER ${peVsHist >= 1 ? 'au-dessus' : 'en dessous'} de sa moyenne 5 ans (${mult(h5.pe)})` },
+            { score: LP(v.peg, 3, 1), note: v.peg == null ? null : `PEG de ${mult(v.peg)}` },
+            { score: LP(v.evEbitda, 25, 8), note: v.evEbitda == null ? null : `VE/EBITDA de ${mult(v.evEbitda)}${v.evEbitda <= 0 ? ' (EBITDA négatif)' : ''}` },
             { score: L(v.fcfYield, 0, 8), note: v.fcfYield == null ? null : `rendement du free cash-flow de ${pct(v.fcfYield)}` }
         ]);
 
@@ -1212,9 +1226,16 @@ const AnalysisService = {
 
         // Sante : bornes alignees sur les seuils deja utilises par les pastilles.
         const fcfTrendScore = { 'croissant': 100, 'stable': 60, 'décroissant': 20 }[h.fcfTrend];
+        // Ici une valeur negative est une bonne nouvelle (tresorerie nette), donc
+        // pas de garde sur le signe -- SAUF si l'EBITDA lui-meme est negatif, ou
+        // le ratio n'est plus interpretable dans un sens ni dans l'autre. Un
+        // VE/EBITDA negatif signale un EBITDA negatif (la VE etant positive).
+        const ebitdaNegatif = v.evEbitda != null && v.evEbitda <= 0;
         const health = this._scoreCriteria([
-            { score: L(h.netDebtToEbitda, 4, 0), note: h.netDebtToEbitda == null ? null : `dette nette à ${mult(h.netDebtToEbitda)} l'EBITDA` },
-            { score: L(h.debtToEquity, 2.5, 0.3), note: h.debtToEquity == null ? null : `dette sur fonds propres à ${mult(h.debtToEquity)}` },
+            { score: ebitdaNegatif ? null : L(h.netDebtToEbitda, 4, 0), note: (h.netDebtToEbitda == null || ebitdaNegatif) ? null : `dette nette à ${mult(h.netDebtToEbitda)} l'EBITDA` },
+            // Pas de `LP` ici : zero dette est le meilleur cas, seul le negatif
+            // (fonds propres negatifs) est pathologique.
+            { score: h.debtToEquity < 0 ? 0 : L(h.debtToEquity, 2.5, 0.3), note: h.debtToEquity == null ? null : `dette sur fonds propres à ${mult(h.debtToEquity)}${h.debtToEquity < 0 ? ' (fonds propres négatifs)' : ''}` },
             { score: L(h.currentRatio, 0.8, 2), note: h.currentRatio == null ? null : `liquidité générale à ${mult(h.currentRatio)}` },
             { score: L(h.interestCoverage, 2, 15), note: h.interestCoverage == null ? null : `intérêts couverts ${mult(h.interestCoverage)}` },
             { score: fcfTrendScore == null ? null : fcfTrendScore, note: h.fcfTrend ? `free cash-flow ${h.fcfTrend}` : null }
