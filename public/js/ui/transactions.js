@@ -50,7 +50,7 @@ export const transactions = {
         return blocks.filter(Boolean).join('\n\n');
     },
 
-    async refreshAssetNames(symbols, curr) {
+    async refreshAssetNames(symbols, _curr) {
         const toFetch = symbols.filter(s => !(s in this.assetNameCache));
         if (!toFetch.length) return;
         await Promise.all(toFetch.map(async s => {

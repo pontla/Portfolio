@@ -223,7 +223,7 @@ export const charts = {
         }
     },
 
-    renderAnalysisCharts(stats, curr) {
+    renderAnalysisCharts(stats, _curr) {
         const holdings = stats.holdings || [];
 
         const groupBy = (keyFn) => {

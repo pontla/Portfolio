@@ -5,7 +5,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { AnalysisUtils, AnalysisService } from './analysis.js';
 import { APIService } from './api.js';
-import { Utils } from './utils.js';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

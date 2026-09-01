@@ -651,10 +651,9 @@ export class PortfolioService {
         let realizedPnLUSD = 0;
         let totalDividendsUSD = 0;
         let totalFeesUSD = 0;
-        let standaloneFeesUSD = 0;
         let runningNetContribUSD = 0;
         let peakNetContribUSD = 0;
-        let holdings = {};
+        const holdings = {};
         const firstTradeDate = this.getFirstTradeDate();
 
         sortedTrades.forEach(trade => {
@@ -729,7 +728,6 @@ export class PortfolioService {
                 case 'FEE': {
                     const feeUSD = toUSD(trade.amount);
                     totalFeesUSD += feeUSD;
-                    standaloneFeesUSD += feeUSD;
                     break;
                 }
             }
@@ -932,10 +930,10 @@ export class PortfolioService {
     computeProfitAsOf(dateStr, targetCurrency = 'USD') {
         const trades = this.getSortedTrades().filter(t => t.date <= dateStr);
 
-        let realizedPnLUSD = 0, dividendsUSD = 0, feesUSD = 0, standaloneFeesUSD = 0;
-        let depositsUSD = 0, withdrawalsUSD = 0, totalBuyUSD = 0;
+        let realizedPnLUSD = 0, dividendsUSD = 0, feesUSD = 0;
+        let totalBuyUSD = 0;
         let runningNetContribUSD = 0, peakNetContribUSD = 0;
-        let holdings = {};
+        const holdings = {};
 
         trades.forEach(trade => {
             const currency = Utils.getCurrency(trade.symbol);
@@ -944,14 +942,12 @@ export class PortfolioService {
             switch (trade.type) {
                 case 'DEPOSIT': {
                     const amtUSD = toUSD(trade.amount);
-                    depositsUSD += amtUSD;
                     runningNetContribUSD += amtUSD;
                     peakNetContribUSD = Math.max(peakNetContribUSD, runningNetContribUSD);
                     break;
                 }
                 case 'WITHDRAWAL': {
                     const amtUSD = toUSD(trade.amount);
-                    withdrawalsUSD += amtUSD;
                     runningNetContribUSD -= amtUSD;
                     break;
                 }
@@ -986,7 +982,6 @@ export class PortfolioService {
                 case 'FEE': {
                     const amtUSD = toUSD(trade.amount);
                     feesUSD += amtUSD;
-                    standaloneFeesUSD += amtUSD;
                     break;
                 }
             }
@@ -1105,7 +1100,7 @@ export class PortfolioService {
     // fois. Les badges de periode (rangeStats/profitRangeStats) sont TOUJOURS calcules sur cette serie
     // complete, independamment de la fenetre actuellement affichee dans le graphe (`range`), pour que
     // leurs valeurs ne changent jamais quand l'utilisateur clique sur un autre bouton de periode.
-    getHistoricalTimeline(range = 'ALL', mode = 'VALUE', targetCurrency = 'USD') {
+    getHistoricalTimeline(range = 'ALL', _mode = 'VALUE', targetCurrency = 'USD') {
         const sortedTrades = this.getSortedTrades();
         const firstTradeDate = this.getFirstTradeDate();
 
@@ -1132,7 +1127,7 @@ export class PortfolioService {
             const dateStr = Utils.getDateString(currDate);
 
             const tradesUpToDate = sortedTrades.filter(t => t.date <= dateStr);
-            let dayHoldings = {};
+            const dayHoldings = {};
 
             tradesUpToDate.forEach(trade => {
                 const currency = Utils.getCurrency(trade.symbol);

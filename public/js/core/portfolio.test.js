@@ -437,7 +437,7 @@ describe('PortfolioService - config IA liée au compte', () => {
 
     it('removeAiKey appelle DELETE /ai/key?provider= et rafraîchit aiConfigured', async () => {
         const reqs = [];
-        const { store } = harness({
+        harness({
             session: SESSION,
             fetch: async (urlArg, opts) => {
                 reqs.push({ url: String(urlArg), method: opts && opts.method });

@@ -873,7 +873,7 @@ async function handleAiStockAnalysis(request, env) {
         // Une entree illisible est traitee comme absente : on regenere plutot
         // que de renvoyer une erreur a l'utilisateur.
         let parsed = null;
-        try { parsed = hit ? JSON.parse(hit) : null; } catch (e) { parsed = null; }
+        try { parsed = hit ? JSON.parse(hit) : null; } catch (e) { /* entree illisible : on regenere */ }
         if (parsed && parsed.text) return jsonResponse({ ...parsed, cached: true });
     } else {
         await enforceStockAnalysisRefresh(env, userId, symbol);

@@ -84,22 +84,15 @@ test('échec de génération : message clair, le reste de la page reste intact',
 });
 
 test('valeur pauvre en données : les métriques absentes sont transmises au modèle', async ({ page }) => {
-    const calls = [];
     await bootApp(page, { ai: true, profile: 'sparse' });
-    await page.route('**/ai/stock-analysis', (route) => {
-        calls.push(route.request().postDataJSON());
-        return route.fallback();   // laisse le mock de bootApp repondre
-    });
+    // On attend la requête au lieu de tester si elle a eu lieu : le test doit
+    // échouer si l'analyse n'est plus déclenchée, pas passer silencieusement.
+    const sentRequest = page.waitForRequest('**/ai/stock-analysis');
 
     await openResearch(page, 'MC.PA');
     await expect(page.locator('#researchAiCard')).toBeVisible();
 
-    if (calls.length) {
-        const sent = calls[0].data;
-        expect(sent.nonDisponible.length).toBeGreaterThan(10);
-        expect(sent.nonDisponible).toContain('ROIC (%)');
-    } else {
-        // Trop peu de données pour un score : l'analyse n'est alors pas proposée.
-        await expect(page.locator('#researchAiCard')).toBeVisible();
-    }
+    const sent = (await sentRequest).postDataJSON().data;
+    expect(sent.nonDisponible.length).toBeGreaterThan(10);
+    expect(sent.nonDisponible).toContain('ROIC (%)');
 });
