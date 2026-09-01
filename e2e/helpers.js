@@ -157,16 +157,39 @@ window.supabase = {
       }],
       user_settings: __USER_SETTINGS__
     };
+    var seq = 0;
+    // Les insertions renvoient la ligne ecrite (avec un id) : c'est ce que
+    // PortfolioService attend de .insert().select().single() pour alimenter son
+    // etat en memoire. Les update/delete se contentent de { error: null }.
     function builder(table) {
       var rows = DATA[table] || [];
+      var pending = null;
       var b = {
         select: function () { return b; }, order: function () { return b; },
         eq: function () { return b; }, limit: function () { return b; },
-        insert: function () { return b; }, update: function () { return b; },
+        insert: function (payload) { pending = payload; return b; },
+        update: function () { return b; },
         delete: function () { return b; }, upsert: function () { return b; },
-        single: function () { return Promise.resolve({ data: rows[0] || null, error: null }); },
+        single: function () {
+          if (pending) {
+            var one = Array.isArray(pending) ? pending[0] : pending;
+            var row = Object.assign({ id: table + '-new-' + (++seq), created_at: '2024-06-01T00:00:00Z' }, one);
+            pending = null;
+            return Promise.resolve({ data: row, error: null });
+          }
+          return Promise.resolve({ data: rows[0] || null, error: null });
+        },
         maybeSingle: function () { return Promise.resolve({ data: rows[0] || null, error: null }); },
-        then: function (res, rej) { return Promise.resolve({ data: rows, error: null }).then(res, rej); }
+        then: function (res, rej) {
+          if (pending) {
+            var list = (Array.isArray(pending) ? pending : [pending]).map(function (one) {
+              return Object.assign({ id: table + '-new-' + (++seq), created_at: '2024-06-01T00:00:00Z' }, one);
+            });
+            pending = null;
+            return Promise.resolve({ data: list, error: null }).then(res, rej);
+          }
+          return Promise.resolve({ data: rows, error: null }).then(res, rej);
+        }
       };
       return b;
     }
