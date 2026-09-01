@@ -213,6 +213,38 @@ describe('/ai/* : cles IA jamais exposees au navigateur', () => {
         expect(res.status).toBe(400);
     });
 
+    it('Anthropic : appelle Sonnet 5 avec une marge de tokens compatible du raisonnement adaptatif', async () => {
+        const env = AI_ENV();
+        let body = null;
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })],
+            ['api.anthropic.com', (_u, opts) => {
+                body = JSON.parse(opts.body);
+                return { ok: true, json: async () => ({ content: [{ type: 'text', text: 'ok' }] }) };
+            }]
+        ]));
+        await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        await aiCall('/ai/insights', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', prompt: 'analyse', liveSearch: true }
+        });
+
+        expect(body.model).toBe('claude-sonnet-5');
+        // Le raisonnement adaptatif consomme max_tokens : 4096 tronquait la reponse.
+        expect(body.max_tokens).toBeGreaterThanOrEqual(16000);
+        expect(body.output_config).toEqual({ effort: 'medium' });
+        // Parametres retires sur Sonnet 5 (400 s'ils sont envoyes).
+        expect(body.temperature).toBeUndefined();
+        expect(body.top_p).toBeUndefined();
+        expect(body.thinking).toBeUndefined();
+        // Variante de recherche web supportee par Sonnet 5.
+        expect(body.tools[0].type).toBe('web_search_20260209');
+    });
+
     const STOCK_DATA = {
         symbol: 'AAPL', nom: 'Apple Inc.', scoreGlobal: 72, signal: 'Achat',
         sousScores: [{ dimension: 'Valorisation', score: 40 }],

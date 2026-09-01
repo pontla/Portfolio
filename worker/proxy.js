@@ -580,9 +580,19 @@ async function httpErr(name, res) {
 
 const AI_PROVIDERS = {
     anthropic: {
+        // Sonnet 5 raisonne en mode adaptatif par defaut : les tokens de reflexion
+        // sont preleves sur max_tokens, d'ou une marge large (4096 tronquait la
+        // reponse visible). `effort: medium` borne la depense : nos deux usages
+        // (resume de portefeuille, analyse d'une valeur) sont de la redaction a
+        // partir de donnees deja fournies, pas du raisonnement difficile.
         async call(apiKey, prompt, liveSearch) {
-            const body = { model: 'claude-sonnet-4-5', max_tokens: 4096, messages: [{ role: 'user', content: prompt }] };
-            if (liveSearch) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }];
+            const body = {
+                model: 'claude-sonnet-5',
+                max_tokens: 16000,
+                output_config: { effort: 'medium' },
+                messages: [{ role: 'user', content: prompt }]
+            };
+            if (liveSearch) body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }];
             const res = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
