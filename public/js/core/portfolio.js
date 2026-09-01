@@ -1076,11 +1076,11 @@ export class PortfolioService {
         return results;
     }
 
-    // Calendrier reel via Finnhub (actions US uniquement, gratuit).
+    // Calendrier reel via Finnhub (actions US uniquement, gratuit). La fenetre de
+    // 90 jours est appliquee par le proxy (/earnings), qui ne renvoie que la
+    // prochaine publication : rien a filtrer ici.
     async getUpcomingEarnings() {
         const stats = this.calculatePortfolio('USD');
-        const windowEnd = new Date();
-        windowEnd.setDate(windowEnd.getDate() + 90);
 
         const results = [];
         for (const h of stats.holdings) {

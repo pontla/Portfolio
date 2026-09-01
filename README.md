@@ -96,7 +96,10 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 │           ├── api.js        # Accès marché via le proxy
 │           ├── analysis.js   # Agrégation d'analyse de valeur & score global
 │           ├── portfolio.js  # P&L, allocations, séries historiques
-│           └── *.test.js     # Tests par import direct (pas de stub de DOM)
+│           ├── portfolio.test.js            # calculs : P&L, validation, séries
+│           ├── portfolio-io.test.js         # persistance Supabase, CRUD, CSV
+│           ├── portfolio-aggregates.test.js # variations, dividendes, résultats
+│           └── *.test.js                    # import direct, aucun stub de DOM
 ├── e2e/                      # Parcours Playwright
 ├── scripts/
 │   └── check-csp-hash.mjs    # Garde-fou : hash CSP ↔ script inline de index.html
@@ -125,6 +128,12 @@ correspondance sous surveillance.
 Le moteur (`public/js/core/`) ne touche ni au DOM ni au stockage direct : il
 s'importe tel quel sous Node, ce qui rend sa couverture réellement mesurable
 (`npx vitest run --coverage`).
+
+`portfolio.js` — le moteur de P&L, la partie du dépôt où une erreur coûte le
+plus cher — est couvert à **98 % des instructions et 85 % des branches**. Son
+double Supabase (`portfolio-io.test.js`) imite les chaînages de PostgREST et
+enregistre les appels, ce qui permet de vérifier ce qui partirait réellement au
+serveur, pas seulement l'état local après coup.
 
 Les fragments de `public/js/ui/` sont fusionnés dans un unique objet `App` par
 `Object.assign` : ils partagent donc le même `this`, et l'état commun est

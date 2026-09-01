@@ -319,6 +319,27 @@ describe('PortfolioService.validateTrade', () => {
         ).not.toThrow();
     });
 
+    it('date absente : refus explicite', () => {
+        // normalizeTradeInput met toujours une date ; ce garde-fou protege les
+        // appels directs (import CSV, re-validation d'une ligne existante).
+        expect(() =>
+            svc.validateTrade({ type: 'BUY', symbol: 'AAPL', qty: 1, price: 10, date: '' })
+        ).toThrow('Date manquante');
+    });
+
+    it('type inconnu : refus explicite', () => {
+        expect(() =>
+            svc.validateTrade({
+                type: 'TRANSFERT',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 10,
+                amount: 10,
+                date: '2020-01-01',
+            })
+        ).toThrow('Type de transaction inconnu');
+    });
+
     it('refuse une date future', () => {
         const future = new Date(Date.now() + 3 * 864e5);
         expect(() =>
@@ -872,5 +893,423 @@ describe('PortfolioService.computeProfitAsOf : devise du prix de repli', () => {
         // Avant correction le PRU (stocke en USD) etait reconverti EUR -> USD :
         // 1 166,4 au lieu de 1 080, soit +86,4 USD de plus-value fantome.
         expect(out.totalPnL).toBeCloseTo(0, 6);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// P&L a une date donnee : c'est la fonction qui alimente la serie « plus-values »
+// du graphe. Un seul de ses six types de transaction etait couvert.
+// ---------------------------------------------------------------------------
+
+describe('PortfolioService.computeProfitAsOf : tous les types de transaction', () => {
+    /** Service avec un portefeuille, sans historique de prix (repli sur le PRU). */
+    function svcWith(trades) {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = trades;
+        svc.marketPrices = {};
+        svc.dailyPriceCache = {};
+        return svc;
+    }
+
+    /** @param {Partial<any>} over */
+    function tr(over) {
+        return {
+            id: Math.random().toString(36).slice(2),
+            portfolioId: 'p1',
+            symbol: '$CASH',
+            qty: 0,
+            price: 0,
+            amount: 0,
+            fees: 0,
+            fxRate: null,
+            ...over,
+        };
+    }
+
+    it('un retrait diminue les apports courants sans baisser le pic', () => {
+        // netInvested retient le pic des apports nets : retirer 400 apres avoir
+        // verse 1000 ne fait pas croire a un investissement de 600.
+        const svc = svcWith([
+            tr({ type: 'DEPOSIT', amount: 1000, date: '2026-01-01' }),
+            tr({ type: 'WITHDRAWAL', amount: 400, date: '2026-01-05' }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').netInvested).toBeCloseTo(1000);
+    });
+
+    it('un apport posterieur a un retrait ne redescend pas le pic', () => {
+        // 1000 verses, 400 retires, 200 reverses : les apports courants valent 800
+        // mais le capital reellement engage a culmine a 1000. C'est ce pic qui
+        // sert de base au rendement, sinon un retrait le gonflerait artificiellement.
+        const svc = svcWith([
+            tr({ type: 'DEPOSIT', amount: 1000, date: '2026-01-01' }),
+            tr({ type: 'WITHDRAWAL', amount: 400, date: '2026-01-05' }),
+            tr({ type: 'DEPOSIT', amount: 200, date: '2026-01-08' }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').netInvested).toBeCloseTo(1000);
+    });
+
+    it('sans apport, les apports se deduisent du montant achete frais compris', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                fees: 5,
+                date: '2026-01-02',
+            }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').netInvested).toBeCloseTo(1005);
+    });
+
+    it('une vente realise la plus-value au prix de revient moyen', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'SELL',
+                symbol: 'AAPL',
+                qty: 4,
+                price: 150,
+                amount: 600,
+                date: '2026-01-05',
+            }),
+        ]);
+        // 4 titres vendus 150 pour un PRU de 100 : +200 realises. Les 6 restants
+        // sont valorises a leur PRU (aucun historique) : zero latent.
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(200);
+    });
+
+    it('une vente totale ne laisse aucune plus-value latente', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'SELL',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 120,
+                amount: 1200,
+                date: '2026-01-05',
+            }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(200);
+    });
+
+    it('les frais d une vente sont retranches du resultat', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'SELL',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 120,
+                amount: 1200,
+                fees: 7,
+                date: '2026-01-05',
+            }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(193);
+    });
+
+    it('une vente sans position correspondante ne cree pas de plus-value', () => {
+        // Symbole jamais achete : la quantite vendue est ramenee a zero, sinon
+        // le resultat serait credite d'un gain integral fantome.
+        const svc = svcWith([
+            tr({
+                type: 'SELL',
+                symbol: 'AAPL',
+                qty: 5,
+                price: 150,
+                amount: 750,
+                date: '2026-01-05',
+            }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(0);
+    });
+
+    it('une vente superieure a la position est ecretee a la quantite detenue', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 3,
+                price: 100,
+                amount: 300,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'SELL',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 150,
+                amount: 1500,
+                date: '2026-01-05',
+            }),
+        ]);
+        // 3 titres seulement peuvent etre vendus : +150, pas +500.
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(150);
+    });
+
+    it('un dividende augmente le resultat', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 25,
+                amount: 25,
+                date: '2026-01-05',
+            }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(25);
+    });
+
+    it('des frais isoles diminuent le resultat', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({ type: 'FEE', symbol: '$FEE', qty: 1, price: 12, amount: 12, date: '2026-01-05' }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-01-10', 'USD').totalPnL).toBeCloseTo(-12);
+    });
+
+    it('les transactions posterieures a la date sont ignorees', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 50,
+                amount: 50,
+                date: '2026-03-01',
+            }),
+        ]);
+        expect(svc.computeProfitAsOf('2026-02-01', 'USD').totalPnL).toBeCloseTo(0);
+        expect(svc.computeProfitAsOf('2026-03-01', 'USD').totalPnL).toBeCloseTo(50);
+    });
+
+    it('le resultat est converti dans la devise demandee', () => {
+        const svc = svcWith([
+            tr({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                date: '2026-01-02',
+            }),
+            tr({
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 108,
+                amount: 108,
+                date: '2026-01-05',
+            }),
+        ]);
+        svc.fxRate = 1.08;
+        expect(svc.computeProfitAsOf('2026-01-10', 'EUR').totalPnL).toBeCloseTo(100);
+    });
+
+    it('aucune transaction : resultat et apports nuls', () => {
+        const out = svcWith([]).computeProfitAsOf('2026-01-10', 'USD');
+        expect(out).toEqual({ totalPnL: 0, netInvested: 0 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('PortfolioService.resolveRangeStart', () => {
+    const today = new Date(2026, 5, 15, 14, 30); // 15 juin 2026, apres-midi
+    const first = new Date(2024, 0, 20);
+
+    /** Nombre de jours entiers entre la borne calculee et la date de reference. */
+    function daysBack(range, firstTradeDate = first) {
+        const ref = new Date(2026, 5, 15);
+        ref.setHours(0, 0, 0, 0);
+        const start = new PortfolioService().resolveRangeStart(range, ref, firstTradeDate);
+        return Math.round((ref.getTime() - start.getTime()) / 86400000);
+    }
+
+    it('ALL part de la premiere transaction', () => {
+        const start = new PortfolioService().resolveRangeStart('ALL', today, first);
+        expect(Utils.getDateString(start)).toBe('2024-01-20');
+    });
+
+    it('ALL sans transaction part de 30 jours en arriere', () => {
+        const start = new PortfolioService().resolveRangeStart('ALL', new Date(2026, 5, 15), null);
+        expect(Utils.getDateString(start)).toBe('2026-05-16');
+    });
+
+    it('YTD part du 1er janvier', () => {
+        const start = new PortfolioService().resolveRangeStart('YTD', today, first);
+        expect(Utils.getDateString(start)).toBe('2026-01-01');
+    });
+
+    it('les plages glissantes reculent du bon nombre de jours', () => {
+        expect(daysBack('1M')).toBe(30);
+        expect(daysBack('3M')).toBe(90);
+        expect(daysBack('6M')).toBe(180);
+        expect(daysBack('1Y')).toBe(365);
+    });
+
+    it('plage inconnue : repli sur 90 jours', () => {
+        expect(daysBack('ZZZ')).toBe(90);
+    });
+
+    it('la borne est ramenee a minuit', () => {
+        const start = new PortfolioService().resolveRangeStart('1M', today, first);
+        expect([start.getHours(), start.getMinutes(), start.getSeconds()]).toEqual([0, 0, 0]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('PortfolioService.getHistoricalTimeline : ventes et flux du jour', () => {
+    const dayStr = (offset) => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + offset);
+        return Utils.getDateString(d);
+    };
+
+    /** Prix constant sur toute la fenetre, pour isoler l'effet des transactions. */
+    function priceSeries(price, from = -6) {
+        const out = {};
+        for (let i = from; i <= 0; i++) out[dayStr(i)] = price;
+        return out;
+    }
+
+    function svcWith(trades, { price = 100 } = {}) {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = trades;
+        svc.marketPrices = { AAPL: price };
+        svc.dailyPriceCache = { AAPL: priceSeries(price) };
+        return svc;
+    }
+
+    /** @param {Partial<any>} over */
+    const tr = (over) => ({
+        id: Math.random().toString(36).slice(2),
+        portfolioId: 'p1',
+        symbol: 'AAPL',
+        qty: 0,
+        price: 0,
+        amount: 0,
+        fees: 0,
+        fxRate: null,
+        ...over,
+    });
+
+    it('une vente retire la valeur de la position des jours suivants', () => {
+        const svc = svcWith([
+            tr({ type: 'BUY', qty: 10, price: 100, amount: 1000, date: dayStr(-6) }),
+            tr({ type: 'SELL', qty: 4, price: 100, amount: 400, date: dayStr(-3) }),
+        ]);
+        const tl = svc.getHistoricalTimeline('ALL', 'VALUE', 'USD');
+        expect(tl.values[0]).toBeCloseTo(1000);
+        expect(tl.values[tl.values.length - 1]).toBeCloseTo(600);
+    });
+
+    it('une vente totale ramene la valeur a zero', () => {
+        const svc = svcWith([
+            tr({ type: 'BUY', qty: 10, price: 100, amount: 1000, date: dayStr(-6) }),
+            tr({ type: 'SELL', qty: 10, price: 100, amount: 1000, date: dayStr(-3) }),
+        ]);
+        const tl = svc.getHistoricalTimeline('ALL', 'VALUE', 'USD');
+        expect(tl.values[tl.values.length - 1]).toBeCloseTo(0);
+        // Plus de cout en portefeuille : la serie base-cout retombe a 0, pas a -100 %.
+        expect(tl.perfValues[tl.perfValues.length - 1]).toBeCloseTo(0);
+    });
+
+    it('vendre au prix du marche ne cree pas de rendement sur le badge', () => {
+        // Les flux du jour neutralisent la sortie : le cours n'a pas bouge, donc
+        // le badge de performance doit rester a zero.
+        const svc = svcWith([
+            tr({ type: 'BUY', qty: 10, price: 100, amount: 1000, date: dayStr(-6) }),
+            tr({ type: 'SELL', qty: 5, price: 100, amount: 500, date: dayStr(-3) }),
+        ]);
+        expect(svc.getHistoricalTimeline('ALL', 'PERF', 'USD').rangeStats.ALL).toBeCloseTo(0, 6);
+    });
+
+    it('les apports et les frais ne comptent pas dans les flux de positions', () => {
+        // Un depot le meme jour qu'un achat ne doit pas etre compte deux fois
+        // dans le flux : seul l'achat entre dans les positions.
+        const withCash = svcWith([
+            tr({
+                type: 'DEPOSIT',
+                symbol: '$CASH',
+                qty: 5000,
+                price: 1,
+                amount: 5000,
+                date: dayStr(-6),
+            }),
+            tr({ type: 'BUY', qty: 10, price: 100, amount: 1000, date: dayStr(-6) }),
+            tr({ type: 'FEE', symbol: '$FEE', qty: 1, price: 20, amount: 20, date: dayStr(-3) }),
+        ]);
+        const plain = svcWith([
+            tr({ type: 'BUY', qty: 10, price: 100, amount: 1000, date: dayStr(-6) }),
+        ]);
+
+        expect(withCash.getHistoricalTimeline('ALL', 'PERF', 'USD').rangeStats.ALL).toBeCloseTo(
+            plain.getHistoricalTimeline('ALL', 'PERF', 'USD').rangeStats.ALL,
+            6
+        );
+    });
+
+    it('une vente sur un symbole jamais achete est sans effet', () => {
+        const svc = svcWith([
+            tr({ type: 'BUY', qty: 10, price: 100, amount: 1000, date: dayStr(-6) }),
+            tr({ type: 'SELL', symbol: 'MSFT', qty: 3, price: 300, amount: 900, date: dayStr(-3) }),
+        ]);
+        const tl = svc.getHistoricalTimeline('ALL', 'VALUE', 'USD');
+        expect(tl.values[tl.values.length - 1]).toBeCloseTo(1000);
     });
 });
