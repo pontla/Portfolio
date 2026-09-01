@@ -1064,7 +1064,13 @@ const AnalysisService = {
             debtToEquity: n(latestRatio.debtEquityRatio) ?? n(rTtm.debtEquityRatioTTM) ?? (yahooDE != null ? yahooDE / 100 : null),
             currentRatio: n(latestRatio.currentRatio) ?? n(qs.currentRatio) ?? n(rTtm.currentRatioTTM),
             quickRatio: n(latestRatio.quickRatio) ?? n(qs.quickRatio) ?? n(rTtm.quickRatioTTM),
-            interestCoverage: n(latestRatio.interestCoverage) ?? n(rTtm.interestCoverageTTM) ?? n(kmTtm.interestCoverageTTM),
+            // FMP renvoie 0 quand il n'y a aucune charge d'interets a couvrir (division
+            // par zero cote fournisseur). Une societe sans dette etait alors notee
+            // 0/100 sur ce critere, avec la mention "interets couverts 0,0 x".
+            interestCoverage: (() => {
+                const ic = n(latestRatio.interestCoverage) ?? n(rTtm.interestCoverageTTM) ?? n(kmTtm.interestCoverageTTM);
+                return ic === 0 ? null : ic;
+            })(),
             fcfHistory: fcfHist,
             fcfTrend: U.trend(fcfHist.map(p => p.value)),
             totalCash: n(qs.totalCash),
@@ -1099,7 +1105,13 @@ const AnalysisService = {
         const sentiment = {
             consensus,
             recommendationKey: qs.recommendationKey || null,
-            recommendationMean: n(qs.recommendationMean),
+            // Echelle 1 (achat fort) a 5 (vente forte) : un 0 n'est pas un consensus
+            // mais l'absence de donnee renvoyee telle quelle par le fournisseur.
+            // Non filtre, il etait note 100/100 avec la mention "consensus a 0,0 / 5".
+            recommendationMean: (() => {
+                const rm = n(qs.recommendationMean);
+                return (rm != null && rm >= 1 && rm <= 5) ? rm : null;
+            })(),
             targetMean: n(qs.targetMeanPrice),
             targetLow: n(qs.targetLowPrice),
             targetHigh: n(qs.targetHighPrice),
@@ -2637,12 +2649,37 @@ class PortfolioService {
         const jan1Str = (y) => `${y}-01-01`;
         const dec31Str = (y) => `${y}-12-31`;
 
+        const firstTradeStr = Utils.getDateString(firstTradeDate);
+
+        // Denominateur du rendement : capital net moyen pondere par le temps ou il a
+        // reellement ete investi (Dietz modifie). Fige a la valeur du 1er janvier, il
+        // ignorait les apports faits en cours d'annee : 5 000 gagnes apres 10 000
+        // apportes en janvier puis 90 000 en juillet donnaient +50 %, alors que le
+        // capital moyen mobilise est d'environ 55 000, soit ~9 %.
+        const weightedBasis = (fromStr, toStr, startingCapital) => {
+            const startStr = fromStr < firstTradeStr ? firstTradeStr : fromStr;
+            const totalDays = Math.max(1, Utils.daysBetween(startStr, toStr));
+            let basis = startingCapital;
+            this.getSortedTrades().forEach(t => {
+                if (t.date <= startStr || t.date > toStr) return;
+                if (t.type !== 'DEPOSIT' && t.type !== 'WITHDRAWAL') return;
+                const amount = this.convertCurrency(t.amount, Utils.getCurrency(t.symbol), targetCurrency);
+                const remaining = Utils.daysBetween(t.date, toStr) / totalDays;
+                basis += (t.type === 'DEPOSIT' ? amount : -amount) * remaining;
+            });
+            return basis;
+        };
+
         const buildRow = (label, fromStr, toStr) => {
             const from = profitAt(fromStr);
             const to = profitAt(toStr);
             const profit = to.totalPnL - from.totalPnL;
-            const basis = from.netInvested > 0 ? from.netInvested : to.netInvested;
-            const percent = basis > 0 ? (profit / basis) * 100 : 0;
+            const startingCapital = from.netInvested > 0 ? from.netInvested : 0;
+            const basis = weightedBasis(fromStr, toStr, startingCapital);
+            // Repli sur le capital de fin quand rien n'etait investi au depart et
+            // qu'aucun flux pondere n'est exploitable (annee d'ouverture tres courte).
+            const denom = basis > 0 ? basis : to.netInvested;
+            const percent = denom > 0 ? (profit / denom) * 100 : 0;
             return { label, profit, percent };
         };
 
@@ -2699,6 +2736,10 @@ class PortfolioService {
         const fullValues = [];
         const fullPerfValues = [];
         const fullProfitValues = [];
+        // Series en USD servant au rendement pondere dans le temps (cf. plus bas) :
+        // valeur de marche des positions et flux nets investis du jour.
+        const fullHoldingsUSD = [];
+        const fullFlowsUSD = [];
 
         for (let i = 0; i <= fullTotalDays; i++) {
             const currDate = new Date(fullStartDate);
@@ -2748,6 +2789,18 @@ class PortfolioService {
 
             const dayStockValueTarget = this.convertCurrency(dayHoldingsValueUSD, 'USD', targetCurrency);
 
+            // Flux du jour : ce qui entre (achats) ou sort (ventes) des positions.
+            // Les frais en sont exclus, ils ne changent pas la valeur de marche.
+            let dayFlowUSD = 0;
+            tradesUpToDate.forEach(trade => {
+                if (trade.date !== dateStr) return;
+                if (trade.type !== 'BUY' && trade.type !== 'SELL') return;
+                const flow = this.convertCurrency(trade.qty * trade.price, Utils.getCurrency(trade.symbol), 'USD');
+                dayFlowUSD += trade.type === 'BUY' ? flow : -flow;
+            });
+            fullHoldingsUSD.push(dayHoldingsValueUSD);
+            fullFlowsUSD.push(dayFlowUSD);
+
             fullLabels.push(Utils.formatDateShort(dateStr));
             fullRawDates.push(dateStr);
             fullValues.push(dayStockValueTarget);
@@ -2770,6 +2823,19 @@ class PortfolioService {
             return idx === -1 ? fullRawDates.length - 1 : idx;
         };
 
+        // Indice de rendement pondere dans le temps : chaque jour, la valeur des
+        // positions est comparee a celle de la veille augmentee des flux du jour.
+        // Sans cela, un simple ecart entre deux points de fullPerfValues (plus-value
+        // rapportee au cout) melange performance et dilution : acheter une seconde
+        // ligne au prix du marche fait chuter la plus-value moyenne sans qu'aucune
+        // perte n'ait eu lieu -- le badge affichait alors -30 %.
+        const twrIndex = [100];
+        for (let i = 1; i < fullHoldingsUSD.length; i++) {
+            const base = fullHoldingsUSD[i - 1] + fullFlowsUSD[i];
+            const growth = base > 0.0001 ? fullHoldingsUSD[i] / base : 1;
+            twrIndex.push(twrIndex[i - 1] * growth);
+        }
+
         const rangeStats = {};
         const valueRangeStats = {};
         const profitRangeStats = {};
@@ -2781,11 +2847,11 @@ class PortfolioService {
             const startVal = fullValues[rStartIndex] || 0;
             const endVal = fullValues[fullValues.length - 1] || 0;
 
-            // Badge "Performance" : variation (en points de %) de la meme serie base-cout que
-            // la courbe PERF (fullPerfValues), pas la variation de valeur de marche.
-            const perfStart = fullPerfValues[rStartIndex] || 0;
-            const perfEnd = fullPerfValues[fullPerfValues.length - 1] || 0;
-            rangeStats[r] = perfEnd - perfStart;
+            // Badge "Performance" : rendement reel des positions sur la periode,
+            // neutralise des apports et retraits (cf. twrIndex).
+            const twrStart = twrIndex[rStartIndex];
+            const twrEnd = twrIndex[twrIndex.length - 1];
+            rangeStats[r] = (twrStart > 0 && twrEnd != null) ? (twrEnd / twrStart - 1) * 100 : 0;
             valueRangeStats[r] = endVal - startVal;
 
             const profitStartVal = fullProfitValues[rStartIndex] || 0;
@@ -5289,7 +5355,10 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         const benchmarks = this.chartState.benchmarks || [];
         const rawDates = timelineData.rawDates || [];
 
-        if (benchmarks.length > 0 && rawDates.length > 0) {
+        // Hors mode Performance, l'axe porte des montants : y tracer un indice
+        // boursier en devise native n'aurait aucun sens. Le mode est force a
+        // l'activation d'un benchmark, mais l'utilisateur peut revenir sur Valeur.
+        if (isPerf && benchmarks.length > 0 && rawDates.length > 0) {
             const startDate = Utils.parseDate(rawDates[0]);
             const endDate = Utils.parseDate(rawDates[rawDates.length - 1]);
 
@@ -5319,9 +5388,16 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                 });
 
                 const baseline = rawSeries.find(v => v !== null && v !== undefined);
-                const bData = isPerf
-                    ? rawSeries.map(v => (v === null || v === undefined || !baseline) ? null : parseFloat((((v / baseline) - 1) * 100).toFixed(2)))
-                    : rawSeries;
+                // La courbe du portefeuille n'est pas rebasee a 0 : elle affiche la
+                // plus-value cumulee vs prix de revient. On cale donc le benchmark
+                // sur son point de depart, sinon un portefeuille a +50 % semble
+                // ecraser un indice a +2 % alors qu'il a peut-etre sous-performe.
+                // Ainsi l'ecart lu entre les deux courbes est bien l'ecart de
+                // performance sur la fenetre affichee.
+                const offset = primaryData && primaryData.length ? (primaryData[0] || 0) : 0;
+                const bData = rawSeries.map(v => (v === null || v === undefined || !baseline)
+                    ? null
+                    : parseFloat((offset + ((v / baseline) - 1) * 100).toFixed(2)));
 
                 this.chart.data.datasets.push({
                     label: benchConfig.name,
@@ -5402,6 +5478,18 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                 if (this.researchSymbol) this.renderResearchChart(this.researchSymbol);
             });
         });
+
+        // Legende / interrupteurs des moyennes mobiles
+        const maLegend = document.getElementById('researchMaLegend');
+        if (maLegend) {
+            maLegend.addEventListener('click', (e) => {
+                const btn = e.target.closest('.ma-toggle');
+                if (!btn || !btn.dataset.ma) return;
+                const key = btn.dataset.ma;
+                this.researchMaVisible[key] = !this.researchMaVisible[key];
+                this.applyResearchMaOverlay();
+            });
+        }
 
         const deepBtn = document.getElementById('researchDeepBtn');
         if (deepBtn) deepBtn.onclick = () => this.runDeepAnalysis();
@@ -6680,33 +6768,65 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     // Trace MM 50 / MM 200 par-dessus la courbe de cours existante. Les moyennes
     // viennent de l'analyse (15 mois d'historique) : rien n'est re-telecharge, et
     // les points hors de cette fenetre restent vides plutot qu'approximes.
+    // Moyennes mobiles affichees par defaut, mais masquables : la legende sous le
+    // graphe sert d'interrupteur. L'etat vit ici pour survivre a un changement de
+    // plage ou de valeur, qui reconstruit les datasets.
+    researchMaVisible: { ma50: true, ma200: true },
+
     applyResearchMaOverlay() {
         const chart = this.researchChart;
         if (!chart || !chart.data || !Array.isArray(chart.data.datasets) || !chart.data.datasets.length) return;
         const t = this.researchAnalysis && this.researchAnalysis.technical;
         const dates = this.researchChartDates || [];
         const ink = this.chartInk();
+        const colors = { ma50: ink.acc, ma200: ink.tick };
+        const available = { ma50: false, ma200: false };
 
         const extra = [];
         if (t && t.maSeries && dates.length) {
             const idx = {};
             t.maSeries.dates.forEach((d, i) => { idx[d] = i; });
             const pick = (serie) => dates.map(d => (idx[d] === undefined ? null : serie[idx[d]]));
-            const add = (label, serie, color, dash) => {
+            const add = (key, label, serie, dash) => {
                 const data = pick(serie);
                 if (!data.some(v => v != null)) return;
+                // La moyenne existe : la legende doit l'annoncer meme si l'utilisateur
+                // l'a masquee, sinon l'interrupteur devient introuvable.
+                available[key] = true;
+                if (!this.researchMaVisible[key]) return;
                 extra.push({
-                    label, data, borderColor: color, backgroundColor: 'transparent',
+                    label, data, borderColor: colors[key], backgroundColor: 'transparent',
                     borderWidth: 1.4, borderDash: dash, fill: false, tension: 0,
                     pointRadius: 0, pointHoverRadius: 0, spanGaps: false
                 });
             };
-            add('MM 50', t.maSeries.ma50, ink.acc, []);
-            add('MM 200', t.maSeries.ma200, ink.tick, [5, 4]);
+            add('ma50', 'MM 50', t.maSeries.ma50, []);
+            add('ma200', 'MM 200', t.maSeries.ma200, [5, 4]);
         }
 
         chart.data.datasets = [chart.data.datasets[0], ...extra];
         chart.update();
+        this.renderResearchMaLegend(available, colors);
+    },
+
+    renderResearchMaLegend(available, colors) {
+        const box = document.getElementById('researchMaLegend');
+        if (!box) return;
+        const any = available.ma50 || available.ma200;
+        box.hidden = !any;
+        if (!any) return;
+
+        box.querySelectorAll('.ma-toggle').forEach(btn => {
+            const key = btn.dataset.ma;
+            btn.hidden = !available[key];
+            const on = !!this.researchMaVisible[key];
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            const swatch = btn.querySelector('.ma-swatch');
+            // Couleur posee seulement quand la courbe est visible : masquee, le
+            // trait reprend le gris defini en CSS.
+            if (swatch) swatch.style.borderTopColor = on ? colors[key] : '';
+        });
     },
 
     renderResearchPosition(symbol, cur, price) {

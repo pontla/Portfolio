@@ -1050,6 +1050,78 @@ describe('AnalysisService._normalize', () => {
 // Bugs remontes par l'audit des calculs financiers
 // ---------------------------------------------------------------------------
 
+describe('PortfolioService : badge de periode et rendement annuel', () => {
+    const dayStr = (offset) => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + offset);
+        return Utils.getDateString(d);
+    };
+
+    it('un achat au prix du marche ne cree pas de perte sur le badge', () => {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = [
+            // 1 titre paye 100, qui vaut 150 depuis. Puis un 2e titre achete 150,
+            // au prix du marche : la plus-value moyenne tombe de +50 % a +20 %
+            // sans qu'aucune perte n'ait eu lieu.
+            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 1, price: 100, amount: 100, fees: 0, date: dayStr(-6) },
+            { id: 'b2', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 1, price: 150, amount: 150, fees: 0, date: dayStr(-3) }
+        ];
+        svc.marketPrices = { AAPL: 150 };
+        const prices = {};
+        for (let i = -6; i <= 0; i++) prices[dayStr(i)] = 150;
+        svc.dailyPriceCache = { AAPL: prices };
+
+        const tl = svc.getHistoricalTimeline('1M', 'PERF', 'USD');
+        // La serie base-cout chute bien de 50 a 20 : c'est de la dilution.
+        expect(tl.perfValues[0]).toBeCloseTo(50, 6);
+        expect(tl.perfValues[tl.perfValues.length - 1]).toBeCloseTo(20, 6);
+        // Le badge, lui, mesure le rendement reel : le cours n'a pas bouge.
+        expect(tl.rangeStats['1M']).toBeCloseTo(0, 6);
+    });
+
+    it('le badge reflete la hausse reelle du cours, sans mouvement', () => {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = [
+            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 1, price: 100, amount: 100, fees: 0, date: dayStr(-6) }
+        ];
+        svc.marketPrices = { AAPL: 155 };
+        const prices = {};
+        for (let i = -6; i <= 0; i++) prices[dayStr(i)] = i <= -4 ? 150 : 155;
+        svc.dailyPriceCache = { AAPL: prices };
+
+        const tl = svc.getHistoricalTimeline('1M', 'PERF', 'USD');
+        // 150 -> 155, soit +3,33 %, et non la difference +55 - +50 = 5 points.
+        expect(tl.rangeStats['1M']).toBeCloseTo((155 / 150 - 1) * 100, 4);
+    });
+
+    it('le rendement annuel pondere les apports par leur duree de presence', () => {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        const y = new Date().getFullYear();
+        svc.trades = [
+            { id: 'd1', portfolioId: 'p1', type: 'DEPOSIT', symbol: '$CASH', qty: 1, price: 1, amount: 10000, fees: 0, date: `${y}-01-01` },
+            // Gros apport tardif : il ne doit presque pas peser au denominateur.
+            { id: 'd2', portfolioId: 'p1', type: 'DEPOSIT', symbol: '$CASH', qty: 1, price: 1, amount: 90000, fees: 0, date: dayStr(-2) },
+            { id: 'v1', portfolioId: 'p1', type: 'DIVIDEND', symbol: 'AAPL', qty: 1, price: 5000, amount: 5000, fees: 0, date: dayStr(-1) }
+        ];
+        svc.marketPrices = {};
+        svc.dailyPriceCache = {};
+
+        const perf = svc.getYearlyPerformance('USD');
+        expect(perf.ytd.profit).toBeCloseTo(5000, 6);
+        // Avant correction : 5000 / 10000 = +50 %, l'apport de 90 000 etant ignore.
+        // Le capital moyen mobilise est bien superieur a 10 000.
+        expect(perf.ytd.percent).toBeLessThan(50);
+        expect(perf.ytd.percent).toBeGreaterThan(0);
+    });
+});
+
 describe('PortfolioService.computeProfitAsOf : devise du prix de repli', () => {
     it('une position en euros n est pas convertie deux fois', () => {
         const svc = new PortfolioService();
@@ -1070,6 +1142,42 @@ describe('PortfolioService.computeProfitAsOf : devise du prix de repli', () => {
         // Avant correction le PRU (stocke en USD) etait reconverti EUR -> USD :
         // 1 166,4 au lieu de 1 080, soit +86,4 USD de plus-value fantome.
         expect(out.totalPnL).toBeCloseTo(0, 6);
+    });
+});
+
+describe('_normalize : valeurs sentinelles 0 des fournisseurs', () => {
+    const { AnalysisService: S } = app;
+    const norm = (qs, ratios = []) => S._normalize({
+        symbol: 'X', nonUS: false, errors: [], fund: {}, qs, ratios,
+        income: [], cashflow: [], keyMetricsTtm: {}, ratiosTtm: {},
+        estimatesFmp: [], profileFmp: {}, reco: [], insider: {}, peersRaw: [],
+        earn: null, history: {}, dividends: []
+    });
+
+    it('un consensus analystes a 0 est une absence de donnee, pas un achat fort', () => {
+        // L'echelle va de 1 (achat fort) a 5 (vente forte) : 0 en est hors.
+        expect(norm({ recommendationMean: 0 }).sentiment.recommendationMean).toBeNull();
+        expect(norm({ recommendationMean: 7 }).sentiment.recommendationMean).toBeNull();
+        expect(norm({ recommendationMean: 2.1 }).sentiment.recommendationMean).toBe(2.1);
+    });
+
+    it('le consensus a 0 ne rapporte plus 100/100 au sous-score', () => {
+        const out = norm({ recommendationMean: 0, targetMeanPrice: 0, price: 100 });
+        const mom = out.score.subs.find(s => s.key === 'momentum');
+        expect(mom.value).toBeNull();          // plus aucun critere notable
+        expect(String(mom.note)).not.toContain('0,0 / 5');
+    });
+
+    it('une couverture des interets a 0 vaut absence de dette, pas 0/100', () => {
+        // FMP divise par zero quand il n'y a aucune charge d'interets.
+        const zero = norm({}, [{ calendarYear: '2024', interestCoverage: 0, currentRatio: 3, debtEquityRatio: 0 }]);
+        expect(zero.health.interestCoverage).toBeNull();
+        const vraie = norm({}, [{ calendarYear: '2024', interestCoverage: 12 }]);
+        expect(vraie.health.interestCoverage).toBe(12);
+
+        const sante = zero.score.subs.find(s => s.key === 'health');
+        expect(String(sante.note)).not.toContain('intérêts couverts 0,0');
+        expect(sante.value).toBe(100);         // aucune dette : que des points forts
     });
 });
 

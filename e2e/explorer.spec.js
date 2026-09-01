@@ -296,6 +296,47 @@ test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe
     expect(filled).toBeGreaterThan(50);
 });
 
+test('graphe de cours : légende des moyennes mobiles et bascule d’affichage', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const legend = page.locator('#researchMaLegend');
+    await expect(legend).toBeVisible();
+    const toggles = legend.locator('.ma-toggle');
+    await expect(toggles).toHaveCount(2);
+    await expect(toggles.nth(0)).toContainText('MM 50');
+    await expect(toggles.nth(1)).toContainText('MM 200');
+    await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'true');
+
+    // La pastille reprend la couleur réellement tracée sur le graphe.
+    const swatch = await page.evaluate(() => {
+        const el = document.querySelector('#researchMaLegend [data-ma-swatch="ma50"]');
+        return { inline: el.style.borderTopColor, chart: App.researchChart.data.datasets[1].borderColor };
+    });
+    expect(swatch.inline).not.toBe('');
+
+    // Masquer la MM 50 : elle disparaît du graphe, la MM 200 reste.
+    await toggles.nth(0).click();
+    await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggles.nth(0)).not.toHaveClass(/active/);
+    expect(await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label)))
+        .toEqual(['AAPL', 'MM 200']);
+
+    // Masquer les deux : il ne reste que la courbe de cours, la légende demeure
+    // visible sinon l'interrupteur deviendrait introuvable.
+    await toggles.nth(1).click();
+    expect(await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL']);
+    await expect(legend).toBeVisible();
+
+    // Le choix survit à un changement de plage.
+    await page.locator('#researchRange .range-btn', { hasText: '3M' }).click();
+    await expect.poll(async () => page.evaluate(() => App.researchChart.data.datasets.length)).toBe(1);
+    await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'false');
+
+    // Réafficher la MM 50.
+    await toggles.nth(0).click();
+    expect(await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL', 'MM 50']);
+});
+
 test('section Dividende : rendement, distribution et historique par action', async ({ page }) => {
     await openResearch(page, 'AAPL');
 

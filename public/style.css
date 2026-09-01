@@ -1956,6 +1956,42 @@ input:focus {
 
 .research-range .range-btn { padding: 5px 10px; }
 
+/* Legende des moyennes mobiles : sert aussi d'interrupteur (clic = afficher /
+   masquer la courbe). Le trait reprend exactement le style de la ligne tracee,
+   plein pour la MM 50, pointille pour la MM 200. */
+.chart-ma-legend { display: flex; gap: 8px; margin-top: 10px; padding: 0 2px; }
+.ma-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: none;
+    border: 1px solid var(--l2);
+    border-radius: 999px;
+    padding: 4px 11px 4px 9px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    transition: background .2s, color .2s, border-color .2s, opacity .2s;
+}
+.ma-toggle:hover { background-color: var(--hover-bg); }
+.ma-toggle.active { color: var(--text-primary); border-color: var(--l3); }
+.ma-toggle:not(.active) { opacity: .55; }
+.ma-swatch {
+    width: 16px;
+    height: 0;
+    border-top: 2px solid currentColor;
+    border-radius: 2px;
+    flex: 0 0 auto;
+}
+.ma-swatch-dashed { border-top-style: dashed; }
+/* Couleur portee par le JS pour rester alignee sur le trace du graphe. */
+.ma-toggle:not(.active) .ma-swatch { border-top-color: var(--dim2); }
+
+@media (max-width: 560px) {
+    .chart-ma-legend { flex-wrap: wrap; }
+}
+
 @media (max-width: 1023px) {
     #view-research .card { margin-top: 12px; padding: 16px; }
     #view-research .research-search-card { padding: 14px; }
