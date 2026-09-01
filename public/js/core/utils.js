@@ -12,18 +12,34 @@ export const Utils = {
     // injecte via innerHTML. Les guillemets sont echappes aussi, pour que le
     // helper reste sur en contexte d'attribut si un appel s'y risque un jour.
     /** @param {unknown} str */
-    escapeHtml: (str) => String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;'),
+    escapeHtml: (str) =>
+        String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;'),
 
-    PORTFOLIO_ICONS: ['wallet', 'banknote', 'landmark', 'briefcase', 'bitcoin', 'shield', 'house', 'piggy-bank', 'coins', 'globe', 'cpu', 'trending-up', 'gem', 'rocket'],
+    PORTFOLIO_ICONS: [
+        'wallet',
+        'banknote',
+        'landmark',
+        'briefcase',
+        'bitcoin',
+        'shield',
+        'house',
+        'piggy-bank',
+        'coins',
+        'globe',
+        'cpu',
+        'trending-up',
+        'gem',
+        'rocket',
+    ],
 
     autoPortfolioIcon: (name) => {
         const n = (name || '').toLowerCase();
-        const has = (...k) => k.some(x => n.includes(x));
+        const has = (...k) => k.some((x) => n.includes(x));
         if (has('crypto', 'bitcoin', 'btc', ' eth', 'ether', 'web3')) return 'bitcoin';
         if (has('pea', 'épargne en actions', 'epargne en actions')) return 'landmark';
         if (has('assurance vie', 'assurance-vie', 'contrat')) return 'shield';
@@ -31,9 +47,11 @@ export const Utils = {
         if (has('immo', 'immobilier', 'scpi', 'reit', 'pierre', 'foncier')) return 'house';
         if (has('retraite', ' per', 'pension')) return 'piggy-bank';
         if (has('dividende', 'rente', 'revenu', 'coupon')) return 'coins';
-        if (has('livret', 'épargne', 'epargne', 'cash', 'liquidit', 'trésorerie', 'tresorerie')) return 'wallet';
+        if (has('livret', 'épargne', 'epargne', 'cash', 'liquidit', 'trésorerie', 'tresorerie'))
+            return 'wallet';
         if (has('tech', 'nasdaq', 'growth', 'croissance', ' ia', 'semi-cond')) return 'cpu';
-        if (has('monde', 'world', 'msci', 'etf', 'indiciel', 'passif', 'long terme')) return 'globe';
+        if (has('monde', 'world', 'msci', 'etf', 'indiciel', 'passif', 'long terme'))
+            return 'globe';
         if (has('trading', 'spécul', 'specul', 'court terme', 'swing')) return 'trending-up';
         if (has('or ', 'gold', 'métaux', 'metaux', 'précieux', 'precieux', 'luxe')) return 'gem';
         if (has('start', 'venture', 'pre-ipo', 'startup', 'moonshot', 'pari')) return 'rocket';
@@ -42,8 +60,11 @@ export const Utils = {
     },
 
     portfolioIconOverrides: () => {
-        try { return JSON.parse(storage.get(CONFIG.PORTFOLIO_ICONS_STORAGE)) || {}; }
-        catch (e) { return {}; }
+        try {
+            return JSON.parse(storage.get(CONFIG.PORTFOLIO_ICONS_STORAGE)) || {};
+        } catch (e) {
+            return {};
+        }
     },
 
     portfolioIcon: (p) => {
@@ -54,7 +75,8 @@ export const Utils = {
 
     setPortfolioIconOverride: (id, icon) => {
         const map = Utils.portfolioIconOverrides();
-        if (icon) map[id] = icon; else delete map[id];
+        if (icon) map[id] = icon;
+        else delete map[id];
         storage.set(CONFIG.PORTFOLIO_ICONS_STORAGE, JSON.stringify(map));
     },
 
@@ -73,11 +95,27 @@ export const Utils = {
             const trimmed = val.trim();
             if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
                 const parts = trimmed.split('T')[0].split('-');
-                return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
+                return new Date(
+                    parseInt(parts[0], 10),
+                    parseInt(parts[1], 10) - 1,
+                    parseInt(parts[2], 10),
+                    0,
+                    0,
+                    0,
+                    0
+                );
             }
             if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(trimmed)) {
                 const parts = trimmed.split(' ')[0].split('/');
-                return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 0, 0, 0, 0);
+                return new Date(
+                    parseInt(parts[2], 10),
+                    parseInt(parts[1], 10) - 1,
+                    parseInt(parts[0], 10),
+                    0,
+                    0,
+                    0,
+                    0
+                );
             }
         }
         const d = new Date(val);
@@ -125,7 +163,7 @@ export const Utils = {
         const sign = num < 0 ? '−' : '';
         const body = new Intl.NumberFormat('fr-FR', {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 2,
         }).format(Math.abs(num));
         if (curr === 'EUR') return `${sign}${body} €`;
         if (curr === 'GBP') return `${sign}£${body}`;
@@ -135,10 +173,10 @@ export const Utils = {
 
     formatPercent: (num, withSign = true) => {
         if (num === null || num === undefined || isNaN(num)) return '0,00 %';
-        const sign = num < 0 ? '−' : (withSign && num > 0 ? '+' : '');
+        const sign = num < 0 ? '−' : withSign && num > 0 ? '+' : '';
         const body = new Intl.NumberFormat('fr-FR', {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 2,
         }).format(Math.abs(num));
         return sign + body + ' %';
     },
@@ -150,11 +188,19 @@ export const Utils = {
         if (num === null || num === undefined || isNaN(num)) return '—';
         const abs = Math.abs(num);
         const sign = num < 0 ? '−' : '';
-        const units = /** @type {[number, string][]} */ ([[1e12, 'T'], [1e9, 'Md'], [1e6, 'M'], [1e3, 'k']]);
+        const units = /** @type {[number, string][]} */ ([
+            [1e12, 'T'],
+            [1e9, 'Md'],
+            [1e6, 'M'],
+            [1e3, 'k'],
+        ]);
         let body;
         const hit = units.find(([v]) => abs >= v);
         if (hit) {
-            body = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(abs / hit[0]) + ' ' + hit[1];
+            body =
+                new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(abs / hit[0]) +
+                ' ' +
+                hit[1];
         } else {
             body = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(abs);
         }
@@ -179,20 +225,20 @@ export const Utils = {
 
         const suffix = parts[1];
         const map = {
-            'PA': 'Euronext Paris',
-            'L': 'London LSE',
-            'TO': 'Toronto TSX',
-            'DE': 'Xetra Allemagne',
-            'MI': 'Borsa Italiana',
-            'AS': 'Euronext Amsterdam',
-            'BR': 'Euronext Bruxelles',
-            'LS': 'Euronext Lisbonne',
-            'MC': 'Bolsa de Madrid',
-            'HK': 'Hong Kong HKSE',
-            'KS': 'Korea KOSPI',
-            'SI': 'Singapore SGX',
-            'AX': 'Australie ASX',
-            'NS': 'Inde NSE'
+            PA: 'Euronext Paris',
+            L: 'London LSE',
+            TO: 'Toronto TSX',
+            DE: 'Xetra Allemagne',
+            MI: 'Borsa Italiana',
+            AS: 'Euronext Amsterdam',
+            BR: 'Euronext Bruxelles',
+            LS: 'Euronext Lisbonne',
+            MC: 'Bolsa de Madrid',
+            HK: 'Hong Kong HKSE',
+            KS: 'Korea KOSPI',
+            SI: 'Singapore SGX',
+            AX: 'Australie ASX',
+            NS: 'Inde NSE',
         };
         return map[suffix] || suffix;
     },
@@ -219,17 +265,23 @@ export const Utils = {
     },
 
     parseCSV: (text) => {
-        const lines = text.split(/\r\n|\n|\r/).filter(l => l.trim().length > 0);
+        const lines = text.split(/\r\n|\n|\r/).filter((l) => l.trim().length > 0);
         if (lines.length === 0) return [];
 
         const parseLine = (line) => {
             const cells = [];
-            let cur = '', inQuotes = false;
+            let cur = '',
+                inQuotes = false;
             for (let i = 0; i < line.length; i++) {
                 const c = line[i];
                 if (inQuotes) {
                     if (c === '"') {
-                        if (line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = false; }
+                        if (line[i + 1] === '"') {
+                            cur += '"';
+                            i++;
+                        } else {
+                            inQuotes = false;
+                        }
                     } else {
                         cur += c;
                     }
@@ -243,15 +295,17 @@ export const Utils = {
                 }
             }
             cells.push(cur);
-            return cells.map(c => c.trim());
+            return cells.map((c) => c.trim());
         };
 
-        const headers = parseLine(lines[0]).map(h => h.toLowerCase());
+        const headers = parseLine(lines[0]).map((h) => h.toLowerCase());
         const rows = [];
         for (let i = 1; i < lines.length; i++) {
             const cells = parseLine(lines[i]);
             const row = {};
-            headers.forEach((h, idx) => { row[h] = cells[idx] !== undefined ? cells[idx] : ''; });
+            headers.forEach((h, idx) => {
+                row[h] = cells[idx] !== undefined ? cells[idx] : '';
+            });
             rows.push(row);
         }
         return rows;
@@ -275,5 +329,5 @@ export const Utils = {
         if (val === null || val === undefined || val === '') return 0;
         const n = parseFloat(String(val).trim().replace(',', '.'));
         return isNaN(n) ? 0 : n;
-    }
+    },
 };

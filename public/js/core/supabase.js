@@ -14,6 +14,9 @@ export function setSupabaseClient(c) {
 
 /** @returns {any} */
 export function db() {
-    if (!client) throw new Error('Client Supabase non initialise : appeler setSupabaseClient() au demarrage.');
+    if (!client)
+        throw new Error(
+            'Client Supabase non initialise : appeler setSupabaseClient() au demarrage.'
+        );
     return client;
 }

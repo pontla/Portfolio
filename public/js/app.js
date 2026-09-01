@@ -32,21 +32,22 @@ import { researchMarket } from './ui/research-market.js';
 setSupabaseClient(window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY));
 
 // Seul etat partage cote UI ; tout le reste vit dans le moteur.
-const App = Object.assign({
-    service: new PortfolioService(),
-    chart: null,
-    chartState: {
-        mode: 'VALUE',
-        range: 'ALL',
-        benchmarks: [],
-        currency: 'EUR',
-        perfFilter: 'all',
-        profitRange: 'ALL',
-        researchRange: '1Y'
+const App = Object.assign(
+    {
+        service: new PortfolioService(),
+        chart: null,
+        chartState: {
+            mode: 'VALUE',
+            range: 'ALL',
+            benchmarks: [],
+            currency: 'EUR',
+            perfFilter: 'all',
+            profitRange: 'ALL',
+            researchRange: '1Y',
+        },
+        researchChart: null,
+        researchSymbol: null,
     },
-    researchChart: null,
-    researchSymbol: null,
-},
     shell,
     events,
     overview,
@@ -63,16 +64,18 @@ const App = Object.assign({
 window.App = App;
 
 window.onerror = function (msg, url, line) {
-    console.error("Global Error:", msg, "at line:", line);
+    console.error('Global Error:', msg, 'at line:', line);
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    App.init().catch(e => console.error("Critical initialization error:", e));
+    App.init().catch((e) => console.error('Critical initialization error:', e));
 });
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW registration failed:', e));
+        navigator.serviceWorker
+            .register('/sw.js')
+            .catch((e) => console.error('SW registration failed:', e));
     });
 }
 

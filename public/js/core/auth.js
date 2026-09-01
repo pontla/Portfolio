@@ -36,7 +36,7 @@ export const AuthService = {
 
     async resetPasswordForEmail(email) {
         const { error } = await db().auth.resetPasswordForEmail(email, {
-            redirectTo: currentPageUrl()
+            redirectTo: currentPageUrl(),
         });
         if (error) throw error;
     },
@@ -48,7 +48,7 @@ export const AuthService = {
 
     onAuthStateChange(callback) {
         db().auth.onAuthStateChange((_event, session) => callback(session));
-    }
+    },
 };
 
 // Supabase/PostgREST rejette un JWT dont l'iat est dans le futur : arrive quand

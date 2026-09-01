@@ -10,11 +10,15 @@ test('affiche le texte généré, le timestamp et le bouton de régénération',
     const card = page.locator('#researchAiCard');
     await expect(card).toBeVisible();
     await expect(card.locator('.research-ai-text p').first()).toContainText(/Apple/);
-    await expect(page.locator('#researchAiUpdated')).toHaveText(/Analyse générée le \d{2}\/\d{2}\/\d{4}/);
+    await expect(page.locator('#researchAiUpdated')).toHaveText(
+        /Analyse générée le \d{2}\/\d{2}\/\d{4}/
+    );
     await expect(page.locator('#researchAiRefreshBtn')).toBeVisible();
 
     // Le disclaimer reste affiché en dur sous le texte.
-    await expect(card.locator('.score-disclaimer')).toContainText(/pas un conseil en investissement/i);
+    await expect(card.locator('.score-disclaimer')).toContainText(
+        /pas un conseil en investissement/i
+    );
 });
 
 test('texte long : tronqué par défaut, déplié par « Afficher plus »', async ({ page }) => {
@@ -33,12 +37,14 @@ test('texte long : tronqué par défaut, déplié par « Afficher plus »', asyn
     expect((await text.boundingBox()).height).toBeGreaterThan(clampedHeight);
 });
 
-test('un seul appel au fournisseur : le cache local sert les visites suivantes', async ({ page }) => {
+test('un seul appel au fournisseur : le cache local sert les visites suivantes', async ({
+    page,
+}) => {
     const calls = [];
     await bootApp(page, { ai: true });
     await page.route('**/ai/stock-analysis', (route) => {
         calls.push(route.request().postDataJSON());
-        return route.fallback();   // laisse le mock de bootApp repondre
+        return route.fallback(); // laisse le mock de bootApp repondre
     });
 
     await openResearch(page, 'AAPL');
@@ -69,13 +75,18 @@ test('un seul appel au fournisseur : le cache local sert les visites suivantes',
 test('échec de génération : message clair, le reste de la page reste intact', async ({ page }) => {
     await bootApp(page, { ai: true });
     await page.route('**/ai/stock-analysis', (route) =>
-        route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'fournisseur injoignable' }) })
+        route.fulfill({
+            status: 502,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'fournisseur injoignable' }),
+        })
     );
 
     await openResearch(page, 'AAPL');
 
-    await expect(page.locator('#researchAiCard .insights-plain-note'))
-        .toContainText('Analyse temporairement indisponible');
+    await expect(page.locator('#researchAiCard .insights-plain-note')).toContainText(
+        'Analyse temporairement indisponible'
+    );
     // Les autres cartes de l'analyse approfondie ne sont pas affectées.
     await expect(page.locator('#researchScoreCard')).toBeVisible();
     await expect(page.locator('#researchScoreSubs .score-sub').first()).toBeVisible();
@@ -83,7 +94,9 @@ test('échec de génération : message clair, le reste de la page reste intact',
     await expect(page.locator('#researchPeersCard')).toBeVisible();
 });
 
-test('valeur pauvre en données : les métriques absentes sont transmises au modèle', async ({ page }) => {
+test('valeur pauvre en données : les métriques absentes sont transmises au modèle', async ({
+    page,
+}) => {
     await bootApp(page, { ai: true, profile: 'sparse' });
     // On attend la requête au lieu de tester si elle a eu lieu : le test doit
     // échouer si l'analyse n'est plus déclenchée, pas passer silencieusement.

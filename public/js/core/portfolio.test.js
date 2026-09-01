@@ -18,11 +18,19 @@ import { setSupabaseClient } from './supabase.js';
 const store = new Map();
 globalThis.localStorage = /** @type {any} */ ({
     getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => { store.set(k, String(v)); },
-    removeItem: (k) => { store.delete(k); },
-    clear: () => { store.clear(); },
+    setItem: (k, v) => {
+        store.set(k, String(v));
+    },
+    removeItem: (k) => {
+        store.delete(k);
+    },
+    clear: () => {
+        store.clear();
+    },
     key: () => null,
-    get length() { return store.size; },
+    get length() {
+        return store.size;
+    },
 });
 
 // --- double du client Supabase --------------------------------------------
@@ -32,25 +40,50 @@ globalThis.localStorage = /** @type {any} */ ({
  */
 function supabaseStub(overrides = {}) {
     const chain = {
-        from() { return chain; },
-        select() { return chain; },
-        insert() { return chain; },
-        update() { return chain; },
-        delete() { return chain; },
+        from() {
+            return chain;
+        },
+        select() {
+            return chain;
+        },
+        insert() {
+            return chain;
+        },
+        update() {
+            return chain;
+        },
+        delete() {
+            return chain;
+        },
         upsert: overrides.upsert || (() => Promise.resolve({ data: null, error: null })),
-        eq() { return chain; },
-        order() { return Promise.resolve({ data: [], error: null }); },
-        single() { return Promise.resolve({ data: null, error: null }); },
+        eq() {
+            return chain;
+        },
+        order() {
+            return Promise.resolve({ data: [], error: null });
+        },
+        single() {
+            return Promise.resolve({ data: null, error: null });
+        },
         maybeSingle: overrides.maybeSingle || (() => Promise.resolve({ data: null, error: null })),
-        then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); },
+        then(resolve) {
+            return Promise.resolve({ data: [], error: null }).then(resolve);
+        },
     };
     return {
-        from() { return chain; },
+        from() {
+            return chain;
+        },
         auth: { getSession: async () => ({ data: { session: overrides.session || null } }) },
     };
 }
 
-const DEFAULT_FETCH = async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '' });
+const DEFAULT_FETCH = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({}),
+    text: async () => '',
+});
 
 /**
  * Cable les doubles pour un test : client Supabase, fetch, et magasin local
@@ -66,8 +99,13 @@ function harness({ maybeSingle, upsert, session, fetch } = {}) {
 }
 
 const realFetch = globalThis.fetch;
-beforeEach(() => { store.clear(); harness(); });
-afterEach(() => { globalThis.fetch = realFetch; });
+beforeEach(() => {
+    store.clear();
+    harness();
+});
+afterEach(() => {
+    globalThis.fetch = realFetch;
+});
 
 describe('PortfolioService - etat initial', () => {
     it('valeurs par defaut', () => {
@@ -81,7 +119,9 @@ describe('PortfolioService - etat initial', () => {
 
 describe('PortfolioService.convertCurrency', () => {
     let svc;
-    beforeEach(() => { svc = new PortfolioService(); });
+    beforeEach(() => {
+        svc = new PortfolioService();
+    });
 
     it('identite si meme devise', () => {
         expect(svc.convertCurrency(100, 'USD', 'USD')).toBe(100);
@@ -114,11 +154,44 @@ describe('PortfolioService - filtrage & tri des transactions', () => {
     let svc;
     beforeEach(() => {
         svc = new PortfolioService();
-        svc.portfolios = [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }];
+        svc.portfolios = [
+            { id: 'p1', name: 'A' },
+            { id: 'p2', name: 'B' },
+        ];
         svc.trades = [
-            { id: 't3', portfolioId: 'p2', type: 'BUY', symbol: 'AAPL', qty: 1, price: 10, amount: 10, fees: 0, date: '2026-03-01' },
-            { id: 't1', portfolioId: 'p1', type: 'BUY', symbol: 'MSFT', qty: 1, price: 20, amount: 20, fees: 0, date: '2026-01-01' },
-            { id: 't2', portfolioId: 'p1', type: 'BUY', symbol: 'NVDA', qty: 1, price: 30, amount: 30, fees: 0, date: '2026-02-01' },
+            {
+                id: 't3',
+                portfolioId: 'p2',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 10,
+                amount: 10,
+                fees: 0,
+                date: '2026-03-01',
+            },
+            {
+                id: 't1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'MSFT',
+                qty: 1,
+                price: 20,
+                amount: 20,
+                fees: 0,
+                date: '2026-01-01',
+            },
+            {
+                id: 't2',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'NVDA',
+                qty: 1,
+                price: 30,
+                amount: 30,
+                fees: 0,
+                date: '2026-02-01',
+            },
         ];
     });
 
@@ -129,7 +202,12 @@ describe('PortfolioService - filtrage & tri des transactions', () => {
 
     it('un portefeuille actif restreint le perimetre', () => {
         svc.activePortfolioId = 'p1';
-        expect(svc.getFilteredTrades().map((t) => t.id).sort()).toEqual(['t1', 't2']);
+        expect(
+            svc
+                .getFilteredTrades()
+                .map((t) => t.id)
+                .sort()
+        ).toEqual(['t1', 't2']);
     });
 
     it('getFirstTradeDate = date de la transaction la plus ancienne', () => {
@@ -149,7 +227,10 @@ describe('PortfolioService - portefeuille actif', () => {
 
     it('renvoie le portefeuille correspondant a l id', () => {
         const svc = new PortfolioService();
-        svc.portfolios = [{ id: 'p1', name: 'Principal' }, { id: 'p2', name: 'Perso' }];
+        svc.portfolios = [
+            { id: 'p1', name: 'Principal' },
+            { id: 'p2', name: 'Perso' },
+        ];
         svc.activePortfolioId = 'p2';
         expect(svc.getActivePortfolio().name).toBe('Perso');
     });
@@ -175,19 +256,43 @@ describe('PortfolioService.normalizeTradeInput', () => {
     });
 
     it('BUY : majuscule le symbole, calcule le montant, rattache un portefeuille', () => {
-        const n = svc.normalizeTradeInput({ type: 'buy', symbol: '  aapl ', qty: '2', price: '10.5' });
-        expect(n).toMatchObject({ type: 'BUY', symbol: 'AAPL', qty: 2, price: 10.5, amount: 21, portfolioId: 'p1' });
+        const n = svc.normalizeTradeInput({
+            type: 'buy',
+            symbol: '  aapl ',
+            qty: '2',
+            price: '10.5',
+        });
+        expect(n).toMatchObject({
+            type: 'BUY',
+            symbol: 'AAPL',
+            qty: 2,
+            price: 10.5,
+            amount: 21,
+            portfolioId: 'p1',
+        });
         expect(n.date).toBe(Utils.getDateString());
     });
 
     it('DEPOSIT : symbole force a $CASH, prix 1, qty = montant', () => {
         const n = svc.normalizeTradeInput({ type: 'deposit', amount: '500' });
-        expect(n).toMatchObject({ type: 'DEPOSIT', symbol: '$CASH', amount: 500, qty: 500, price: 1 });
+        expect(n).toMatchObject({
+            type: 'DEPOSIT',
+            symbol: '$CASH',
+            amount: 500,
+            qty: 500,
+            price: 1,
+        });
     });
 
     it('DIVIDEND : conserve le symbole, qty 1, prix = montant', () => {
         const n = svc.normalizeTradeInput({ type: 'dividend', symbol: 'aapl', amount: '12.3' });
-        expect(n).toMatchObject({ type: 'DIVIDEND', symbol: 'AAPL', qty: 1, price: 12.3, amount: 12.3 });
+        expect(n).toMatchObject({
+            type: 'DIVIDEND',
+            symbol: 'AAPL',
+            qty: 1,
+            price: 12.3,
+            amount: 12.3,
+        });
     });
 
     it('FEE : symbole $FEE', () => {
@@ -207,40 +312,84 @@ describe('PortfolioService.validateTrade', () => {
     const norm = (t) => svc.normalizeTradeInput(t);
 
     it('accepte un achat valide', () => {
-        expect(() => svc.validateTrade(norm({ type: 'buy', symbol: 'AAPL', qty: 1, price: 10, date: '2020-01-01' }))).not.toThrow();
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'buy', symbol: 'AAPL', qty: 1, price: 10, date: '2020-01-01' })
+            )
+        ).not.toThrow();
     });
 
     it('refuse une date future', () => {
         const future = new Date(Date.now() + 3 * 864e5);
-        expect(() => svc.validateTrade(norm({ type: 'buy', symbol: 'AAPL', qty: 1, price: 10, date: future })))
-            .toThrow(/futur/);
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'buy', symbol: 'AAPL', qty: 1, price: 10, date: future })
+            )
+        ).toThrow(/futur/);
     });
 
     it('refuse une quantite <= 0', () => {
-        expect(() => svc.validateTrade(norm({ type: 'buy', symbol: 'AAPL', qty: 0, price: 10, date: '2020-01-01' })))
-            .toThrow(/Quantit/);
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'buy', symbol: 'AAPL', qty: 0, price: 10, date: '2020-01-01' })
+            )
+        ).toThrow(/Quantit/);
     });
 
     it('refuse un prix <= 0', () => {
-        expect(() => svc.validateTrade(norm({ type: 'buy', symbol: 'AAPL', qty: 1, price: 0, date: '2020-01-01' })))
-            .toThrow(/Prix/);
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'buy', symbol: 'AAPL', qty: 1, price: 0, date: '2020-01-01' })
+            )
+        ).toThrow(/Prix/);
     });
 
     it('refuse de vendre plus que la quantite detenue', () => {
-        svc.trades = [{ id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 3, price: 10, amount: 30, fees: 0, date: '2020-01-01' }];
-        expect(() => svc.validateTrade(norm({ type: 'sell', symbol: 'AAPL', qty: 5, price: 12, date: '2021-01-01' })))
-            .toThrow(/supérieure|detenue|détenue/i);
+        svc.trades = [
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 3,
+                price: 10,
+                amount: 30,
+                fees: 0,
+                date: '2020-01-01',
+            },
+        ];
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'sell', symbol: 'AAPL', qty: 5, price: 12, date: '2021-01-01' })
+            )
+        ).toThrow(/supérieure|detenue|détenue/i);
     });
 
     it('autorise une vente couverte par les achats', () => {
-        svc.trades = [{ id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 3, price: 10, amount: 30, fees: 0, date: '2020-01-01' }];
-        expect(() => svc.validateTrade(norm({ type: 'sell', symbol: 'AAPL', qty: 2, price: 12, date: '2021-01-01' })))
-            .not.toThrow();
+        svc.trades = [
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 3,
+                price: 10,
+                amount: 30,
+                fees: 0,
+                date: '2020-01-01',
+            },
+        ];
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'sell', symbol: 'AAPL', qty: 2, price: 12, date: '2021-01-01' })
+            )
+        ).not.toThrow();
     });
 
     it('refuse un montant <= 0 pour un mouvement de cash', () => {
-        expect(() => svc.validateTrade(norm({ type: 'deposit', amount: 0, date: '2020-01-01' })))
-            .toThrow(/Montant/);
+        expect(() =>
+            svc.validateTrade(norm({ type: 'deposit', amount: 0, date: '2020-01-01' }))
+        ).toThrow(/Montant/);
     });
 });
 
@@ -250,23 +399,63 @@ describe('PortfolioService.calculatePortfolio', () => {
         svc.portfolios = [{ id: 'p1', name: 'A' }];
         svc.activePortfolioId = 'GLOBAL';
         svc.trades = [
-            { id: 'd1', portfolioId: 'p1', type: 'DEPOSIT', symbol: '$CASH', qty: 1000, price: 1, amount: 1000, fees: 0, date: '2026-01-01' },
-            { id: 'w1', portfolioId: 'p1', type: 'WITHDRAWAL', symbol: '$CASH', qty: 200, price: 1, amount: 200, fees: 0, date: '2026-01-05' },
-            { id: 'v1', portfolioId: 'p1', type: 'DIVIDEND', symbol: 'AAPL', qty: 1, price: 50, amount: 50, fees: 0, date: '2026-02-01' },
-            { id: 'f1', portfolioId: 'p1', type: 'FEE', symbol: '$FEE', qty: 1, price: 10, amount: 10, fees: 0, date: '2026-02-02' },
+            {
+                id: 'd1',
+                portfolioId: 'p1',
+                type: 'DEPOSIT',
+                symbol: '$CASH',
+                qty: 1000,
+                price: 1,
+                amount: 1000,
+                fees: 0,
+                date: '2026-01-01',
+            },
+            {
+                id: 'w1',
+                portfolioId: 'p1',
+                type: 'WITHDRAWAL',
+                symbol: '$CASH',
+                qty: 200,
+                price: 1,
+                amount: 200,
+                fees: 0,
+                date: '2026-01-05',
+            },
+            {
+                id: 'v1',
+                portfolioId: 'p1',
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 50,
+                amount: 50,
+                fees: 0,
+                date: '2026-02-01',
+            },
+            {
+                id: 'f1',
+                portfolioId: 'p1',
+                type: 'FEE',
+                symbol: '$FEE',
+                qty: 1,
+                price: 10,
+                amount: 10,
+                fees: 0,
+                date: '2026-02-02',
+            },
         ];
         return svc;
     }
 
     it('agrege depots / retraits / dividendes / frais (USD)', () => {
         const s = cashOnlyService().calculatePortfolio('USD');
-        expect(s.cash).toBeCloseTo(850);        // 1000 - 200 + 50 ; le FEE autonome ne bouge pas le cash affiche
+        expect(s.cash).toBeCloseTo(850); // 1000 - 200 + 50 ; le FEE autonome ne bouge pas le cash affiche
         expect(s.totalDeposits).toBeCloseTo(1000);
         expect(s.totalWithdrawals).toBeCloseTo(200);
         expect(s.totalDividends).toBeCloseTo(50);
         expect(s.holdings).toEqual([]);
         expect(s.totalValue).toBeCloseTo(850);
-        expect(s.totalPnL).toBeCloseTo(40);     // dividendes 50 - frais autonomes 10
+        expect(s.totalPnL).toBeCloseTo(40); // dividendes 50 - frais autonomes 10
     });
 
     it('convertit le resultat dans la devise cible', () => {
@@ -282,7 +471,17 @@ describe('PortfolioService.calculatePortfolio', () => {
         svc.portfolios = [{ id: 'p1', name: 'A' }];
         svc.activePortfolioId = 'GLOBAL';
         svc.trades = [
-            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 2, price: 100, amount: 200, fees: 0, date: '2026-01-02' },
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 2,
+                price: 100,
+                amount: 200,
+                fees: 0,
+                date: '2026-01-02',
+            },
         ];
         svc.marketPrices = { AAPL: 150 };
 
@@ -308,8 +507,28 @@ describe('PortfolioService.calculatePortfolio', () => {
         svc.portfolios = [{ id: 'p1', name: 'A' }];
         svc.activePortfolioId = 'GLOBAL';
         svc.trades = [
-            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 2, price: 100, amount: 200, fees: 0, date: '2026-01-02' },
-            { id: 's1', portfolioId: 'p1', type: 'SELL', symbol: 'AAPL', qty: 2, price: 130, amount: 260, fees: 0, date: '2026-03-02' },
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 2,
+                price: 100,
+                amount: 200,
+                fees: 0,
+                date: '2026-01-02',
+            },
+            {
+                id: 's1',
+                portfolioId: 'p1',
+                type: 'SELL',
+                symbol: 'AAPL',
+                qty: 2,
+                price: 130,
+                amount: 260,
+                fees: 0,
+                date: '2026-03-02',
+            },
         ];
         svc.marketPrices = { AAPL: 150 };
 
@@ -321,8 +540,12 @@ describe('PortfolioService.calculatePortfolio', () => {
 
 describe('helpers JWT (garde-fou horloge desynchronisee)', () => {
     const mkToken = (payload) => {
-        const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64')
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const b64 = (o) =>
+            Buffer.from(JSON.stringify(o))
+                .toString('base64')
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/, '');
         return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.sig`;
     };
 
@@ -349,9 +572,11 @@ describe('PortfolioService - config IA liée au compte', () => {
 
     it('_loadAiConfig adopte ai_provider + ai_providers_configured de la ligne du compte', async () => {
         const { store } = harness({
-            maybeSingle: () => Promise.resolve({
-                data: { ai_provider: 'groq', ai_providers_configured: ['groq', 'openai'] }, error: null
-            })
+            maybeSingle: () =>
+                Promise.resolve({
+                    data: { ai_provider: 'groq', ai_providers_configured: ['groq', 'openai'] },
+                    error: null,
+                }),
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
@@ -366,7 +591,7 @@ describe('PortfolioService - config IA liée au compte', () => {
 
     it('_loadAiConfig sans ligne garde le fournisseur en cache et aiConfigured vide', async () => {
         const { store } = harness({
-            maybeSingle: () => Promise.resolve({ data: null, error: null })
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
@@ -380,7 +605,11 @@ describe('PortfolioService - config IA liée au compte', () => {
 
     it('_loadAiConfig retombe sur le cache local si la table est absente', async () => {
         const { store } = harness({
-            maybeSingle: () => Promise.resolve({ data: null, error: { message: 'relation "user_settings" does not exist' } })
+            maybeSingle: () =>
+                Promise.resolve({
+                    data: null,
+                    error: { message: 'relation "user_settings" does not exist' },
+                }),
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
@@ -395,7 +624,10 @@ describe('PortfolioService - config IA liée au compte', () => {
     it('setAiProvider écrit la sélection (cache + upsert), sans toucher aux clés', async () => {
         const calls = [];
         const { store } = harness({
-            upsert: (payload, opts) => { calls.push({ payload, opts }); return Promise.resolve({ data: null, error: null }); }
+            upsert: (payload, opts) => {
+                calls.push({ payload, opts });
+                return Promise.resolve({ data: null, error: null });
+            },
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
@@ -416,8 +648,16 @@ describe('PortfolioService - config IA liée au compte', () => {
             session: SESSION,
             fetch: async (urlArg, opts) => {
                 reqs.push({ url: String(urlArg), opts });
-                return { ok: true, status: 200, json: async () => ({ ok: true, provider: 'anthropic', configured: ['anthropic'] }) };
-            }
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        ok: true,
+                        provider: 'anthropic',
+                        configured: ['anthropic'],
+                    }),
+                };
+            },
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
@@ -430,7 +670,10 @@ describe('PortfolioService - config IA liée au compte', () => {
         expect(reqs[0].url).toMatch(/\/ai\/key$/);
         expect(reqs[0].opts.method).toBe('POST');
         expect(reqs[0].opts.headers.Authorization).toBe('Bearer jwt-abc');
-        expect(JSON.parse(reqs[0].opts.body)).toEqual({ provider: 'anthropic', key: 'sk-ant-secret' });
+        expect(JSON.parse(reqs[0].opts.body)).toEqual({
+            provider: 'anthropic',
+            key: 'sk-ant-secret',
+        });
         // aucune trace de la clé dans le stockage local
         expect(JSON.stringify([...store.entries()])).not.toContain('sk-ant-secret');
     });
@@ -442,7 +685,7 @@ describe('PortfolioService - config IA liée au compte', () => {
             fetch: async (urlArg, opts) => {
                 reqs.push({ url: String(urlArg), method: opts && opts.method });
                 return { ok: true, status: 200, json: async () => ({ ok: true, configured: [] }) };
-            }
+            },
         });
         const svc = new PortfolioService();
         svc.userId = 'u-1';
@@ -483,8 +726,28 @@ describe('PortfolioService : badge de periode et rendement annuel', () => {
             // 1 titre paye 100, qui vaut 150 depuis. Puis un 2e titre achete 150,
             // au prix du marche : la plus-value moyenne tombe de +50 % a +20 %
             // sans qu'aucune perte n'ait eu lieu.
-            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 1, price: 100, amount: 100, fees: 0, date: dayStr(-6) },
-            { id: 'b2', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 1, price: 150, amount: 150, fees: 0, date: dayStr(-3) }
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 100,
+                amount: 100,
+                fees: 0,
+                date: dayStr(-6),
+            },
+            {
+                id: 'b2',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 150,
+                amount: 150,
+                fees: 0,
+                date: dayStr(-3),
+            },
         ];
         svc.marketPrices = { AAPL: 150 };
         const prices = {};
@@ -504,7 +767,17 @@ describe('PortfolioService : badge de periode et rendement annuel', () => {
         svc.portfolios = [{ id: 'p1', name: 'A' }];
         svc.activePortfolioId = 'GLOBAL';
         svc.trades = [
-            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AAPL', qty: 1, price: 100, amount: 100, fees: 0, date: dayStr(-6) }
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 100,
+                amount: 100,
+                fees: 0,
+                date: dayStr(-6),
+            },
         ];
         svc.marketPrices = { AAPL: 155 };
         const prices = {};
@@ -522,10 +795,40 @@ describe('PortfolioService : badge de periode et rendement annuel', () => {
         svc.activePortfolioId = 'GLOBAL';
         const y = new Date().getFullYear();
         svc.trades = [
-            { id: 'd1', portfolioId: 'p1', type: 'DEPOSIT', symbol: '$CASH', qty: 1, price: 1, amount: 10000, fees: 0, date: `${y}-01-01` },
+            {
+                id: 'd1',
+                portfolioId: 'p1',
+                type: 'DEPOSIT',
+                symbol: '$CASH',
+                qty: 1,
+                price: 1,
+                amount: 10000,
+                fees: 0,
+                date: `${y}-01-01`,
+            },
             // Gros apport tardif : il ne doit presque pas peser au denominateur.
-            { id: 'd2', portfolioId: 'p1', type: 'DEPOSIT', symbol: '$CASH', qty: 1, price: 1, amount: 90000, fees: 0, date: dayStr(-2) },
-            { id: 'v1', portfolioId: 'p1', type: 'DIVIDEND', symbol: 'AAPL', qty: 1, price: 5000, amount: 5000, fees: 0, date: dayStr(-1) }
+            {
+                id: 'd2',
+                portfolioId: 'p1',
+                type: 'DEPOSIT',
+                symbol: '$CASH',
+                qty: 1,
+                price: 1,
+                amount: 90000,
+                fees: 0,
+                date: dayStr(-2),
+            },
+            {
+                id: 'v1',
+                portfolioId: 'p1',
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 5000,
+                amount: 5000,
+                fees: 0,
+                date: dayStr(-1),
+            },
         ];
         svc.marketPrices = {};
         svc.dailyPriceCache = {};
@@ -547,7 +850,17 @@ describe('PortfolioService.computeProfitAsOf : devise du prix de repli', () => {
         svc.fxRate = 1.08;
         svc.fxRates = { EUR: 1.08 };
         svc.trades = [
-            { id: 'b1', portfolioId: 'p1', type: 'BUY', symbol: 'AIR.PA', qty: 10, price: 100, amount: 1000, fees: 0, date: '2026-01-02' }
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AIR.PA',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                fees: 0,
+                date: '2026-01-02',
+            },
         ];
         // Ni historique ni prix live : `getPriceOnDate` retombe sur le prix passe
         // en repli, qui doit etre exprime en euros comme les cours de AIR.PA.

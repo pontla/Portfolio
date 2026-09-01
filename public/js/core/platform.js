@@ -9,18 +9,27 @@
 export const storage = {
     /** @param {string} key @returns {string|null} */
     get(key) {
-        try { return globalThis.localStorage ? globalThis.localStorage.getItem(key) : null; }
-        catch (e) { return null; }
+        try {
+            return globalThis.localStorage ? globalThis.localStorage.getItem(key) : null;
+        } catch (e) {
+            return null;
+        }
     },
     /** @param {string} key @param {string} value */
     set(key, value) {
-        try { if (globalThis.localStorage) globalThis.localStorage.setItem(key, value); }
-        catch (e) { /* stockage indisponible */ }
+        try {
+            if (globalThis.localStorage) globalThis.localStorage.setItem(key, value);
+        } catch (e) {
+            /* stockage indisponible */
+        }
     },
     /** @param {string} key */
     remove(key) {
-        try { if (globalThis.localStorage) globalThis.localStorage.removeItem(key); }
-        catch (e) { /* stockage indisponible */ }
+        try {
+            if (globalThis.localStorage) globalThis.localStorage.removeItem(key);
+        } catch (e) {
+            /* stockage indisponible */
+        }
     },
 };
 
@@ -34,7 +43,9 @@ export function emit(name) {
         if (typeof globalThis.dispatchEvent === 'function') {
             globalThis.dispatchEvent(new CustomEvent(name));
         }
-    } catch (e) { /* hors navigateur */ }
+    } catch (e) {
+        /* hors navigateur */
+    }
 }
 
 /**
@@ -46,5 +57,7 @@ export function currentPageUrl() {
     try {
         const l = globalThis.location;
         return l ? l.origin + l.pathname : '';
-    } catch (e) { return ''; }
+    } catch (e) {
+        return '';
+    }
 }

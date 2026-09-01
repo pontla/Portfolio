@@ -11,6 +11,6 @@ export default defineConfig({
             // sans `include`, un fichier jamais importe n'apparait pas du tout.
             include: ['public/js/**/*.js', 'worker/proxy.js'],
             exclude: ['**/*.test.js'],
-        }
-    }
+        },
+    },
 });

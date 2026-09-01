@@ -1,0 +1,6 @@
+# Commits de reformatage pur, a ignorer dans `git blame`.
+#
+# Activation locale, une fois :
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub applique ce fichier automatiquement dans sa vue blame.

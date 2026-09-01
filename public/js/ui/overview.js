@@ -36,11 +36,14 @@ export const overview = {
 
         // Render Portfolios List in Dropdown
         if (listEl) {
-            listEl.innerHTML = this.service.portfolios.map(p => {
-                const isSelected = p.id === this.service.activePortfolioId;
-                const countTrades = this.service.trades.filter(t => t.portfolioId === p.id).length;
+            listEl.innerHTML = this.service.portfolios
+                .map((p) => {
+                    const isSelected = p.id === this.service.activePortfolioId;
+                    const countTrades = this.service.trades.filter(
+                        (t) => t.portfolioId === p.id
+                    ).length;
 
-                return `
+                    return `
                     <div class="portfolio-dropdown-item portfolio-item-select ${isSelected ? 'active' : ''}" data-id="${p.id}">
                         <div class="portfolio-item-left">
                             <span class="portfolio-bullet pf-ico" style="color:${p.color};"><i data-lucide="${Utils.portfolioIcon(p)}"></i></span>
@@ -53,36 +56,47 @@ export const overview = {
                             <button class="item-action-btn edit-portfolio-btn" data-id="${p.id}" title="Renommer">
                                 <i data-lucide="edit-2" class="icon-xs"></i>
                             </button>
-                            ${this.service.portfolios.length > 1 ? `
+                            ${
+                                this.service.portfolios.length > 1
+                                    ? `
                             <button class="item-action-btn delete delete-portfolio-btn" data-id="${p.id}" title="Supprimer">
                                 <i data-lucide="trash-2" class="icon-xs"></i>
-                            </button>` : ''}
+                            </button>`
+                                    : ''
+                            }
                         </div>
                     </div>
                 `;
-            }).join('');
+                })
+                .join('');
         }
 
         // Render Portfolios in desktop side nav
         const sideListEl = document.getElementById('sidePortfolioList');
         if (sideListEl) {
-            sideListEl.innerHTML = this.service.portfolios.map(p => {
-                const isSel = p.id === this.service.activePortfolioId;
-                const name = Utils.escapeHtml(p.name);
-                return `
+            sideListEl.innerHTML = this.service.portfolios
+                .map((p) => {
+                    const isSel = p.id === this.service.activePortfolioId;
+                    const name = Utils.escapeHtml(p.name);
+                    return `
                     <button class="side-portfolio portfolio-item-select ${isSel ? 'active' : ''}" data-id="${p.id}" title="${name}">
                         <i class="side-portfolio-ico" data-lucide="${Utils.portfolioIcon(p)}" style="color:${p.color};"></i>
                         <span class="side-label">${name}</span>
                     </button>`;
-            }).join('');
+                })
+                .join('');
         }
 
         // Render Target Portfolio Select options in Transaction Modal
         if (targetSelect) {
-            targetSelect.innerHTML = this.service.portfolios.map(p => {
-                const isSel = (!isGlobal && p.id === this.service.activePortfolioId) || (isGlobal && p.id === this.service.portfolios[0].id);
-                return `<option value="${p.id}" ${isSel ? 'selected' : ''}>${p.name}</option>`;
-            }).join('');
+            targetSelect.innerHTML = this.service.portfolios
+                .map((p) => {
+                    const isSel =
+                        (!isGlobal && p.id === this.service.activePortfolioId) ||
+                        (isGlobal && p.id === this.service.portfolios[0].id);
+                    return `<option value="${p.id}" ${isSel ? 'selected' : ''}>${p.name}</option>`;
+                })
+                .join('');
         }
 
         Icons.render();
@@ -101,17 +115,23 @@ export const overview = {
         if (chartTitleEl) chartTitleEl.textContent = this.service.getActivePortfolio().name;
 
         // Sync Range Buttons Active State
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#timeRangeSelector .range-btn')).forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('#timeRangeSelector .range-btn')
+        ).forEach((btn) => {
             btn.classList.toggle('active', btn.dataset.range === this.chartState.range);
         });
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#profitRangeSelector .range-btn')).forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('#profitRangeSelector .range-btn')
+        ).forEach((btn) => {
             btn.classList.toggle('active', btn.dataset.range === this.chartState.profitRange);
         });
 
         // Sync Currency Toggle UI
         const currencyToggle = document.getElementById('currencyToggle');
         if (currencyToggle) {
-            /** @type {NodeListOf<HTMLElement>} */ (currencyToggle.querySelectorAll('.toggle-btn')).forEach(b => {
+            /** @type {NodeListOf<HTMLElement>} */ (
+                currencyToggle.querySelectorAll('.toggle-btn')
+            ).forEach((b) => {
                 b.classList.toggle('active', b.dataset.currency === curr);
             });
         }
@@ -165,22 +185,26 @@ export const overview = {
         // 2. HOLDINGS TABLE RENDERING
         const hBody = document.getElementById('holdingsTableBody');
         if (hBody) {
-            hBody.innerHTML = stats.holdings.length ? stats.holdings.map(h => {
-                const isProfit = h.gainNative >= 0;
-                const isGlobal = this.service.activePortfolioId === 'GLOBAL';
-                
-                let portTags = '';
-                if (isGlobal && h.portfolios && h.portfolios.length) {
-                    portTags = h.portfolios.map(pId => {
-                        const p = this.service.getPortfolioById(pId);
-                        return `<span class="portfolio-badge" style="font-size:10px; padding:1px 5px;"><span class="dot" style="background:${p.color}; width:6px; height:6px;"></span>${p.name}</span>`;
-                    }).join(' ');
-                }
+            hBody.innerHTML = stats.holdings.length
+                ? stats.holdings
+                      .map((h) => {
+                          const isProfit = h.gainNative >= 0;
+                          const isGlobal = this.service.activePortfolioId === 'GLOBAL';
 
-                const assetName = this.assetNameCache[h.symbol];
-                const isPriceUp = h.currentPrice >= h.avgPrice;
+                          let portTags = '';
+                          if (isGlobal && h.portfolios && h.portfolios.length) {
+                              portTags = h.portfolios
+                                  .map((pId) => {
+                                      const p = this.service.getPortfolioById(pId);
+                                      return `<span class="portfolio-badge" style="font-size:10px; padding:1px 5px;"><span class="dot" style="background:${p.color}; width:6px; height:6px;"></span>${p.name}</span>`;
+                                  })
+                                  .join(' ');
+                          }
 
-                return `
+                          const assetName = this.assetNameCache[h.symbol];
+                          const isPriceUp = h.currentPrice >= h.avgPrice;
+
+                          return `
                     <tr>
                         <td data-label="Actif">
                             <div class="holding-asset-cell" data-symbol="${h.symbol}" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
@@ -212,23 +236,32 @@ export const overview = {
                         </td>
                     </tr>
                 `;
-            }).join('') : '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--dim);">Aucune position active dans ce portefeuille.</td></tr>';
-            this.refreshAssetNames(stats.holdings.map(h => h.symbol), curr);
+                      })
+                      .join('')
+                : '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--dim);">Aucune position active dans ce portefeuille.</td></tr>';
+            this.refreshAssetNames(
+                stats.holdings.map((h) => h.symbol),
+                curr
+            );
         }
 
         // 2b. HOLDINGS CARDS (mobile) — meme design + glisser pour vendre
         const cardsList = document.getElementById('holdingsCardsList');
         const cntEl = document.getElementById('holdingsCount');
         const totEl = document.getElementById('holdingsCardsTotal');
-        if (cntEl) cntEl.textContent = `${stats.holdings.length} position${stats.holdings.length > 1 ? 's' : ''}`;
+        if (cntEl)
+            cntEl.textContent = `${stats.holdings.length} position${stats.holdings.length > 1 ? 's' : ''}`;
         if (totEl) totEl.textContent = Utils.formatCurrency(stats.holdingsValue, curr);
         if (cardsList) {
-            cardsList.innerHTML = stats.holdings.length ? stats.holdings.map(h => {
-                const isProfit = h.gainNative >= 0;
-                const isPriceUp = h.currentPrice >= h.avgPrice;
-                const nm = this.assetNameCache[h.symbol] || Utils.getExchangeName(h.symbol);
-                const barW = Math.max(2, Math.min(100, h.weightPercent || 0));
-                return `
+            cardsList.innerHTML = stats.holdings.length
+                ? stats.holdings
+                      .map((h) => {
+                          const isProfit = h.gainNative >= 0;
+                          const isPriceUp = h.currentPrice >= h.avgPrice;
+                          const nm =
+                              this.assetNameCache[h.symbol] || Utils.getExchangeName(h.symbol);
+                          const barW = Math.max(2, Math.min(100, h.weightPercent || 0));
+                          return `
                 <div class="holding-swipe">
                     <button class="holding-swipe-action quick-sell-btn" data-symbol="${h.symbol}" data-qty="${h.qty}" data-price="${h.currentPrice}">Vendre</button>
                     <div class="holding-card">
@@ -253,7 +286,9 @@ export const overview = {
                         </div>
                     </div>
                 </div>`;
-            }).join('') : '<div class="hc-empty">Aucune position active dans ce portefeuille.</div>';
+                      })
+                      .join('')
+                : '<div class="hc-empty">Aucune position active dans ce portefeuille.</div>';
             this.initHoldingsSwipe();
         }
 
@@ -261,21 +296,29 @@ export const overview = {
         this.renderTransactionsTable(curr);
 
         // 4. UPDATE DYNAMIC TIME RANGE BADGES
-        const timelineData = this.service.getHistoricalTimeline(this.chartState.range, this.chartState.mode, curr);
+        const timelineData = this.service.getHistoricalTimeline(
+            this.chartState.range,
+            this.chartState.mode,
+            curr
+        );
         if (timelineData && timelineData.rangeStats) {
             const isPerf = this.chartState.mode === 'PERF';
             const badgeStats = isPerf ? timelineData.rangeStats : timelineData.valueRangeStats;
             Object.entries(badgeStats).forEach(([rangeKey, val]) => {
-                const el = /** @type {HTMLElement} */ (document.querySelector(`[data-range-val="${rangeKey}"]`));
+                const el = /** @type {HTMLElement} */ (
+                    document.querySelector(`[data-range-val="${rangeKey}"]`)
+                );
                 if (el) {
                     const isPositive = val >= 0;
-                    const fmt = (v) => isPerf
-                        ? Utils.formatPercent(v)
-                        : (v >= 0 ? '+' : '') + Utils.formatCurrency(v, curr);
+                    const fmt = (v) =>
+                        isPerf
+                            ? Utils.formatPercent(v)
+                            : (v >= 0 ? '+' : '') + Utils.formatCurrency(v, curr);
                     const rangeBtn = el.closest('.range-btn');
                     const isActive = rangeBtn && rangeBtn.classList.contains('active');
                     if (isActive) {
-                        const from = (typeof this._activeDeltaVal === 'number') ? this._activeDeltaVal : val;
+                        const from =
+                            typeof this._activeDeltaVal === 'number' ? this._activeDeltaVal : val;
                         if (from !== val) this.animateNumber(el, from, val, fmt);
                         else if (!el._animating) el.textContent = fmt(val);
                         this._activeDeltaVal = val;
@@ -296,8 +339,16 @@ export const overview = {
             const isPerfHead = this.chartState.mode === 'PERF';
             const valSeries = timelineData.values || [];
             const perfSeries = timelineData.perfValues || [];
-            const lastVal = valSeries.length ? valSeries[valSeries.length - 1] : (stats ? stats.holdingsValue : 0);
-            const lastPerf = perfSeries.length ? perfSeries[perfSeries.length - 1] : (stats ? stats.unrealizedPercent : 0);
+            const lastVal = valSeries.length
+                ? valSeries[valSeries.length - 1]
+                : stats
+                  ? stats.holdingsValue
+                  : 0;
+            const lastPerf = perfSeries.length
+                ? perfSeries[perfSeries.length - 1]
+                : stats
+                  ? stats.unrealizedPercent
+                  : 0;
 
             const valTxt = Utils.formatCurrency(lastVal, curr);
             const perfTxt = Utils.formatPercent(lastPerf);
@@ -350,14 +401,15 @@ export const overview = {
             grid: v('--grid', 'rgba(255,255,255,.045)'),
             tick: v('--dim', '#8b93a1'),
             up: '#2ebd85',
-            acc: '#00d3f2'
+            acc: '#00d3f2',
         };
     },
 
     // Anime un nombre de `from` a `to` (rAF, ~420ms, easing 1-(1-t)^3)
     animateNumber(el, from, to, fmt) {
         if (!el) return;
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const reduce =
+            window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduce || document.hidden || typeof from !== 'number' || !isFinite(from)) {
             el.textContent = fmt(to);
             return;
@@ -365,7 +417,8 @@ export const overview = {
         const token = (el._animTok || 0) + 1;
         el._animTok = token;
         el._animating = true;
-        const t0 = performance.now(), dur = 420;
+        const t0 = performance.now(),
+            dur = 420;
         const step = (now) => {
             if (el._animTok !== token) return;
             const t = Math.min(1, (now - t0) / dur);
@@ -382,35 +435,39 @@ export const overview = {
         if (!listEl) return;
 
         const dividendSymbols = new Set(
-            this.service.getFilteredTrades()
-                .filter(t => t.type === 'DIVIDEND')
-                .map(t => t.symbol)
+            this.service
+                .getFilteredTrades()
+                .filter((t) => t.type === 'DIVIDEND')
+                .map((t) => t.symbol)
         );
 
         let rows = (stats.holdings || []).slice();
 
         const filter = this.chartState.perfFilter;
-        if (filter === 'up') rows = rows.filter(h => h.gainPercent > 0);
-        else if (filter === 'down') rows = rows.filter(h => h.gainPercent < 0);
-        else if (filter === 'dividends') rows = rows.filter(h => dividendSymbols.has(h.symbol));
+        if (filter === 'up') rows = rows.filter((h) => h.gainPercent > 0);
+        else if (filter === 'down') rows = rows.filter((h) => h.gainPercent < 0);
+        else if (filter === 'dividends') rows = rows.filter((h) => dividendSymbols.has(h.symbol));
 
         rows.sort((a, b) => b.gainPercent - a.gainPercent);
 
         if (rows.length === 0) {
-            listEl.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-secondary);">Aucune position à afficher.</p>';
+            listEl.innerHTML =
+                '<p style="text-align:center; padding:20px; color:var(--text-secondary);">Aucune position à afficher.</p>';
             return;
         }
 
-        const maxAbs = Math.max(...rows.map(h => Math.abs(h.gainPercent)), 1);
+        const maxAbs = Math.max(...rows.map((h) => Math.abs(h.gainPercent)), 1);
 
-        listEl.innerHTML = rows.map(h => {
-            const isPositive = h.gainPercent >= 0;
-            const widthPct = (Math.abs(h.gainPercent) / maxAbs) * 100;
-            const barClass = isPositive ? 'positive' : 'negative';
-            const gainNativeStr = (isPositive ? '+' : '') + Utils.formatCurrency(h.gainNative, h.currency);
-            const valueStr = Utils.formatCurrency(h.valueNative, h.currency);
+        listEl.innerHTML = rows
+            .map((h) => {
+                const isPositive = h.gainPercent >= 0;
+                const widthPct = (Math.abs(h.gainPercent) / maxAbs) * 100;
+                const barClass = isPositive ? 'positive' : 'negative';
+                const gainNativeStr =
+                    (isPositive ? '+' : '') + Utils.formatCurrency(h.gainNative, h.currency);
+                const valueStr = Utils.formatCurrency(h.valueNative, h.currency);
 
-            return `
+                return `
                 <div class="perf-row">
                     <img class="perf-logo" src="${this.getLogoUrl(h.symbol)}" alt=""
                         data-fallback="sibling">
@@ -428,7 +485,8 @@ export const overview = {
                     </div>
                 </div>
             `;
-        }).join('');
+            })
+            .join('');
     },
 
     renderDailyMovers() {
@@ -440,14 +498,16 @@ export const overview = {
 
         const renderList = (el, items, barClass) => {
             if (!items.length) {
-                el.innerHTML = '<p style="text-align:center; padding:12px; color:var(--text-secondary);">Aucune donnée du jour.</p>';
+                el.innerHTML =
+                    '<p style="text-align:center; padding:12px; color:var(--text-secondary);">Aucune donnée du jour.</p>';
                 return;
             }
-            const maxAbs = Math.max(...items.map(m => Math.abs(m.dayChangePercent)), 1);
+            const maxAbs = Math.max(...items.map((m) => Math.abs(m.dayChangePercent)), 1);
 
-            el.innerHTML = items.map(m => {
-                const widthPct = (Math.abs(m.dayChangePercent) / maxAbs) * 100;
-                return `
+            el.innerHTML = items
+                .map((m) => {
+                    const widthPct = (Math.abs(m.dayChangePercent) / maxAbs) * 100;
+                    return `
                     <div class="perf-row">
                         <img class="perf-logo" src="${this.getLogoUrl(m.symbol)}" alt=""
                             data-fallback="sibling">
@@ -459,7 +519,8 @@ export const overview = {
                         <span class="perf-pct ${barClass === 'positive' ? 'text-green' : 'text-red'}">${Utils.formatPercent(m.dayChangePercent)}</span>
                     </div>
                 `;
-            }).join('');
+                })
+                .join('');
         };
 
         renderList(gainersEl, gainers, 'positive');

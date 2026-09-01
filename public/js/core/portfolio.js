@@ -20,7 +20,12 @@ export class PortfolioService {
         this.marketPrices = {};
         this.dailyPriceCache = {};
         this.fxRate = 1.08;
-        this.fxRates = /** @type {Record<string, number|null>} */ ({ USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73 });
+        this.fxRates = /** @type {Record<string, number|null>} */ ({
+            USD: 1,
+            EUR: 1.08,
+            GBP: 1.27,
+            CAD: 0.73,
+        });
         this.userId = null;
         // Config IA liee au compte (table user_settings). aiProvider = fournisseur
         // choisi (non secret) ; aiConfigured = fournisseurs pour lesquels une cle
@@ -34,7 +39,9 @@ export class PortfolioService {
     async _loadAiConfig() {
         try {
             this.aiProvider = storage.get(CONFIG.AI_PROVIDER_STORAGE) || null;
-        } catch (e) { /* stockage indisponible */ }
+        } catch (e) {
+            /* stockage indisponible */
+        }
 
         try {
             const { data, error } = await db()
@@ -48,8 +55,12 @@ export class PortfolioService {
             try {
                 if (this.aiProvider) storage.set(CONFIG.AI_PROVIDER_STORAGE, this.aiProvider);
                 else storage.remove(CONFIG.AI_PROVIDER_STORAGE);
-            } catch (e) { /* ignore */ }
-        } catch (e) { /* on garde le cache local */ }
+            } catch (e) {
+                /* ignore */
+            }
+        } catch (e) {
+            /* on garde le cache local */
+        }
     }
 
     // Change le fournisseur actif (non secret) : ecriture directe via RLS + cache.
@@ -58,12 +69,17 @@ export class PortfolioService {
         try {
             if (this.aiProvider) storage.set(CONFIG.AI_PROVIDER_STORAGE, this.aiProvider);
             else storage.remove(CONFIG.AI_PROVIDER_STORAGE);
-        } catch (e) { /* ignore */ }
-        const { error } = await db().from('user_settings').upsert({
-            user_id: this.userId,
-            ai_provider: this.aiProvider,
-            updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
+        } catch (e) {
+            /* ignore */
+        }
+        const { error } = await db().from('user_settings').upsert(
+            {
+                user_id: this.userId,
+                ai_provider: this.aiProvider,
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' }
+        );
         if (error) throw error;
     }
 
@@ -71,7 +87,11 @@ export class PortfolioService {
     async saveAiKey(provider, key) {
         this.aiConfigured = await APIService.aiKeySave(provider, key);
         this.aiProvider = provider;
-        try { storage.set(CONFIG.AI_PROVIDER_STORAGE, provider); } catch (e) { /* ignore */ }
+        try {
+            storage.set(CONFIG.AI_PROVIDER_STORAGE, provider);
+        } catch (e) {
+            /* ignore */
+        }
     }
 
     async removeAiKey(provider) {
@@ -79,10 +99,11 @@ export class PortfolioService {
     }
 
     async _fetchRows() {
-        const [{ data: portfolioRows, error: pErr }, { data: tradeRows, error: tErr }] = await Promise.all([
-            db().from('portfolios').select('*').order('created_at', { ascending: true }),
-            db().from('trades').select('*')
-        ]);
+        const [{ data: portfolioRows, error: pErr }, { data: tradeRows, error: tErr }] =
+            await Promise.all([
+                db().from('portfolios').select('*').order('created_at', { ascending: true }),
+                db().from('trades').select('*'),
+            ]);
         if (pErr) throw pErr;
         if (tErr) throw tErr;
         return { portfolioRows, tradeRows };
@@ -107,7 +128,7 @@ export class PortfolioService {
             if (!isJwtTimingError(err)) throw err;
             // Rafraichit le jeton puis laisse le serveur rattraper l'ecart avant de reessayer.
             await AuthService.refreshSession().catch(() => {});
-            await new Promise(r => setTimeout(r, 2500));
+            await new Promise((r) => setTimeout(r, 2500));
             ({ portfolioRows, tradeRows } = await this._fetchRows());
         }
 
@@ -115,10 +136,15 @@ export class PortfolioService {
             const created = await this.createPortfolio('Portefeuille Principal', '#3b82f6');
             this.portfolios = [created];
         } else {
-            this.portfolios = portfolioRows.map(r => ({ id: r.id, name: r.name, color: r.color, createdAt: r.created_at }));
+            this.portfolios = portfolioRows.map((r) => ({
+                id: r.id,
+                name: r.name,
+                color: r.color,
+                createdAt: r.created_at,
+            }));
         }
 
-        this.trades = (tradeRows || []).map(r => ({
+        this.trades = (tradeRows || []).map((r) => ({
             id: r.id,
             portfolioId: r.portfolio_id,
             type: r.type,
@@ -128,12 +154,15 @@ export class PortfolioService {
             amount: Number(r.amount),
             fees: Number(r.fees) || 0,
             fxRate: Number(r.fx_rate) || null,
-            date: r.date
+            date: r.date,
         }));
 
         const storedActiveId = storage.get(CONFIG.ACTIVE_PORTFOLIO_STORAGE);
         this.activePortfolioId = storedActiveId || this.portfolios[0].id;
-        if (this.activePortfolioId !== 'GLOBAL' && !this.portfolios.find(p => p.id === this.activePortfolioId)) {
+        if (
+            this.activePortfolioId !== 'GLOBAL' &&
+            !this.portfolios.find((p) => p.id === this.activePortfolioId)
+        ) {
             this.activePortfolioId = this.portfolios[0].id;
         }
 
@@ -143,7 +172,7 @@ export class PortfolioService {
     async createPortfolio(name, color = '#3b82f6') {
         const trimmed = (name || '').trim();
         if (!trimmed) throw new Error('Nom de portefeuille requis');
-        if (this.portfolios.some(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
+        if (this.portfolios.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
             throw new Error(`Un portefeuille nommé "${trimmed}" existe déjà`);
         }
 
@@ -154,8 +183,13 @@ export class PortfolioService {
             .single();
         if (error) throw error;
 
-        const newPort = { id: data.id, name: data.name, color: data.color, createdAt: data.created_at };
-        if (!this.portfolios.find(p => p.id === newPort.id)) {
+        const newPort = {
+            id: data.id,
+            name: data.name,
+            color: data.color,
+            createdAt: data.created_at,
+        };
+        if (!this.portfolios.find((p) => p.id === newPort.id)) {
             this.portfolios.push(newPort);
         }
         this.setActivePortfolio(newPort.id);
@@ -165,7 +199,11 @@ export class PortfolioService {
     async renamePortfolio(id, newName, newColor) {
         const trimmed = (newName || '').trim();
         if (!trimmed) throw new Error('Nom de portefeuille requis');
-        if (this.portfolios.some(p => p.id !== id && p.name.toLowerCase() === trimmed.toLowerCase())) {
+        if (
+            this.portfolios.some(
+                (p) => p.id !== id && p.name.toLowerCase() === trimmed.toLowerCase()
+            )
+        ) {
             throw new Error(`Un portefeuille nommé "${trimmed}" existe déjà`);
         }
 
@@ -175,7 +213,7 @@ export class PortfolioService {
         const { error } = await db().from('portfolios').update(updates).eq('id', id);
         if (error) throw error;
 
-        const p = this.portfolios.find(x => x.id === id);
+        const p = this.portfolios.find((x) => x.id === id);
         if (p) {
             p.name = updates.name;
             if (newColor) p.color = newColor;
@@ -192,8 +230,8 @@ export class PortfolioService {
         if (error) throw error;
 
         // La contrainte "on delete cascade" cote Supabase supprime deja les trades associes
-        this.trades = this.trades.filter(t => t.portfolioId !== id);
-        this.portfolios = this.portfolios.filter(p => p.id !== id);
+        this.trades = this.trades.filter((t) => t.portfolioId !== id);
+        this.portfolios = this.portfolios.filter((p) => p.id !== id);
 
         if (this.activePortfolioId === id) {
             this.setActivePortfolio(this.portfolios[0].id);
@@ -213,18 +251,18 @@ export class PortfolioService {
         if (this.activePortfolioId === 'GLOBAL') {
             return { id: 'GLOBAL', name: 'Tous les portefeuilles (Global)', color: '#4f46e5' };
         }
-        return this.portfolios.find(p => p.id === this.activePortfolioId) || this.portfolios[0];
+        return this.portfolios.find((p) => p.id === this.activePortfolioId) || this.portfolios[0];
     }
 
     getPortfolioById(id) {
-        return this.portfolios.find(p => p.id === id) || { name: 'Inconnu', color: '#6b7280' };
+        return this.portfolios.find((p) => p.id === id) || { name: 'Inconnu', color: '#6b7280' };
     }
 
     getFilteredTrades() {
         if (this.activePortfolioId === 'GLOBAL') {
             return [...this.trades];
         }
-        return this.trades.filter(t => t.portfolioId === this.activePortfolioId);
+        return this.trades.filter((t) => t.portfolioId === this.activePortfolioId);
     }
 
     getSortedTrades() {
@@ -241,27 +279,48 @@ export class PortfolioService {
     }
 
     async refreshPrices() {
-        const uniqueSymbols = [...new Set(this.trades.map(t => t.symbol).filter(s => !s.startsWith('$') && s !== '$FEE'))];
+        const uniqueSymbols = [
+            ...new Set(
+                this.trades.map((t) => t.symbol).filter((s) => !s.startsWith('$') && s !== '$FEE')
+            ),
+        ];
         this.marketPrices = {};
 
-        await Promise.all(uniqueSymbols.map(async (sym) => {
-            this.marketPrices[sym] = await APIService.getCurrentPrice(sym);
-        }));
+        await Promise.all(
+            uniqueSymbols.map(async (sym) => {
+                this.marketPrices[sym] = await APIService.getCurrentPrice(sym);
+            })
+        );
 
         this.fxRates = await APIService.getExchangeRates();
         this.fxRate = this.fxRates.EUR || 1.08;
 
-        const earliestDate = this.getFirstTradeDate() || new Date(Date.now() - 365 * 24 * 3600 * 1000);
+        const earliestDate =
+            this.getFirstTradeDate() || new Date(Date.now() - 365 * 24 * 3600 * 1000);
         const today = new Date();
 
-        await Promise.all(uniqueSymbols.map(async (sym) => {
-            const symTrades = this.trades.filter(t => t.symbol === sym && t.type === 'BUY').sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime());
-            const anchorBuyPrice = symTrades.length > 0 ? symTrades[0].price : (this.marketPrices[sym] || 100);
-            const currentPrice = this.marketPrices[sym] || anchorBuyPrice;
+        await Promise.all(
+            uniqueSymbols.map(async (sym) => {
+                const symTrades = this.trades
+                    .filter((t) => t.symbol === sym && t.type === 'BUY')
+                    .sort(
+                        (a, b) =>
+                            Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime()
+                    );
+                const anchorBuyPrice =
+                    symTrades.length > 0 ? symTrades[0].price : this.marketPrices[sym] || 100;
+                const currentPrice = this.marketPrices[sym] || anchorBuyPrice;
 
-            const dailyPrices = await APIService.getDailyHistory(sym, earliestDate, today, anchorBuyPrice, currentPrice);
-            this.dailyPriceCache[sym] = dailyPrices;
-        }));
+                const dailyPrices = await APIService.getDailyHistory(
+                    sym,
+                    earliestDate,
+                    today,
+                    anchorBuyPrice,
+                    currentPrice
+                );
+                this.dailyPriceCache[sym] = dailyPrices;
+            })
+        );
 
         emit('portfolio-updated');
     }
@@ -282,7 +341,7 @@ export class PortfolioService {
 
         if (symPrices) {
             const availableDates = Object.keys(symPrices).sort();
-            const priorDates = availableDates.filter(d => d <= dateStr);
+            const priorDates = availableDates.filter((d) => d <= dateStr);
             if (priorDates.length > 0) {
                 return symPrices[priorDates[priorDates.length - 1]];
             }
@@ -305,24 +364,27 @@ export class PortfolioService {
 
         let portfolioId = tradeData.portfolioId;
         if (!portfolioId || portfolioId === 'GLOBAL') {
-            portfolioId = this.activePortfolioId === 'GLOBAL'
-                ? (this.portfolios[0] ? this.portfolios[0].id : null)
-                : this.activePortfolioId;
+            portfolioId =
+                this.activePortfolioId === 'GLOBAL'
+                    ? this.portfolios[0]
+                        ? this.portfolios[0].id
+                        : null
+                    : this.activePortfolioId;
         }
 
         if (type === 'DEPOSIT' || type === 'WITHDRAWAL') {
             symbol = '$CASH';
-            amount = amount > 0 ? amount : (qty * price || qty || price || 0);
+            amount = amount > 0 ? amount : qty * price || qty || price || 0;
             qty = amount;
             price = 1.0;
         } else if (type === 'DIVIDEND') {
             symbol = symbol || '$CASH';
-            amount = amount > 0 ? amount : (qty * price || price || 0);
+            amount = amount > 0 ? amount : qty * price || price || 0;
             qty = 1;
             price = amount;
         } else if (type === 'FEE') {
             symbol = '$FEE';
-            amount = amount > 0 ? amount : (qty * price || price || 0);
+            amount = amount > 0 ? amount : qty * price || price || 0;
             qty = 1;
             price = amount;
         } else {
@@ -334,12 +396,23 @@ export class PortfolioService {
         const nativeCurrency = Utils.getCurrency(symbol);
         let fxRate = tradeData.fxRate != null ? Number(tradeData.fxRate) : null;
         if (!(fxRate > 0)) {
-            fxRate = nativeCurrency === 'USD'
-                ? 1
-                : ((this.fxRates && this.fxRates[nativeCurrency]) || null);
+            fxRate =
+                nativeCurrency === 'USD'
+                    ? 1
+                    : (this.fxRates && this.fxRates[nativeCurrency]) || null;
         }
 
-        return { type, symbol, qty, price, amount, fees, fxRate, date: normalizedDate, portfolioId };
+        return {
+            type,
+            symbol,
+            qty,
+            price,
+            amount,
+            fees,
+            fxRate,
+            date: normalizedDate,
+            portfolioId,
+        };
     }
 
     validateTrade(n, excludeTradeId) {
@@ -358,13 +431,19 @@ export class PortfolioService {
 
             if (n.type === 'SELL' && n.symbol) {
                 const held = this.trades
-                    .filter(t => t.id !== excludeTradeId && t.symbol === n.symbol
-                        && (t.type === 'BUY' || t.type === 'SELL')
-                        && t.portfolioId === n.portfolioId
-                        && t.date <= n.date)
+                    .filter(
+                        (t) =>
+                            t.id !== excludeTradeId &&
+                            t.symbol === n.symbol &&
+                            (t.type === 'BUY' || t.type === 'SELL') &&
+                            t.portfolioId === n.portfolioId &&
+                            t.date <= n.date
+                    )
                     .reduce((q, t) => q + (t.type === 'BUY' ? t.qty : -t.qty), 0);
                 if (n.qty > held + 0.0001) {
-                    errors.push(`Quantité vendue (${n.qty}) supérieure à la quantité détenue à cette date (${held})`);
+                    errors.push(
+                        `Quantité vendue (${n.qty}) supérieure à la quantité détenue à cette date (${held})`
+                    );
                 }
             }
         } else if (['DEPOSIT', 'WITHDRAWAL', 'DIVIDEND', 'FEE'].includes(n.type)) {
@@ -385,9 +464,14 @@ export class PortfolioService {
             .insert({
                 user_id: this.userId,
                 portfolio_id: n.portfolioId,
-                type: n.type, symbol: n.symbol, qty: n.qty, price: n.price, amount: n.amount, fees: n.fees,
+                type: n.type,
+                symbol: n.symbol,
+                qty: n.qty,
+                price: n.price,
+                amount: n.amount,
+                fees: n.fees,
                 fx_rate: n.fxRate,
-                date: n.date
+                date: n.date,
             })
             .select()
             .single();
@@ -403,7 +487,7 @@ export class PortfolioService {
             amount: Number(data.amount),
             fees: Number(data.fees) || 0,
             fxRate: Number(data.fx_rate) || null,
-            date: data.date
+            date: data.date,
         };
 
         this.trades.push(newTrade);
@@ -419,9 +503,14 @@ export class PortfolioService {
             .from('trades')
             .update({
                 portfolio_id: n.portfolioId,
-                type: n.type, symbol: n.symbol, qty: n.qty, price: n.price, amount: n.amount, fees: n.fees,
+                type: n.type,
+                symbol: n.symbol,
+                qty: n.qty,
+                price: n.price,
+                amount: n.amount,
+                fees: n.fees,
                 fx_rate: n.fxRate,
-                date: n.date
+                date: n.date,
             })
             .eq('id', id)
             .select()
@@ -438,10 +527,10 @@ export class PortfolioService {
             amount: Number(data.amount),
             fees: Number(data.fees) || 0,
             fxRate: Number(data.fx_rate) || null,
-            date: data.date
+            date: data.date,
         };
 
-        const idx = this.trades.findIndex(t => t.id === id);
+        const idx = this.trades.findIndex((t) => t.id === id);
         if (idx !== -1) this.trades[idx] = updatedTrade;
 
         this.refreshPrices();
@@ -452,26 +541,31 @@ export class PortfolioService {
         const { error } = await db().from('trades').delete().eq('id', id);
         if (error) throw error;
 
-        this.trades = this.trades.filter(t => t.id !== id);
+        this.trades = this.trades.filter((t) => t.id !== id);
         this.refreshPrices();
     }
 
     async addTradesBulk(tradesDataArray) {
-        const rows = tradesDataArray.map(td => {
+        const rows = tradesDataArray.map((td) => {
             const n = this.normalizeTradeInput(td);
             return {
                 user_id: this.userId,
                 portfolio_id: n.portfolioId,
-                type: n.type, symbol: n.symbol, qty: n.qty, price: n.price, amount: n.amount, fees: n.fees,
+                type: n.type,
+                symbol: n.symbol,
+                qty: n.qty,
+                price: n.price,
+                amount: n.amount,
+                fees: n.fees,
                 fx_rate: n.fxRate,
-                date: n.date
+                date: n.date,
             };
         });
 
         const { data, error } = await db().from('trades').insert(rows).select();
         if (error) throw error;
 
-        const newTrades = data.map(d => ({
+        const newTrades = data.map((d) => ({
             id: d.id,
             portfolioId: d.portfolio_id,
             type: d.type,
@@ -481,7 +575,7 @@ export class PortfolioService {
             amount: Number(d.amount),
             fees: Number(d.fees) || 0,
             fxRate: Number(d.fx_rate) || null,
-            date: d.date
+            date: d.date,
         }));
 
         this.trades.push(...newTrades);
@@ -490,18 +584,41 @@ export class PortfolioService {
     }
 
     exportToCSV() {
-        const headers = ['date', 'type', 'symbol', 'qty', 'price', 'currency', 'fees', 'amount', 'portfolio'];
+        const headers = [
+            'date',
+            'type',
+            'symbol',
+            'qty',
+            'price',
+            'currency',
+            'fees',
+            'amount',
+            'portfolio',
+        ];
         const lines = [headers.join(';')];
 
-        this.trades.slice().sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime()).forEach(t => {
-            const port = this.getPortfolioById(t.portfolioId);
-            const currency = Utils.getCurrency(t.symbol);
-            lines.push([
-                t.date, t.type, t.symbol,
-                Utils.csvNumber(t.qty), Utils.csvNumber(t.price), currency, Utils.csvNumber(t.fees || 0), Utils.csvNumber(t.amount),
-                port.name
-            ].map(Utils.csvCell).join(';'));
-        });
+        this.trades
+            .slice()
+            .sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime())
+            .forEach((t) => {
+                const port = this.getPortfolioById(t.portfolioId);
+                const currency = Utils.getCurrency(t.symbol);
+                lines.push(
+                    [
+                        t.date,
+                        t.type,
+                        t.symbol,
+                        Utils.csvNumber(t.qty),
+                        Utils.csvNumber(t.price),
+                        currency,
+                        Utils.csvNumber(t.fees || 0),
+                        Utils.csvNumber(t.amount),
+                        port.name,
+                    ]
+                        .map(Utils.csvCell)
+                        .join(';')
+                );
+            });
 
         return lines.join('\n');
     }
@@ -512,7 +629,9 @@ export class PortfolioService {
 
         const errors = [];
         const portfolioNameToId = {};
-        this.portfolios.forEach(p => { portfolioNameToId[p.name.toLowerCase()] = p.id; });
+        this.portfolios.forEach((p) => {
+            portfolioNameToId[p.name.toLowerCase()] = p.id;
+        });
 
         for (const row of rows) {
             const pname = (row.portfolio || '').trim();
@@ -522,9 +641,10 @@ export class PortfolioService {
             }
         }
 
-        const defaultPortfolioId = this.activePortfolioId !== 'GLOBAL'
-            ? this.activePortfolioId
-            : (this.portfolios[0] && this.portfolios[0].id);
+        const defaultPortfolioId =
+            this.activePortfolioId !== 'GLOBAL'
+                ? this.activePortfolioId
+                : this.portfolios[0] && this.portfolios[0].id;
 
         const tradesData = [];
         rows.forEach((row, idx) => {
@@ -546,7 +666,9 @@ export class PortfolioService {
                 }
 
                 const pname = (row.portfolio || '').trim();
-                const portfolioId = pname ? portfolioNameToId[pname.toLowerCase()] : defaultPortfolioId;
+                const portfolioId = pname
+                    ? portfolioNameToId[pname.toLowerCase()]
+                    : defaultPortfolioId;
 
                 const rowTrade = {
                     portfolioId,
@@ -556,7 +678,7 @@ export class PortfolioService {
                     price,
                     amount: Utils.parseCSVNumber(row.amount),
                     fees,
-                    date: row.date
+                    date: row.date,
                 };
 
                 const normalized = this.normalizeTradeInput(rowTrade);
@@ -576,22 +698,33 @@ export class PortfolioService {
     getQtyHeldOnDate(symbol, dateStr) {
         let qty = 0;
         this.trades
-            .filter(t => t.symbol === symbol && t.date <= dateStr && (t.type === 'BUY' || t.type === 'SELL'))
-            .forEach(t => { qty += t.type === 'BUY' ? t.qty : -t.qty; });
+            .filter(
+                (t) =>
+                    t.symbol === symbol &&
+                    t.date <= dateStr &&
+                    (t.type === 'BUY' || t.type === 'SELL')
+            )
+            .forEach((t) => {
+                qty += t.type === 'BUY' ? t.qty : -t.qty;
+            });
         return qty;
     }
 
     async syncDividends() {
-        const symbols = [...new Set(this.trades.filter(t => t.type === 'BUY').map(t => t.symbol))];
+        const symbols = [
+            ...new Set(this.trades.filter((t) => t.type === 'BUY').map((t) => t.symbol)),
+        ];
         const existingKeys = new Set(
-            this.trades.filter(t => t.type === 'DIVIDEND').map(t => `${t.symbol}_${t.date}`)
+            this.trades.filter((t) => t.type === 'DIVIDEND').map((t) => `${t.symbol}_${t.date}`)
         );
 
         let added = 0;
         for (const symbol of symbols) {
             const buys = this.trades
-                .filter(t => t.symbol === symbol && t.type === 'BUY')
-                .sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime());
+                .filter((t) => t.symbol === symbol && t.type === 'BUY')
+                .sort(
+                    (a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime()
+                );
             if (!buys.length) continue;
 
             const from = buys[0].date;
@@ -608,7 +741,7 @@ export class PortfolioService {
                     type: 'DIVIDEND',
                     symbol,
                     amount: qty * ev.amountPerShare,
-                    date: ev.date
+                    date: ev.date,
                 });
                 existingKeys.add(`${symbol}_${ev.date}`);
                 added++;
@@ -634,7 +767,9 @@ export class PortfolioService {
         const fromRate = usdPerUnit(from);
         const targetRate = usdPerUnit(target);
         if (fromRate === null || targetRate === null) {
-            console.warn(`convertCurrency: taux manquant pour ${from}->${target}, valeur non convertie`);
+            console.warn(
+                `convertCurrency: taux manquant pour ${from}->${target}, valeur non convertie`
+            );
             return val;
         }
         return val * (fromRate / targetRate);
@@ -656,7 +791,7 @@ export class PortfolioService {
         const holdings = {};
         const firstTradeDate = this.getFirstTradeDate();
 
-        sortedTrades.forEach(trade => {
+        sortedTrades.forEach((trade) => {
             const currency = Utils.getCurrency(trade.symbol);
             const toUSD = (val) => this.convertCurrency(val, currency, 'USD');
 
@@ -681,17 +816,27 @@ export class PortfolioService {
                     // Base de cout = prix des parts uniquement ; les frais sont suivis a part
                     // (totalFeesUSD) et deduits une seule fois du P&L total.
                     const sharesCostUSD = toUSD(trade.qty * trade.price);
-                    displayCashUSD -= (sharesCostUSD + feeUSD);
+                    displayCashUSD -= sharesCostUSD + feeUSD;
                     totalFeesUSD += feeUSD;
                     totalBuyCostUSD += sharesCostUSD + feeUSD;
 
                     if (!holdings[trade.symbol]) {
-                        holdings[trade.symbol] = { qty: 0, totalCostUSD: 0, avgPriceNative: 0, currency, portfolios: new Set() };
+                        holdings[trade.symbol] = {
+                            qty: 0,
+                            totalCostUSD: 0,
+                            avgPriceNative: 0,
+                            currency,
+                            portfolios: new Set(),
+                        };
                     }
                     const h = holdings[trade.symbol];
                     h.qty += trade.qty;
                     h.totalCostUSD += sharesCostUSD;
-                    h.avgPriceNative = this.convertCurrency(h.totalCostUSD / h.qty, 'USD', currency);
+                    h.avgPriceNative = this.convertCurrency(
+                        h.totalCostUSD / h.qty,
+                        'USD',
+                        currency
+                    );
                     h.portfolios.add(trade.portfolioId);
                     break;
                 }
@@ -737,52 +882,56 @@ export class PortfolioService {
         let holdingsTotalCostUSD = 0;
         let unrealizedPnLUSD = 0;
 
-        const holdingsList = Object.entries(holdings).map(([symbol, data]) => {
-            if (data.qty < 0.0001) return null;
+        const holdingsList = Object.entries(holdings)
+            .map(([symbol, data]) => {
+                if (data.qty < 0.0001) return null;
 
-            const currentPriceNative = this.marketPrices[symbol] || data.avgPriceNative;
-            const valueNative = data.qty * currentPriceNative;
-            const costNative = data.qty * data.avgPriceNative;
-            const gainNative = valueNative - costNative;
-            const gainPercent = costNative > 0 ? (gainNative / costNative) * 100 : 0;
+                const currentPriceNative = this.marketPrices[symbol] || data.avgPriceNative;
+                const valueNative = data.qty * currentPriceNative;
+                const costNative = data.qty * data.avgPriceNative;
+                const gainNative = valueNative - costNative;
+                const gainPercent = costNative > 0 ? (gainNative / costNative) * 100 : 0;
 
-            const valueUSD = this.convertCurrency(valueNative, data.currency, 'USD');
-            const costUSD = this.convertCurrency(costNative, data.currency, 'USD');
-            const gainUSD = valueUSD - costUSD;
+                const valueUSD = this.convertCurrency(valueNative, data.currency, 'USD');
+                const costUSD = this.convertCurrency(costNative, data.currency, 'USD');
+                const gainUSD = valueUSD - costUSD;
 
-            holdingsTotalValueUSD += valueUSD;
-            holdingsTotalCostUSD += costUSD;
-            unrealizedPnLUSD += gainUSD;
+                holdingsTotalValueUSD += valueUSD;
+                holdingsTotalCostUSD += costUSD;
+                unrealizedPnLUSD += gainUSD;
 
-            return {
-                symbol,
-                qty: data.qty,
-                avgPrice: data.avgPriceNative,
-                currentPrice: currentPriceNative,
-                valueNative,
-                costNative,
-                gainNative,
-                gainPercent,
-                valueUSD,
-                currency: data.currency,
-                weightPercent: 0,
-                portfolios: Array.from(data.portfolios || [])
-            };
-        }).filter(Boolean);
+                return {
+                    symbol,
+                    qty: data.qty,
+                    avgPrice: data.avgPriceNative,
+                    currentPrice: currentPriceNative,
+                    valueNative,
+                    costNative,
+                    gainNative,
+                    gainPercent,
+                    valueUSD,
+                    currency: data.currency,
+                    weightPercent: 0,
+                    portfolios: Array.from(data.portfolios || []),
+                };
+            })
+            .filter(Boolean);
 
-        holdingsList.forEach(h => {
-            h.weightPercent = holdingsTotalValueUSD > 0 ? (h.valueUSD / holdingsTotalValueUSD) * 100 : 0;
+        holdingsList.forEach((h) => {
+            h.weightPercent =
+                holdingsTotalValueUSD > 0 ? (h.valueUSD / holdingsTotalValueUSD) * 100 : 0;
         });
 
         const totalPortfolioValueUSD = displayCashUSD + holdingsTotalValueUSD;
         // Base de rendement = pic historique de capital net apporte (jamais 0/negatif meme si
         // les retraits ont depasse les depots), repli sur le cout d'achat cumule.
-        const netInvestedCapitalUSD = peakNetContribUSD > 0
-            ? peakNetContribUSD
-            : (totalBuyCostUSD > 0 ? totalBuyCostUSD : 0);
+        const netInvestedCapitalUSD =
+            peakNetContribUSD > 0 ? peakNetContribUSD : totalBuyCostUSD > 0 ? totalBuyCostUSD : 0;
         const totalPnLUSD = unrealizedPnLUSD + realizedPnLUSD + totalDividendsUSD - totalFeesUSD;
-        const totalReturnPercent = netInvestedCapitalUSD > 0 ? (totalPnLUSD / netInvestedCapitalUSD) * 100 : 0;
-        const unrealizedPercent = holdingsTotalCostUSD > 0 ? (unrealizedPnLUSD / holdingsTotalCostUSD) * 100 : 0;
+        const totalReturnPercent =
+            netInvestedCapitalUSD > 0 ? (totalPnLUSD / netInvestedCapitalUSD) * 100 : 0;
+        const unrealizedPercent =
+            holdingsTotalCostUSD > 0 ? (unrealizedPnLUSD / holdingsTotalCostUSD) * 100 : 0;
 
         const toTarget = (usdVal) => this.convertCurrency(usdVal, 'USD', targetCurrency);
 
@@ -804,7 +953,7 @@ export class PortfolioService {
             totalReturnPercent,
             holdings: holdingsList,
             firstTradeDate,
-            fxRate: FX
+            fxRate: FX,
         };
     }
 
@@ -816,20 +965,27 @@ export class PortfolioService {
         yesterday.setDate(today.getDate() - 1);
         const yesterdayStr = Utils.getDateString(yesterday);
 
-        const movers = stats.holdings.map(h => {
-            // Sans historique reel, la cloture de la veille est un point de marche
-            // aleatoire : annoncer "+1,87 % sur la seance" serait une invention.
-            if (APIService.isSyntheticHistory(this.dailyPriceCache[h.symbol])) return null;
-            const currentPrice = h.currentPrice;
-            const prevClose = this.getPriceOnDate(h.symbol, yesterdayStr, currentPrice);
-            const dayChangePercent = prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
-            return { symbol: h.symbol, currency: h.currency, currentPrice, dayChangePercent };
-        }).filter(m => m && Math.abs(m.dayChangePercent) > 0.001);
+        const movers = stats.holdings
+            .map((h) => {
+                // Sans historique reel, la cloture de la veille est un point de marche
+                // aleatoire : annoncer "+1,87 % sur la seance" serait une invention.
+                if (APIService.isSyntheticHistory(this.dailyPriceCache[h.symbol])) return null;
+                const currentPrice = h.currentPrice;
+                const prevClose = this.getPriceOnDate(h.symbol, yesterdayStr, currentPrice);
+                const dayChangePercent =
+                    prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
+                return { symbol: h.symbol, currency: h.currency, currentPrice, dayChangePercent };
+            })
+            .filter((m) => m && Math.abs(m.dayChangePercent) > 0.001);
 
-        const gainers = movers.filter(m => m.dayChangePercent > 0)
-            .sort((a, b) => b.dayChangePercent - a.dayChangePercent).slice(0, 3);
-        const losers = movers.filter(m => m.dayChangePercent < 0)
-            .sort((a, b) => a.dayChangePercent - b.dayChangePercent).slice(0, 3);
+        const gainers = movers
+            .filter((m) => m.dayChangePercent > 0)
+            .sort((a, b) => b.dayChangePercent - a.dayChangePercent)
+            .slice(0, 3);
+        const losers = movers
+            .filter((m) => m.dayChangePercent < 0)
+            .sort((a, b) => a.dayChangePercent - b.dayChangePercent)
+            .slice(0, 3);
 
         return { gainers, losers };
     }
@@ -841,20 +997,30 @@ export class PortfolioService {
         monthAgo.setDate(today.getDate() - 30);
         const monthAgoStr = Utils.getDateString(monthAgo);
 
-        const movers = stats.holdings.map(h => {
-            // Idem : pas de variation sur 30 jours a partir d'une serie simulee.
-            if (APIService.isSyntheticHistory(this.dailyPriceCache[h.symbol])) return null;
-            const currentPrice = h.currentPrice;
-            const pastPrice = this.getPriceOnDate(h.symbol, monthAgoStr, currentPrice);
-            const changePercent = pastPrice > 0 ? ((currentPrice - pastPrice) / pastPrice) * 100 : 0;
-            return { symbol: h.symbol, changePercent, weightPercent: h.weightPercent };
-        }).filter(m => m && Math.abs(m.changePercent) > 0.01);
+        const movers = stats.holdings
+            .map((h) => {
+                // Idem : pas de variation sur 30 jours a partir d'une serie simulee.
+                if (APIService.isSyntheticHistory(this.dailyPriceCache[h.symbol])) return null;
+                const currentPrice = h.currentPrice;
+                const pastPrice = this.getPriceOnDate(h.symbol, monthAgoStr, currentPrice);
+                const changePercent =
+                    pastPrice > 0 ? ((currentPrice - pastPrice) / pastPrice) * 100 : 0;
+                return { symbol: h.symbol, changePercent, weightPercent: h.weightPercent };
+            })
+            .filter((m) => m && Math.abs(m.changePercent) > 0.01);
 
-        const topGainers = movers.filter(m => m.changePercent > 0).sort((a, b) => b.changePercent - a.changePercent).slice(0, 3);
-        const topLosers = movers.filter(m => m.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent).slice(0, 3);
+        const topGainers = movers
+            .filter((m) => m.changePercent > 0)
+            .sort((a, b) => b.changePercent - a.changePercent)
+            .slice(0, 3);
+        const topLosers = movers
+            .filter((m) => m.changePercent < 0)
+            .sort((a, b) => a.changePercent - b.changePercent)
+            .slice(0, 3);
 
         const timeline = this.getHistoricalTimeline('1M', 'PERF', targetCurrency);
-        const portfolioPercent = (timeline && timeline.rangeStats && timeline.rangeStats['1M']) || 0;
+        const portfolioPercent =
+            (timeline && timeline.rangeStats && timeline.rangeStats['1M']) || 0;
 
         return { portfolioPercent, topGainers, topLosers };
     }
@@ -872,7 +1038,9 @@ export class PortfolioService {
         for (const h of stats.holdings) {
             if (h.symbol.startsWith('$')) continue;
 
-            const from = Utils.getDateString(new Date(today.getFullYear() - 2, today.getMonth(), today.getDate()));
+            const from = Utils.getDateString(
+                new Date(today.getFullYear() - 2, today.getMonth(), today.getDate())
+            );
             const to = Utils.getDateString(today);
             const events = await APIService.getDividends(h.symbol, from, to);
             if (events.length < 1) continue;
@@ -883,7 +1051,10 @@ export class PortfolioService {
             let intervalDays = 91; // repli trimestriel si un seul versement connu
             if (sorted.length >= 2) {
                 const prev = sorted[sorted.length - 2];
-                intervalDays = Utils.daysBetween(Utils.parseDate(prev.date), Utils.parseDate(last.date));
+                intervalDays = Utils.daysBetween(
+                    Utils.parseDate(prev.date),
+                    Utils.parseDate(last.date)
+                );
             }
 
             const estDate = Utils.parseDate(last.date);
@@ -895,7 +1066,8 @@ export class PortfolioService {
                     symbol: h.symbol,
                     estimatedDate: Utils.getDateString(estDate),
                     amount: this.convertCurrency(amountNative, h.currency, targetCurrency),
-                    yieldPercent: h.currentPrice > 0 ? (last.amountPerShare / h.currentPrice) * 100 : 0
+                    yieldPercent:
+                        h.currentPrice > 0 ? (last.amountPerShare / h.currentPrice) * 100 : 0,
                 });
             }
         }
@@ -919,7 +1091,7 @@ export class PortfolioService {
                 date: data.date,
                 hour: data.hour,
                 epsEstimate: data.epsEstimate,
-                revenueEstimate: data.revenueEstimate
+                revenueEstimate: data.revenueEstimate,
             });
         }
 
@@ -928,14 +1100,17 @@ export class PortfolioService {
     }
 
     computeProfitAsOf(dateStr, targetCurrency = 'USD') {
-        const trades = this.getSortedTrades().filter(t => t.date <= dateStr);
+        const trades = this.getSortedTrades().filter((t) => t.date <= dateStr);
 
-        let realizedPnLUSD = 0, dividendsUSD = 0, feesUSD = 0;
+        let realizedPnLUSD = 0,
+            dividendsUSD = 0,
+            feesUSD = 0;
         let totalBuyUSD = 0;
-        let runningNetContribUSD = 0, peakNetContribUSD = 0;
+        let runningNetContribUSD = 0,
+            peakNetContribUSD = 0;
         const holdings = {};
 
-        trades.forEach(trade => {
+        trades.forEach((trade) => {
             const currency = Utils.getCurrency(trade.symbol);
             const toUSD = (val) => this.convertCurrency(val, currency, 'USD');
 
@@ -972,7 +1147,10 @@ export class PortfolioService {
                         realizedPnLUSD += grossRevenueUSD - costSoldUSD;
                         h.qty -= sellQty;
                         h.costUSD -= costSoldUSD;
-                        if (h.qty <= 0.00001) { h.qty = 0; h.costUSD = 0; }
+                        if (h.qty <= 0.00001) {
+                            h.qty = 0;
+                            h.costUSD = 0;
+                        }
                     }
                     break;
                 }
@@ -987,7 +1165,8 @@ export class PortfolioService {
             }
         });
 
-        let holdingsValueUSD = 0, holdingsCostUSD = 0;
+        let holdingsValueUSD = 0,
+            holdingsCostUSD = 0;
         Object.entries(holdings).forEach(([symbol, h]) => {
             if (h.qty <= 0.0001) return;
             const currency = Utils.getCurrency(symbol);
@@ -1004,13 +1183,12 @@ export class PortfolioService {
 
         const unrealizedPnLUSD = holdingsValueUSD - holdingsCostUSD;
         const totalPnLUSD = unrealizedPnLUSD + realizedPnLUSD + dividendsUSD - feesUSD;
-        const netInvestedUSD = peakNetContribUSD > 0
-            ? peakNetContribUSD
-            : (totalBuyUSD > 0 ? totalBuyUSD : 0);
+        const netInvestedUSD =
+            peakNetContribUSD > 0 ? peakNetContribUSD : totalBuyUSD > 0 ? totalBuyUSD : 0;
 
         return {
             totalPnL: this.convertCurrency(totalPnLUSD, 'USD', targetCurrency),
-            netInvested: this.convertCurrency(netInvestedUSD, 'USD', targetCurrency)
+            netInvested: this.convertCurrency(netInvestedUSD, 'USD', targetCurrency),
         };
     }
 
@@ -1039,10 +1217,14 @@ export class PortfolioService {
             const startStr = fromStr < firstTradeStr ? firstTradeStr : fromStr;
             const totalDays = Math.max(1, Utils.daysBetween(startStr, toStr));
             let basis = startingCapital;
-            this.getSortedTrades().forEach(t => {
+            this.getSortedTrades().forEach((t) => {
                 if (t.date <= startStr || t.date > toStr) return;
                 if (t.type !== 'DEPOSIT' && t.type !== 'WITHDRAWAL') return;
-                const amount = this.convertCurrency(t.amount, Utils.getCurrency(t.symbol), targetCurrency);
+                const amount = this.convertCurrency(
+                    t.amount,
+                    Utils.getCurrency(t.symbol),
+                    targetCurrency
+                );
                 const remaining = Utils.daysBetween(t.date, toStr) / totalDays;
                 basis += (t.type === 'DEPOSIT' ? amount : -amount) * remaining;
             });
@@ -1082,15 +1264,20 @@ export class PortfolioService {
         } else if (range === 'YTD') {
             start = new Date(today.getFullYear(), 0, 1, 0, 0, 0, 0);
         } else if (range === '1M') {
-            start = new Date(today); start.setDate(today.getDate() - 30);
+            start = new Date(today);
+            start.setDate(today.getDate() - 30);
         } else if (range === '3M') {
-            start = new Date(today); start.setDate(today.getDate() - 90);
+            start = new Date(today);
+            start.setDate(today.getDate() - 90);
         } else if (range === '6M') {
-            start = new Date(today); start.setDate(today.getDate() - 180);
+            start = new Date(today);
+            start.setDate(today.getDate() - 180);
         } else if (range === '1Y') {
-            start = new Date(today); start.setDate(today.getDate() - 365);
+            start = new Date(today);
+            start.setDate(today.getDate() - 365);
         } else {
-            start = new Date(today); start.setDate(today.getDate() - 90);
+            start = new Date(today);
+            start.setDate(today.getDate() - 90);
         }
         start.setHours(0, 0, 0, 0);
         return start;
@@ -1126,10 +1313,10 @@ export class PortfolioService {
             currDate.setHours(0, 0, 0, 0);
             const dateStr = Utils.getDateString(currDate);
 
-            const tradesUpToDate = sortedTrades.filter(t => t.date <= dateStr);
+            const tradesUpToDate = sortedTrades.filter((t) => t.date <= dateStr);
             const dayHoldings = {};
 
-            tradesUpToDate.forEach(trade => {
+            tradesUpToDate.forEach((trade) => {
                 const currency = Utils.getCurrency(trade.symbol);
                 const toUSD = (v) => this.convertCurrency(v, currency, 'USD');
 
@@ -1166,15 +1353,23 @@ export class PortfolioService {
                 }
             });
 
-            const dayStockValueTarget = this.convertCurrency(dayHoldingsValueUSD, 'USD', targetCurrency);
+            const dayStockValueTarget = this.convertCurrency(
+                dayHoldingsValueUSD,
+                'USD',
+                targetCurrency
+            );
 
             // Flux du jour : ce qui entre (achats) ou sort (ventes) des positions.
             // Les frais en sont exclus, ils ne changent pas la valeur de marche.
             let dayFlowUSD = 0;
-            tradesUpToDate.forEach(trade => {
+            tradesUpToDate.forEach((trade) => {
                 if (trade.date !== dateStr) return;
                 if (trade.type !== 'BUY' && trade.type !== 'SELL') return;
-                const flow = this.convertCurrency(trade.qty * trade.price, Utils.getCurrency(trade.symbol), 'USD');
+                const flow = this.convertCurrency(
+                    trade.qty * trade.price,
+                    Utils.getCurrency(trade.symbol),
+                    'USD'
+                );
                 dayFlowUSD += trade.type === 'BUY' ? flow : -flow;
             });
             fullHoldingsUSD.push(dayHoldingsValueUSD);
@@ -1184,9 +1379,10 @@ export class PortfolioService {
             fullRawDates.push(dateStr);
             fullValues.push(dayStockValueTarget);
 
-            const perfPct = dayHoldingsCostUSD > 0
-                ? ((dayHoldingsValueUSD - dayHoldingsCostUSD) / dayHoldingsCostUSD) * 100
-                : 0;
+            const perfPct =
+                dayHoldingsCostUSD > 0
+                    ? ((dayHoldingsValueUSD - dayHoldingsCostUSD) / dayHoldingsCostUSD) * 100
+                    : 0;
             fullPerfValues.push(perfPct);
 
             fullProfitValues.push(this.computeProfitAsOf(dateStr, targetCurrency).totalPnL);
@@ -1198,7 +1394,7 @@ export class PortfolioService {
         // soustraction de jours. Chercher la date directement dans fullRawDates est fiable dans tous les cas.
         const indexFromDate = (date) => {
             const dStr = Utils.getDateString(date);
-            const idx = fullRawDates.findIndex(d => d >= dStr);
+            const idx = fullRawDates.findIndex((d) => d >= dStr);
             return idx === -1 ? fullRawDates.length - 1 : idx;
         };
 
@@ -1220,7 +1416,7 @@ export class PortfolioService {
         const profitRangeStats = {};
         const ranges = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 
-        ranges.forEach(r => {
+        ranges.forEach((r) => {
             const rStart = this.resolveRangeStart(r, today, firstTradeDate);
             const rStartIndex = r === 'ALL' ? 0 : indexFromDate(rStart);
             const startVal = fullValues[rStartIndex] || 0;
@@ -1230,7 +1426,7 @@ export class PortfolioService {
             // neutralise des apports et retraits (cf. twrIndex).
             const twrStart = twrIndex[rStartIndex];
             const twrEnd = twrIndex[twrIndex.length - 1];
-            rangeStats[r] = (twrStart > 0 && twrEnd != null) ? (twrEnd / twrStart - 1) * 100 : 0;
+            rangeStats[r] = twrStart > 0 && twrEnd != null ? (twrEnd / twrStart - 1) * 100 : 0;
             valueRangeStats[r] = endVal - startVal;
 
             const profitStartVal = fullProfitValues[rStartIndex] || 0;
@@ -1251,7 +1447,7 @@ export class PortfolioService {
             profitValues: fullProfitValues.slice(sliceStartIndex),
             rangeStats,
             valueRangeStats,
-            profitRangeStats
+            profitRangeStats,
         };
     }
 }

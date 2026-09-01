@@ -15,10 +15,10 @@ export const charts = {
         const sign = monthly.portfolioPercent >= 0 ? '+' : '';
         let summary = `Performance du portefeuille sur les 30 derniers jours : ${sign}${monthly.portfolioPercent.toFixed(2)}%.`;
         if (monthly.topGainers.length) {
-            summary += ` Meilleure(s) performance(s) : ${monthly.topGainers.map(m => `${m.symbol} (+${m.changePercent.toFixed(2)}%)`).join(', ')}.`;
+            summary += ` Meilleure(s) performance(s) : ${monthly.topGainers.map((m) => `${m.symbol} (+${m.changePercent.toFixed(2)}%)`).join(', ')}.`;
         }
         if (monthly.topLosers.length) {
-            summary += ` Plus forte(s) baisse(s) : ${monthly.topLosers.map(m => `${m.symbol} (${m.changePercent.toFixed(2)}%)`).join(', ')}.`;
+            summary += ` Plus forte(s) baisse(s) : ${monthly.topLosers.map((m) => `${m.symbol} (${m.changePercent.toFixed(2)}%)`).join(', ')}.`;
         }
         return `<div class="insights-summary">${Utils.escapeHtml(summary)}</div>`;
     },
@@ -37,19 +37,21 @@ export const charts = {
             type: 'line',
             data: {
                 labels: [],
-                datasets: [{
-                    label: 'Profit',
-                    data: [],
-                    borderColor: ink.acc,
-                    backgroundColor: gradient,
-                    fill: true,
-                    tension: 0.15,
-                    borderWidth: 2.2,
-                    borderCapStyle: 'round',
-                    borderJoinStyle: 'round',
-                    pointRadius: 0,
-                    pointHoverRadius: 5
-                }]
+                datasets: [
+                    {
+                        label: 'Profit',
+                        data: [],
+                        borderColor: ink.acc,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.15,
+                        borderWidth: 2.2,
+                        borderCapStyle: 'round',
+                        borderJoinStyle: 'round',
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                    },
+                ],
             },
             options: {
                 responsive: true,
@@ -60,12 +62,17 @@ export const charts = {
                         mode: 'index',
                         intersect: false,
                         callbacks: {
-                            label: (ctx) => Utils.formatCurrency(ctx.parsed.y, this.chartState.currency)
-                        }
-                    }
+                            label: (ctx) =>
+                                Utils.formatCurrency(ctx.parsed.y, this.chartState.currency),
+                        },
+                    },
                 },
                 scales: {
-                    x: { grid: { display: false }, border: { display: false }, ticks: { color: ink.tick, font: { size: 11 }, maxTicksLimit: 10 } },
+                    x: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { color: ink.tick, font: { size: 11 }, maxTicksLimit: 10 },
+                    },
                     y: {
                         position: 'right',
                         grid: { color: ink.grid, lineWidth: 1, drawTicks: false },
@@ -73,19 +80,24 @@ export const charts = {
                         ticks: {
                             color: ink.tick,
                             font: { size: 11 },
-                            callback: (value) => Utils.formatCurrency(value, this.chartState.currency)
-                        }
-                    }
+                            callback: (value) =>
+                                Utils.formatCurrency(value, this.chartState.currency),
+                        },
+                    },
                 },
-                interaction: { mode: 'nearest', axis: 'x', intersect: false }
-            }
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            },
         });
     },
 
     renderProfitChart() {
         if (!this.profitChart) return;
         const curr = this.chartState.currency;
-        const timeline = this.service.getHistoricalTimeline(this.chartState.profitRange, 'VALUE', curr);
+        const timeline = this.service.getHistoricalTimeline(
+            this.chartState.profitRange,
+            'VALUE',
+            curr
+        );
 
         this.profitChart.data.labels = timeline.labels;
         this.profitChart.data.datasets[0].data = timeline.profitValues;
@@ -116,16 +128,20 @@ export const charts = {
         const perf = this.service.getYearlyPerformance(curr);
         const rows = perf.ytd ? [perf.ytd, ...perf.years] : perf.years;
 
-        tbody.innerHTML = rows.length ? rows.map(r => {
-            const isPositive = r.profit >= 0;
-            return `
+        tbody.innerHTML = rows.length
+            ? rows
+                  .map((r) => {
+                      const isPositive = r.profit >= 0;
+                      return `
                 <tr>
                     <td style="font-weight:600;">${r.label}</td>
                     <td class="${isPositive ? 'text-green' : 'text-red'}">${Utils.formatPercent(r.percent)}</td>
                     <td class="${isPositive ? 'text-green' : 'text-red'}">${isPositive ? '+' : ''}${Utils.formatCurrency(r.profit, curr)}</td>
                 </tr>
             `;
-        }).join('') : '<tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-secondary);">Aucune donnée.</td></tr>';
+                  })
+                  .join('')
+            : '<tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-secondary);">Aucune donnée.</td></tr>';
     },
 
     initAnalysisCharts() {
@@ -139,8 +155,8 @@ export const charts = {
                     responsive: true,
                     maintainAspectRatio: false,
                     cutout: '65%',
-                    plugins: { legend: { display: false } }
-                }
+                    plugins: { legend: { display: false } },
+                },
             });
         };
 
@@ -169,19 +185,29 @@ export const charts = {
         });
 
         let raf;
-        track.addEventListener('scroll', () => {
-            cancelAnimationFrame(raf);
-            raf = requestAnimationFrame(() => {
-                const mid = track.getBoundingClientRect().left + track.clientWidth / 2;
-                let active = 0, best = Infinity;
-                cards.forEach((c, i) => {
-                    const r = c.getBoundingClientRect();
-                    const d = Math.abs(r.left + r.width / 2 - mid);
-                    if (d < best) { best = d; active = i; }
+        track.addEventListener(
+            'scroll',
+            () => {
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => {
+                    const mid = track.getBoundingClientRect().left + track.clientWidth / 2;
+                    let active = 0,
+                        best = Infinity;
+                    cards.forEach((c, i) => {
+                        const r = c.getBoundingClientRect();
+                        const d = Math.abs(r.left + r.width / 2 - mid);
+                        if (d < best) {
+                            best = d;
+                            active = i;
+                        }
+                    });
+                    Array.from(dotsEl.children).forEach((d, i) =>
+                        d.classList.toggle('active', i === active)
+                    );
                 });
-                Array.from(dotsEl.children).forEach((d, i) => d.classList.toggle('active', i === active));
-            });
-        }, { passive: true });
+            },
+            { passive: true }
+        );
     },
 
     updateDoughnutChart(chart, legendId, totals, emptyLabel, centerConfig) {
@@ -197,16 +223,20 @@ export const charts = {
 
         const legendEl = document.getElementById(legendId);
         if (legendEl) {
-            legendEl.innerHTML = entries.length ? entries.map(([label, v], i) => {
-                const pct = total > 0 ? (v / total) * 100 : 0;
-                return `
+            legendEl.innerHTML = entries.length
+                ? entries
+                      .map(([label, v], i) => {
+                          const pct = total > 0 ? (v / total) * 100 : 0;
+                          return `
                     <li>
                         <span class="dot" style="background:${colors[i]};"></span>
                         <span class="label">${label}</span>
                         <span class="pct">${pct.toFixed(1)}%</span>
                     </li>
                 `;
-            }).join('') : `<li style="color:var(--text-secondary);">${emptyLabel || 'Aucune position active.'}</li>`;
+                      })
+                      .join('')
+                : `<li style="color:var(--text-secondary);">${emptyLabel || 'Aucune position active.'}</li>`;
         }
 
         if (centerConfig && centerConfig.el) {
@@ -228,24 +258,28 @@ export const charts = {
 
         const groupBy = (keyFn) => {
             const totals = {};
-            holdings.forEach(h => {
+            holdings.forEach((h) => {
                 const key = keyFn(h);
                 totals[key] = (totals[key] || 0) + h.valueUSD;
             });
             return totals;
         };
 
-        const byAsset = groupBy(h => h.symbol);
-        const byClass = groupBy(h => Utils.getAssetClass(h.symbol));
-        const byCurrency = groupBy(h => h.currency);
+        const byAsset = groupBy((h) => h.symbol);
+        const byClass = groupBy((h) => Utils.getAssetClass(h.symbol));
+        const byCurrency = groupBy((h) => h.currency);
 
         this.updateDoughnutChart(this.assetChart, 'assetLegend', byAsset, undefined, {
             el: document.getElementById('assetChartCenter'),
             value: Object.keys(byAsset).length,
-            label: Object.keys(byAsset).length > 1 ? 'actifs' : 'actif'
+            label: Object.keys(byAsset).length > 1 ? 'actifs' : 'actif',
         });
-        this.updateDoughnutChart(this.classChart, 'classLegend', byClass, undefined, { el: document.getElementById('classChartCenter') });
-        this.updateDoughnutChart(this.currencyChart, 'currencyLegend', byCurrency, undefined, { el: document.getElementById('currencyChartCenter') });
+        this.updateDoughnutChart(this.classChart, 'classLegend', byClass, undefined, {
+            el: document.getElementById('classChartCenter'),
+        });
+        this.updateDoughnutChart(this.currencyChart, 'currencyLegend', byCurrency, undefined, {
+            el: document.getElementById('currencyChartCenter'),
+        });
 
         this.refreshSectorChart(stats);
     },
@@ -255,20 +289,30 @@ export const charts = {
         const holdings = stats.holdings || [];
         this.sectorCache = this.sectorCache || {};
 
-        const uniqueSymbols = [...new Set(holdings.map(h => h.symbol))].filter(s => !(s in this.sectorCache));
+        const uniqueSymbols = [...new Set(holdings.map((h) => h.symbol))].filter(
+            (s) => !(s in this.sectorCache)
+        );
         if (uniqueSymbols.length) {
-            await Promise.all(uniqueSymbols.map(async sym => {
-                this.sectorCache[sym] = await APIService.getSector(sym);
-            }));
+            await Promise.all(
+                uniqueSymbols.map(async (sym) => {
+                    this.sectorCache[sym] = await APIService.getSector(sym);
+                })
+            );
         }
 
         const totals = {};
-        holdings.forEach(h => {
+        holdings.forEach((h) => {
             const sector = this.sectorCache[h.symbol] || 'Non disponible';
             totals[sector] = (totals[sector] || 0) + h.valueUSD;
         });
 
-        this.updateDoughnutChart(this.sectorChart, 'sectorLegend', totals, 'Secteur indisponible (actions non-US).', { el: document.getElementById('sectorChartCenter') });
+        this.updateDoughnutChart(
+            this.sectorChart,
+            'sectorLegend',
+            totals,
+            'Secteur indisponible (actions non-US).',
+            { el: document.getElementById('sectorChartCenter') }
+        );
     },
 
     initChart() {
@@ -286,19 +330,21 @@ export const charts = {
             type: 'line',
             data: {
                 labels: [],
-                datasets: [{
-                    label: 'Portefeuille',
-                    data: [],
-                    borderColor: ink.up,
-                    backgroundColor: gradient,
-                    fill: true,
-                    tension: 0.15,
-                    borderWidth: 2.2,
-                    borderCapStyle: 'round',
-                    borderJoinStyle: 'round',
-                    pointRadius: 0,
-                    pointHoverRadius: 5
-                }]
+                datasets: [
+                    {
+                        label: 'Portefeuille',
+                        data: [],
+                        borderColor: ink.up,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.15,
+                        borderWidth: 2.2,
+                        borderCapStyle: 'round',
+                        borderJoinStyle: 'round',
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                    },
+                ],
             },
             options: {
                 responsive: true,
@@ -311,8 +357,8 @@ export const charts = {
                         labels: {
                             boxWidth: 12,
                             usePointStyle: true,
-                            font: { size: 11 }
-                        }
+                            font: { size: 11 },
+                        },
                     },
                     tooltip: {
                         mode: 'index',
@@ -325,15 +371,20 @@ export const charts = {
                                     return `${label}: ${Utils.formatPercent(val)}`;
                                 }
                                 return `${label}: ${Utils.formatCurrency(val, this.chartState.currency)}`;
-                            }
-                        }
-                    }
+                            },
+                        },
+                    },
                 },
                 scales: {
                     x: {
                         grid: { display: false },
                         border: { display: false },
-                        ticks: { display: isDesktop, color: ink.tick, font: { size: 11 }, maxTicksLimit: 10 }
+                        ticks: {
+                            display: isDesktop,
+                            color: ink.tick,
+                            font: { size: 11 },
+                            maxTicksLimit: 10,
+                        },
                     },
                     y: {
                         position: 'right',
@@ -344,21 +395,30 @@ export const charts = {
                             color: ink.tick,
                             font: { size: 11 },
                             callback: (value) => {
-                                if (this.chartState.mode === 'PERF') return Number(value).toFixed(1) + '%';
+                                if (this.chartState.mode === 'PERF')
+                                    return Number(value).toFixed(1) + '%';
                                 if (Math.abs(Number(value)) >= 1000) {
-                                    return (Number(value) / 1000).toFixed(1) + 'k ' + (this.chartState.currency === 'EUR' ? '€' : '$');
+                                    return (
+                                        (Number(value) / 1000).toFixed(1) +
+                                        'k ' +
+                                        (this.chartState.currency === 'EUR' ? '€' : '$')
+                                    );
                                 }
-                                return Number(value).toFixed(0) + ' ' + (this.chartState.currency === 'EUR' ? '€' : '$');
-                            }
-                        }
-                    }
+                                return (
+                                    Number(value).toFixed(0) +
+                                    ' ' +
+                                    (this.chartState.currency === 'EUR' ? '€' : '$')
+                                );
+                            },
+                        },
+                    },
                 },
                 interaction: {
                     mode: 'nearest',
                     axis: 'x',
-                    intersect: false
-                }
-            }
+                    intersect: false,
+                },
+            },
         });
     },
 
@@ -380,23 +440,25 @@ export const charts = {
 
         const lastIdx = (primaryData ? primaryData.length : 0) - 1;
 
-        this.chart.data.datasets = [{
-            label: activePort.name,
-            data: primaryData,
-            borderColor: lineColor,
-            backgroundColor: isPerf ? 'transparent' : gradient,
-            fill: !isPerf,
-            tension: 0.15,
-            borderWidth: 2.2,
-            borderCapStyle: 'round',
-            borderJoinStyle: 'round',
-            pointRadius: (c) => c.dataIndex === lastIdx ? 3.4 : 0,
-            pointBackgroundColor: lineColor,
-            pointBorderColor: 'rgba(46, 189, 133, 0.16)',
-            pointBorderWidth: 6,
-            pointHoverRadius: 5,
-            yAxisID: 'y'
-        }];
+        this.chart.data.datasets = [
+            {
+                label: activePort.name,
+                data: primaryData,
+                borderColor: lineColor,
+                backgroundColor: isPerf ? 'transparent' : gradient,
+                fill: !isPerf,
+                tension: 0.15,
+                borderWidth: 2.2,
+                borderCapStyle: 'round',
+                borderJoinStyle: 'round',
+                pointRadius: (c) => (c.dataIndex === lastIdx ? 3.4 : 0),
+                pointBackgroundColor: lineColor,
+                pointBorderColor: 'rgba(46, 189, 133, 0.16)',
+                pointBorderWidth: 6,
+                pointHoverRadius: 5,
+                yAxisID: 'y',
+            },
+        ];
 
         // Rafraichir les couleurs d'axes (suivi du theme)
         if (this.chart.options && this.chart.options.scales) {
@@ -415,14 +477,22 @@ export const charts = {
             const startDate = Utils.parseDate(rawDates[0]);
             const endDate = Utils.parseDate(rawDates[rawDates.length - 1]);
 
-            const benchHistories = await Promise.all(benchmarks.map(async symbol => {
-                const benchConfig = CONFIG.BENCHMARKS[symbol];
-                if (!benchConfig) return null;
-                const history = await APIService.getDailyHistory(symbol, startDate, endDate, benchConfig.basePrice, benchConfig.basePrice);
-                return { symbol, benchConfig, history };
-            }));
+            const benchHistories = await Promise.all(
+                benchmarks.map(async (symbol) => {
+                    const benchConfig = CONFIG.BENCHMARKS[symbol];
+                    if (!benchConfig) return null;
+                    const history = await APIService.getDailyHistory(
+                        symbol,
+                        startDate,
+                        endDate,
+                        benchConfig.basePrice,
+                        benchConfig.basePrice
+                    );
+                    return { symbol, benchConfig, history };
+                })
+            );
 
-            benchHistories.forEach(entry => {
+            benchHistories.forEach((entry) => {
                 if (!entry) return;
                 const { benchConfig, history } = entry;
                 const sortedDates = Object.keys(history).sort();
@@ -430,27 +500,29 @@ export const charts = {
 
                 // Forward-fill : le marche ne cote pas tous les jours calendaires (weekends, feries)
                 let lastKnown = null;
-                const rawSeries = rawDates.map(dateStr => {
+                const rawSeries = rawDates.map((dateStr) => {
                     if (history[dateStr] !== undefined) {
                         lastKnown = history[dateStr];
                     } else {
-                        const prior = sortedDates.filter(d => d <= dateStr).pop();
+                        const prior = sortedDates.filter((d) => d <= dateStr).pop();
                         if (prior !== undefined) lastKnown = history[prior];
                     }
                     return lastKnown;
                 });
 
-                const baseline = rawSeries.find(v => v !== null && v !== undefined);
+                const baseline = rawSeries.find((v) => v !== null && v !== undefined);
                 // La courbe du portefeuille n'est pas rebasee a 0 : elle affiche la
                 // plus-value cumulee vs prix de revient. On cale donc le benchmark
                 // sur son point de depart, sinon un portefeuille a +50 % semble
                 // ecraser un indice a +2 % alors qu'il a peut-etre sous-performe.
                 // Ainsi l'ecart lu entre les deux courbes est bien l'ecart de
                 // performance sur la fenetre affichee.
-                const offset = primaryData && primaryData.length ? (primaryData[0] || 0) : 0;
-                const bData = rawSeries.map(v => (v === null || v === undefined || !baseline)
-                    ? null
-                    : parseFloat((offset + ((v / baseline) - 1) * 100).toFixed(2)));
+                const offset = primaryData && primaryData.length ? primaryData[0] || 0 : 0;
+                const bData = rawSeries.map((v) =>
+                    v === null || v === undefined || !baseline
+                        ? null
+                        : parseFloat((offset + (v / baseline - 1) * 100).toFixed(2))
+                );
 
                 this.chart.data.datasets.push({
                     label: benchConfig.name,
@@ -463,7 +535,7 @@ export const charts = {
                     borderWidth: 1.4,
                     pointRadius: 0,
                     yAxisID: 'y',
-                    spanGaps: true
+                    spanGaps: true,
                 });
             });
         }

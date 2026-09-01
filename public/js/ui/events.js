@@ -31,16 +31,21 @@ export const events = {
         // --- REPLIS SANS HANDLERS INLINE (compat CSP stricte) ---
         // Image cassée : masquer et, si demandé, afficher le monogramme voisin.
         // Les évènements `error` ne bouillonnent pas -> écoute en phase de capture.
-        document.addEventListener('error', (e) => {
-            const img = e.target;
-            if (!(img instanceof HTMLImageElement) || !img.dataset.fallback) return;
-            if (img.dataset.fallback === 'hide') {
-                img.style.visibility = 'hidden';
-            } else if (img.dataset.fallback === 'sibling') {
-                img.style.display = 'none';
-                if (img.nextElementSibling) /** @type {HTMLElement} */ (img.nextElementSibling).style.display = 'flex';
-            }
-        }, true);
+        document.addEventListener(
+            'error',
+            (e) => {
+                const img = e.target;
+                if (!(img instanceof HTMLImageElement) || !img.dataset.fallback) return;
+                if (img.dataset.fallback === 'hide') {
+                    img.style.visibility = 'hidden';
+                } else if (img.dataset.fallback === 'sibling') {
+                    img.style.display = 'none';
+                    if (img.nextElementSibling)
+                        /** @type {HTMLElement} */ (img.nextElementSibling).style.display = 'flex';
+                }
+            },
+            true
+        );
 
         // Bulles d'aide : bascule l'ancrage au dernier moment pour que le texte
         // reste dans la carte (les colonnes de droite déborderaient sinon).
@@ -61,7 +66,9 @@ export const events = {
             }
             const grpBtn = /** @type {Element} */ (e.target).closest('.insights-toggle-btn');
             if (grpBtn) {
-                const more = /** @type {HTMLElement} */ (grpBtn.parentElement.querySelector('.insights-more'));
+                const more = /** @type {HTMLElement} */ (
+                    grpBtn.parentElement.querySelector('.insights-more')
+                );
                 if (!more) return;
                 const expanded = more.style.display !== 'none';
                 more.style.display = expanded ? 'none' : 'block';
@@ -77,12 +84,19 @@ export const events = {
         const statsDots = document.getElementById('statsDots');
         if (statsGrid && statsDots) {
             const dots = statsDots.querySelectorAll('.dot');
-            statsGrid.addEventListener('scroll', () => {
-                const card = /** @type {HTMLElement} */ (statsGrid.querySelector('.stat-card'));
-                const step = card ? card.offsetWidth + 12 : statsGrid.clientWidth || 1;
-                const idx = Math.max(0, Math.min(dots.length - 1, Math.round(statsGrid.scrollLeft / step)));
-                dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-            }, { passive: true });
+            statsGrid.addEventListener(
+                'scroll',
+                () => {
+                    const card = /** @type {HTMLElement} */ (statsGrid.querySelector('.stat-card'));
+                    const step = card ? card.offsetWidth + 12 : statsGrid.clientWidth || 1;
+                    const idx = Math.max(
+                        0,
+                        Math.min(dots.length - 1, Math.round(statsGrid.scrollLeft / step))
+                    );
+                    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+                },
+                { passive: true }
+            );
         }
     },
 
@@ -94,7 +108,9 @@ export const events = {
         const openCreateBtn = document.getElementById('openCreatePortfolioBtn');
         const portfolioModal = document.getElementById('portfolioModal');
         const closePortfolioModalBtn = document.getElementById('closePortfolioModalBtn');
-        const portfolioForm = /** @type {HTMLFormElement} */ (document.getElementById('portfolioForm'));
+        const portfolioForm = /** @type {HTMLFormElement} */ (
+            document.getElementById('portfolioForm')
+        );
         const portfolioModalTitle = document.getElementById('portfolioModalTitle');
 
         if (switcherBtn && switcherContainer) {
@@ -125,7 +141,8 @@ export const events = {
                 switcherContainer.classList.remove('open');
                 portfolioModalTitle.textContent = 'Nouveau Portefeuille';
                 portfolioForm.reset();
-                /** @type {HTMLInputElement} */ (document.getElementById('portfolioEditId')).value = '';
+                /** @type {HTMLInputElement} */ (document.getElementById('portfolioEditId')).value =
+                    '';
                 document.getElementById('portfolioSubmitBtn').textContent = 'Créer le portefeuille';
                 portfolioModal.classList.add('open');
                 document.getElementById('portfolioNameInput').focus();
@@ -173,11 +190,15 @@ export const events = {
         const settingsModal = document.getElementById('settingsModal');
         const closeSettings = document.getElementById('closeSettingsBtn');
         const reloadPricesBtn = document.getElementById('reloadPricesBtn');
-        const syncDividendsBtn = /** @type {HTMLButtonElement} */ (document.getElementById('syncDividendsBtn'));
+        const syncDividendsBtn = /** @type {HTMLButtonElement} */ (
+            document.getElementById('syncDividendsBtn')
+        );
         const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
         const exportCsvBtn = document.getElementById('exportCsvBtn');
         const importCsvBtn = document.getElementById('importCsvBtn');
-        const importCsvInput = /** @type {HTMLInputElement} */ (document.getElementById('importCsvInput'));
+        const importCsvInput = /** @type {HTMLInputElement} */ (
+            document.getElementById('importCsvInput')
+        );
         const logoutBtn = document.getElementById('logoutBtn');
 
         if (settingsBtn && settingsModal) {
@@ -190,7 +211,9 @@ export const events = {
                 this.service.refreshPrices();
             };
         }
-        const refreshDataBtn = /** @type {HTMLButtonElement} */ (document.getElementById('refreshDataBtn'));
+        const refreshDataBtn = /** @type {HTMLButtonElement} */ (
+            document.getElementById('refreshDataBtn')
+        );
         if (refreshDataBtn) {
             refreshDataBtn.onclick = async () => {
                 if (refreshDataBtn.classList.contains('is-loading')) return;
@@ -212,7 +235,9 @@ export const events = {
                 syncDividendsBtn.disabled = true;
                 try {
                     const added = await this.service.syncDividends();
-                    alert(added > 0 ? `${added} dividende(s) ajouté(s).` : 'Aucun nouveau dividende.');
+                    alert(
+                        added > 0 ? `${added} dividende(s) ajouté(s).` : 'Aucun nouveau dividende.'
+                    );
                 } catch (err) {
                     alert('Erreur : ' + err.message);
                 } finally {
@@ -224,22 +249,85 @@ export const events = {
         }
         if (exportCsvBtn) {
             exportCsvBtn.onclick = () => {
-                this.downloadCSV(`portefeuille_${Utils.getDateString()}.csv`, this.service.exportToCSV());
+                this.downloadCSV(
+                    `portefeuille_${Utils.getDateString()}.csv`,
+                    this.service.exportToCSV()
+                );
             };
         }
         if (downloadTemplateBtn) {
             downloadTemplateBtn.onclick = () => {
-                const headers = ['date', 'type', 'symbol', 'qty', 'price', 'currency', 'fees', 'amount', 'portfolio'];
-                const rows = [
-                    ['2026-01-15', 'BUY', 'AAPL', '10', '185,50', 'USD', '5', '', 'Portefeuille Principal'],
-                    ['2026-02-10', 'BUY', 'MC.PA', '5', '720', 'EUR', '3,5', '', 'Portefeuille Principal'],
-                    ['2026-03-05', 'SELL', 'AAPL', '4', '195,20', 'USD', '5', '', 'Portefeuille Principal'],
-                    ['2026-01-01', 'DEPOSIT', '', '', '', '', '', '2000', 'Portefeuille Principal'],
-                    ['2026-04-01', 'WITHDRAWAL', '', '', '', '', '', '500', 'Portefeuille Principal'],
-                    ['2026-02-20', 'DIVIDEND', 'AAPL', '', '', '', '', '12,34', 'Portefeuille Principal'],
-                    ['2026-01-20', 'FEE', '', '', '', '', '', '9,99', 'Portefeuille Principal']
+                const headers = [
+                    'date',
+                    'type',
+                    'symbol',
+                    'qty',
+                    'price',
+                    'currency',
+                    'fees',
+                    'amount',
+                    'portfolio',
                 ];
-                const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+                const rows = [
+                    [
+                        '2026-01-15',
+                        'BUY',
+                        'AAPL',
+                        '10',
+                        '185,50',
+                        'USD',
+                        '5',
+                        '',
+                        'Portefeuille Principal',
+                    ],
+                    [
+                        '2026-02-10',
+                        'BUY',
+                        'MC.PA',
+                        '5',
+                        '720',
+                        'EUR',
+                        '3,5',
+                        '',
+                        'Portefeuille Principal',
+                    ],
+                    [
+                        '2026-03-05',
+                        'SELL',
+                        'AAPL',
+                        '4',
+                        '195,20',
+                        'USD',
+                        '5',
+                        '',
+                        'Portefeuille Principal',
+                    ],
+                    ['2026-01-01', 'DEPOSIT', '', '', '', '', '', '2000', 'Portefeuille Principal'],
+                    [
+                        '2026-04-01',
+                        'WITHDRAWAL',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '500',
+                        'Portefeuille Principal',
+                    ],
+                    [
+                        '2026-02-20',
+                        'DIVIDEND',
+                        'AAPL',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '12,34',
+                        'Portefeuille Principal',
+                    ],
+                    ['2026-01-20', 'FEE', '', '', '', '', '', '9,99', 'Portefeuille Principal'],
+                ];
+                const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
                 this.downloadCSV('modele_import_transactions.csv', csv);
             };
         }
@@ -254,7 +342,8 @@ export const events = {
                 try {
                     const { added, errors } = await this.service.importFromCSV(text);
                     let msg = `${added} transaction(s) importée(s).`;
-                    if (errors.length) msg += `\n${errors.length} erreur(s) :\n` + errors.slice(0, 10).join('\n');
+                    if (errors.length)
+                        msg += `\n${errors.length} erreur(s) :\n` + errors.slice(0, 10).join('\n');
                     alert(msg);
                 } catch (err) {
                     alert('Erreur import : ' + err.message);
@@ -273,19 +362,29 @@ export const events = {
         // Fournisseur IA (résumé IA) : lié au compte. La clé API est chiffrée et
         // stockée côté worker (POST /ai/key) et n'est jamais rechargée ici ; le
         // champ affiche seulement si une clé est déjà enregistrée.
-        const aiProviderSelect = /** @type {HTMLSelectElement} */ (document.getElementById('aiProviderSelect'));
+        const aiProviderSelect = /** @type {HTMLSelectElement} */ (
+            document.getElementById('aiProviderSelect')
+        );
         const aiKeyInput = /** @type {HTMLInputElement} */ (document.getElementById('aiKeyInput'));
-        const saveAiKeyBtn = /** @type {HTMLButtonElement} */ (document.getElementById('saveAiKeyBtn'));
-        const clearAiKeyBtn = /** @type {HTMLButtonElement} */ (document.getElementById('clearAiKeyBtn'));
+        const saveAiKeyBtn = /** @type {HTMLButtonElement} */ (
+            document.getElementById('saveAiKeyBtn')
+        );
+        const clearAiKeyBtn = /** @type {HTMLButtonElement} */ (
+            document.getElementById('clearAiKeyBtn')
+        );
 
         const refreshAiKeyInputForProvider = () => {
             if (!aiProviderSelect || !aiKeyInput) return;
             const p = aiProviderSelect.value;
             const configured = p && (this.service.aiConfigured || []).includes(p);
             aiKeyInput.value = '';
-            aiKeyInput.placeholder = !p ? 'Clé API'
-                : configured ? '•••••••••• (clé enregistrée — saisir pour remplacer)'
-                    : (AI_PROVIDERS[p] ? AI_PROVIDERS[p].keyPlaceholder : 'Clé API');
+            aiKeyInput.placeholder = !p
+                ? 'Clé API'
+                : configured
+                  ? '•••••••••• (clé enregistrée — saisir pour remplacer)'
+                  : AI_PROVIDERS[p]
+                    ? AI_PROVIDERS[p].keyPlaceholder
+                    : 'Clé API';
             aiKeyInput.disabled = !p;
             if (clearAiKeyBtn) clearAiKeyBtn.disabled = !configured;
         };
@@ -299,16 +398,25 @@ export const events = {
                 try {
                     await this.service.setAiProvider(aiProviderSelect.value);
                 } catch (e) {
-                    alert('Impossible d\'enregistrer le fournisseur sur le compte : ' + (e.message || e));
+                    alert(
+                        "Impossible d'enregistrer le fournisseur sur le compte : " +
+                            (e.message || e)
+                    );
                 }
             };
         }
         if (saveAiKeyBtn) {
             saveAiKeyBtn.onclick = async () => {
                 const p = aiProviderSelect.value;
-                if (!p) { alert('Choisis un fournisseur IA.'); return; }
+                if (!p) {
+                    alert('Choisis un fournisseur IA.');
+                    return;
+                }
                 const key = aiKeyInput.value.trim();
-                if (!key) { alert('Saisis une clé API.'); return; }
+                if (!key) {
+                    alert('Saisis une clé API.');
+                    return;
+                }
                 saveAiKeyBtn.disabled = true;
                 try {
                     await this.service.saveAiKey(p, key);
@@ -359,7 +467,7 @@ export const events = {
         if (f.form.elements['date']) f.form.elements['date'].max = Utils.getDateString();
         this.editingTradeId = null;
 
-        f.form.querySelectorAll('input[name="type"]').forEach(radio => {
+        f.form.querySelectorAll('input[name="type"]').forEach((radio) => {
             radio.addEventListener('change', (e) => {
                 this.syncTransactionFormFields(/** @type {HTMLInputElement} */ (e.target).value);
             });
@@ -372,10 +480,11 @@ export const events = {
         const emptyAddBtn = document.getElementById('emptyAddBtn');
         if (emptyAddBtn) emptyAddBtn.onclick = open;
         const emptyImportBtn = document.getElementById('emptyImportBtn');
-        if (emptyImportBtn) emptyImportBtn.onclick = () => {
-            const inp = document.getElementById('importCsvInput');
-            if (inp) inp.click();
-        };
+        if (emptyImportBtn)
+            emptyImportBtn.onclick = () => {
+                const inp = document.getElementById('importCsvInput');
+                if (inp) inp.click();
+            };
 
         document.getElementById('closeModalBtn').onclick = () => f.modal.classList.remove('open');
         f.form.onsubmit = (e) => this.submitTransactionForm(e);
@@ -384,7 +493,9 @@ export const events = {
     // --- RECHERCHE DE SYMBOLE (depuis le champ de la modale) --------------
     bindSymbolSearch() {
         const searchModal = document.getElementById('symbolSearchModal');
-        const searchInput = /** @type {HTMLInputElement} */ (document.getElementById('globalSearchInput'));
+        const searchInput = /** @type {HTMLInputElement} */ (
+            document.getElementById('globalSearchInput')
+        );
         const resultsList = document.getElementById('searchResultsList');
         const f = this._txForm();
 
@@ -400,11 +511,13 @@ export const events = {
                 searchModal.classList.add('open');
                 searchInput.value = '';
                 searchInput.focus();
-                resultsList.innerHTML = '<div class="search-placeholder">Commencez à taper un symbole ou nom d\'entreprise...</div>';
+                resultsList.innerHTML =
+                    '<div class="search-placeholder">Commencez à taper un symbole ou nom d\'entreprise...</div>';
             }
         });
 
-        document.getElementById('closeSearchBtn').onclick = () => searchModal.classList.remove('open');
+        document.getElementById('closeSearchBtn').onclick = () =>
+            searchModal.classList.remove('open');
 
         let searchTimeout;
         searchInput.addEventListener('input', (e) => {
@@ -413,7 +526,8 @@ export const events = {
 
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(async () => {
-                resultsList.innerHTML = '<div class="search-placeholder">Recherche en cours...</div>';
+                resultsList.innerHTML =
+                    '<div class="search-placeholder">Recherche en cours...</div>';
                 const results = await APIService.searchSymbol(query);
                 this.renderSymbolSearchResults(results);
             }, 250);
@@ -425,9 +539,13 @@ export const events = {
         // Currency Toggle
         const currencyToggle = document.getElementById('currencyToggle');
         if (currencyToggle) {
-            /** @type {NodeListOf<HTMLElement>} */ (currencyToggle.querySelectorAll('.toggle-btn')).forEach(btn => {
+            /** @type {NodeListOf<HTMLElement>} */ (
+                currencyToggle.querySelectorAll('.toggle-btn')
+            ).forEach((btn) => {
                 btn.onclick = () => {
-                    currencyToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                    currencyToggle
+                        .querySelectorAll('.toggle-btn')
+                        .forEach((b) => b.classList.remove('active'));
                     btn.classList.add('active');
                     this.chartState.currency = btn.dataset.currency || 'USD';
                     localStorage.setItem(CONFIG.CURRENCY_STORAGE, this.chartState.currency);
@@ -437,9 +555,13 @@ export const events = {
         }
 
         // Value / Perf Toggle
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.toggle-group:not(#currencyToggle) .toggle-btn')).forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('.toggle-group:not(#currencyToggle) .toggle-btn')
+        ).forEach((btn) => {
             btn.onclick = () => {
-                btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.parentElement
+                    .querySelectorAll('.toggle-btn')
+                    .forEach((b) => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.chartState.mode = btn.textContent.trim() === 'Performance' ? 'PERF' : 'VALUE';
                 this.render();
@@ -447,7 +569,9 @@ export const events = {
         });
 
         // Benchmarks
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.benchmark-checkbox-btn')).forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('.benchmark-checkbox-btn')
+        ).forEach((btn) => {
             btn.onclick = () => {
                 btn.classList.toggle('active');
                 const symbol = btn.dataset.symbol;
@@ -457,12 +581,19 @@ export const events = {
                     }
                     if (this.chartState.mode !== 'PERF') {
                         this.chartState.mode = 'PERF';
-                        document.querySelectorAll('.toggle-group:not(#currencyToggle) .toggle-btn').forEach(b => {
-                            b.classList.toggle('active', b.textContent.trim() === 'Performance');
-                        });
+                        document
+                            .querySelectorAll('.toggle-group:not(#currencyToggle) .toggle-btn')
+                            .forEach((b) => {
+                                b.classList.toggle(
+                                    'active',
+                                    b.textContent.trim() === 'Performance'
+                                );
+                            });
                     }
                 } else {
-                    this.chartState.benchmarks = this.chartState.benchmarks.filter(s => s !== symbol);
+                    this.chartState.benchmarks = this.chartState.benchmarks.filter(
+                        (s) => s !== symbol
+                    );
                 }
                 this.render();
             };
@@ -471,9 +602,13 @@ export const events = {
         // Performance list filter
         const perfFilterGroup = document.getElementById('perfFilterGroup');
         if (perfFilterGroup) {
-            /** @type {NodeListOf<HTMLElement>} */ (perfFilterGroup.querySelectorAll('.filter-btn')).forEach(btn => {
+            /** @type {NodeListOf<HTMLElement>} */ (
+                perfFilterGroup.querySelectorAll('.filter-btn')
+            ).forEach((btn) => {
                 btn.onclick = () => {
-                    perfFilterGroup.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    perfFilterGroup
+                        .querySelectorAll('.filter-btn')
+                        .forEach((b) => b.classList.remove('active'));
                     btn.classList.add('active');
                     this.chartState.perfFilter = btn.dataset.filter;
                     this.render();
@@ -482,9 +617,13 @@ export const events = {
         }
 
         // Range Buttons
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#timeRangeSelector .range-btn')).forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('#timeRangeSelector .range-btn')
+        ).forEach((btn) => {
             btn.onclick = () => {
-                document.querySelectorAll('#timeRangeSelector .range-btn').forEach(b => b.classList.remove('active'));
+                document
+                    .querySelectorAll('#timeRangeSelector .range-btn')
+                    .forEach((b) => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.chartState.range = btn.dataset.range || 'ALL';
                 this.render();
@@ -492,9 +631,13 @@ export const events = {
         });
 
         // Profit chart range buttons
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#profitRangeSelector .range-btn')).forEach(btn => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('#profitRangeSelector .range-btn')
+        ).forEach((btn) => {
             btn.onclick = () => {
-                document.querySelectorAll('#profitRangeSelector .range-btn').forEach(b => b.classList.remove('active'));
+                document
+                    .querySelectorAll('#profitRangeSelector .range-btn')
+                    .forEach((b) => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.chartState.profitRange = btn.dataset.range || 'ALL';
                 this.render();
@@ -502,22 +645,35 @@ export const events = {
         });
 
         // Navigation Tabs — sous-nav, nav basse et menu lateral pilotent le meme etat
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.tab-btn')).forEach(btn => {
-            btn.onclick = () => {
-                const tab = btn.dataset.tab;
-                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.tab-btn')).forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                const tabTarget = document.getElementById(`view-${tab}`);
-                if (tabTarget) tabTarget.classList.add('active');
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.tab-btn')).forEach(
+            (btn) => {
+                btn.onclick = () => {
+                    const tab = btn.dataset.tab;
+                    /** @type {NodeListOf<HTMLElement>} */ (
+                        document.querySelectorAll('.tab-btn')
+                    ).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+                    document
+                        .querySelectorAll('.tab-content')
+                        .forEach((c) => c.classList.remove('active'));
+                    const tabTarget = document.getElementById(`view-${tab}`);
+                    if (tabTarget) tabTarget.classList.add('active');
 
-                // Charts created while their tab was hidden (display:none) can be
-                // measured with a stale size by Chart.js; force a resize once visible.
-                [this.chart, this.profitChart, this.assetChart, this.classChart, this.currencyChart, this.sectorChart, this.researchChart]
-                    .forEach(c => c && c.resize());
+                    // Charts created while their tab was hidden (display:none) can be
+                    // measured with a stale size by Chart.js; force a resize once visible.
+                    [
+                        this.chart,
+                        this.profitChart,
+                        this.assetChart,
+                        this.classChart,
+                        this.currencyChart,
+                        this.sectorChart,
+                        this.researchChart,
+                    ].forEach((c) => c && c.resize());
 
-                if (tab === 'research') this.onResearchTabShown();
-            };
-        });
+                    if (tab === 'research') this.onResearchTabShown();
+                };
+            }
+        );
     },
 
     // --- ACTIONS DELEGUEES sur du markup injecte (cartes, tableaux, menus) -
@@ -525,8 +681,9 @@ export const events = {
         document.addEventListener('click', async (e) => {
             // Menu "..." des cartes de transaction (mobile)
             const txMenuBtn = /** @type {Element} */ (e.target).closest('.tx-menu-btn');
-            document.querySelectorAll('.tx-card.menu-open').forEach(c => {
-                if (!txMenuBtn || c !== txMenuBtn.closest('.tx-card')) c.classList.remove('menu-open');
+            document.querySelectorAll('.tx-card.menu-open').forEach((c) => {
+                if (!txMenuBtn || c !== txMenuBtn.closest('.tx-card'))
+                    c.classList.remove('menu-open');
             });
             if (txMenuBtn) {
                 e.stopPropagation();
@@ -534,13 +691,17 @@ export const events = {
                 return;
             }
 
-            const editTradeBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.edit-trade-btn'));
+            const editTradeBtn = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.edit-trade-btn')
+            );
             if (editTradeBtn) {
-                const trade = this.service.trades.find(t => t.id === editTradeBtn.dataset.id);
+                const trade = this.service.trades.find((t) => t.id === editTradeBtn.dataset.id);
                 if (trade) this.openTradeEditor(trade);
             }
 
-            const delBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.delete-trade-btn'));
+            const delBtn = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.delete-trade-btn')
+            );
             if (delBtn) {
                 if (confirm('Voulez-vous vraiment supprimer cette transaction ?')) {
                     try {
@@ -551,18 +712,28 @@ export const events = {
                 }
             }
 
-            const assetCell = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.holding-asset-cell'));
+            const assetCell = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.holding-asset-cell')
+            );
             if (assetCell) {
                 this.goToResearch(assetCell.dataset.symbol);
             }
 
-            const sellBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.quick-sell-btn'));
+            const sellBtn = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.quick-sell-btn')
+            );
             if (sellBtn) {
-                this.openQuickSell(sellBtn.dataset.symbol, sellBtn.dataset.qty, sellBtn.dataset.price);
+                this.openQuickSell(
+                    sellBtn.dataset.symbol,
+                    sellBtn.dataset.qty,
+                    sellBtn.dataset.price
+                );
             }
 
             // Edit portfolio
-            const editPortBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.edit-portfolio-btn'));
+            const editPortBtn = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.edit-portfolio-btn')
+            );
             if (editPortBtn) {
                 e.stopPropagation();
                 document.getElementById('portfolioDropdownContainer').classList.remove('open');
@@ -571,16 +742,22 @@ export const events = {
             }
 
             // Delete portfolio
-            const delPortBtn = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.delete-portfolio-btn'));
+            const delPortBtn = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.delete-portfolio-btn')
+            );
             if (delPortBtn) {
                 e.stopPropagation();
                 const pId = delPortBtn.dataset.id;
                 const port = this.service.getPortfolioById(pId);
-                if (confirm(`Voulez-vous vraiment supprimer le portefeuille "${port.name}" et toutes ses transactions ?`)) {
+                if (
+                    confirm(
+                        `Voulez-vous vraiment supprimer le portefeuille "${port.name}" et toutes ses transactions ?`
+                    )
+                ) {
                     try {
                         const removed = await this.service.deletePortfolio(pId);
                         if (!removed) {
-                            alert("Impossible de supprimer le seul portefeuille existant.");
+                            alert('Impossible de supprimer le seul portefeuille existant.');
                             return;
                         }
                     } catch (err) {
@@ -590,7 +767,9 @@ export const events = {
             }
 
             // Switch to specific portfolio
-            const portItem = /** @type {HTMLElement} */ (/** @type {Element} */ (e.target).closest('.portfolio-item-select'));
+            const portItem = /** @type {HTMLElement} */ (
+                /** @type {Element} */ (e.target).closest('.portfolio-item-select')
+            );
             if (portItem) {
                 this.service.setActivePortfolio(portItem.dataset.id);
                 document.getElementById('portfolioDropdownContainer').classList.remove('open');
@@ -601,8 +780,12 @@ export const events = {
     // --- FILTRES DE TRANSACTIONS (feuille de filtres) ---
     bindTransactionFilters() {
         // --- TRANSACTIONS FILTERS (feuille de filtres) ---
-        const txSearchInput = /** @type {HTMLInputElement} */ (document.getElementById('txSearchInput'));
-        const txFromFilter = /** @type {HTMLInputElement} */ (document.getElementById('txFromFilter'));
+        const txSearchInput = /** @type {HTMLInputElement} */ (
+            document.getElementById('txSearchInput')
+        );
+        const txFromFilter = /** @type {HTMLInputElement} */ (
+            document.getElementById('txFromFilter')
+        );
         const txToFilter = /** @type {HTMLInputElement} */ (document.getElementById('txToFilter'));
         const txFilterModal = document.getElementById('txFilterModal');
         const txFilterOpenBtn = document.getElementById('txFilterOpenBtn');
@@ -611,9 +794,10 @@ export const events = {
         const txTypePills = document.getElementById('txTypePills');
 
         const syncTxFilterUI = () => {
-            if (txTypePills) txTypePills.querySelectorAll('button').forEach(b => {
-                b.classList.toggle('active', this.txFilters.types.includes(b.dataset.type));
-            });
+            if (txTypePills)
+                txTypePills.querySelectorAll('button').forEach((b) => {
+                    b.classList.toggle('active', this.txFilters.types.includes(b.dataset.type));
+                });
             if (txFromFilter) txFromFilter.value = this.txFilters.from || '';
             if (txToFilter) txToFilter.value = this.txFilters.to || '';
         };
@@ -625,17 +809,21 @@ export const events = {
             };
         }
         if (txFilterOpenBtn && txFilterModal) {
-            txFilterOpenBtn.onclick = () => { syncTxFilterUI(); txFilterModal.classList.add('open'); };
+            txFilterOpenBtn.onclick = () => {
+                syncTxFilterUI();
+                txFilterModal.classList.add('open');
+            };
             txFilterModal.addEventListener('click', (e) => {
                 if (e.target === txFilterModal) txFilterModal.classList.remove('open');
             });
         }
         if (txTypePills) {
-            txTypePills.querySelectorAll('button').forEach(btn => {
+            txTypePills.querySelectorAll('button').forEach((btn) => {
                 btn.onclick = () => {
                     const t = btn.dataset.type;
                     const i = this.txFilters.types.indexOf(t);
-                    if (i === -1) this.txFilters.types.push(t); else this.txFilters.types.splice(i, 1);
+                    if (i === -1) this.txFilters.types.push(t);
+                    else this.txFilters.types.splice(i, 1);
                     btn.classList.toggle('active');
                     this.renderTransactionsTable(this.chartState.currency);
                 };
@@ -708,11 +896,13 @@ export const events = {
 
             f.amountGroup.style.display = 'block';
             f.amountInput.setAttribute('required', 'true');
-            f.amountLabel.textContent = type === 'DEPOSIT' ? 'Montant du dépôt ($)' : 'Montant du retrait ($)';
+            f.amountLabel.textContent =
+                type === 'DEPOSIT' ? 'Montant du dépôt ($)' : 'Montant du retrait ($)';
         } else if (type === 'DIVIDEND' || type === 'FEE') {
             f.symbolGroup.style.display = 'block';
             f.symbolInput.removeAttribute('required');
-            f.symbolInput.placeholder = type === 'DIVIDEND' ? 'Symbole concerné (ex: AAPL)' : 'Frais de courtage';
+            f.symbolInput.placeholder =
+                type === 'DIVIDEND' ? 'Symbole concerné (ex: AAPL)' : 'Frais de courtage';
 
             f.qtyPriceRow.style.display = 'none';
             f.qtyInput.removeAttribute('required');
@@ -722,7 +912,8 @@ export const events = {
 
             f.amountGroup.style.display = 'block';
             f.amountInput.setAttribute('required', 'true');
-            f.amountLabel.textContent = type === 'DIVIDEND' ? 'Montant du dividende net ($)' : 'Montant des frais ($)';
+            f.amountLabel.textContent =
+                type === 'DIVIDEND' ? 'Montant du dividende net ($)' : 'Montant des frais ($)';
         } else {
             f.symbolGroup.style.display = 'block';
             f.symbolInput.setAttribute('required', 'true');
@@ -807,7 +998,8 @@ export const events = {
         let fees = parseFloat(/** @type {string} */ (fd.get('fees'))) || 0;
         let amount = parseFloat(/** @type {string} */ (fd.get('amount'))) || 0;
         if (type === 'BUY' || type === 'SELL') {
-            const enteredCurrency = /** @type {string} */ (fd.get('priceCurrency')) || Utils.getCurrency(symbol);
+            const enteredCurrency =
+                /** @type {string} */ (fd.get('priceCurrency')) || Utils.getCurrency(symbol);
             const nativeCurrency = Utils.getCurrency(symbol);
             if (enteredCurrency !== nativeCurrency) {
                 price = this.service.convertCurrency(price, enteredCurrency, nativeCurrency);
@@ -826,8 +1018,12 @@ export const events = {
         // titre n'a pas change (sinon on laisse normalizeTradeInput reprendre le spot).
         let carriedFxRate;
         if (this.editingTradeId) {
-            const prev = this.service.trades.find(t => t.id === this.editingTradeId);
-            if (prev && prev.fxRate > 0 && Utils.getCurrency(prev.symbol) === Utils.getCurrency(symbol)) {
+            const prev = this.service.trades.find((t) => t.id === this.editingTradeId);
+            if (
+                prev &&
+                prev.fxRate > 0 &&
+                Utils.getCurrency(prev.symbol) === Utils.getCurrency(symbol)
+            ) {
                 carriedFxRate = prev.fxRate;
             }
         }
@@ -841,7 +1037,7 @@ export const events = {
             amount: amount || 0,
             fees,
             fxRate: carriedFxRate,
-            date: dateValue ? Utils.getDateString(dateValue) : Utils.getDateString()
+            date: dateValue ? Utils.getDateString(dateValue) : Utils.getDateString(),
         };
 
         try {
@@ -864,12 +1060,18 @@ export const events = {
     openPortfolioEditor(port) {
         const modal = document.getElementById('portfolioModal');
         document.getElementById('portfolioModalTitle').textContent = 'Modifier le portefeuille';
-        /** @type {HTMLInputElement} */ (document.getElementById('portfolioEditId')).value = port.id;
-        /** @type {HTMLInputElement} */ (document.getElementById('portfolioNameInput')).value = port.name;
-        const radio = /** @type {HTMLInputElement} */ (document.querySelector(`input[name="portfolioColor"][value="${port.color}"]`));
+        /** @type {HTMLInputElement} */ (document.getElementById('portfolioEditId')).value =
+            port.id;
+        /** @type {HTMLInputElement} */ (document.getElementById('portfolioNameInput')).value =
+            port.name;
+        const radio = /** @type {HTMLInputElement} */ (
+            document.querySelector(`input[name="portfolioColor"][value="${port.color}"]`)
+        );
         if (radio) radio.checked = true;
         const curIcon = Utils.portfolioIconOverrides()[port.id] || '';
-        const iconRadio = /** @type {HTMLInputElement} */ (document.querySelector(`input[name="portfolioIcon"][value="${curIcon}"]`));
+        const iconRadio = /** @type {HTMLInputElement} */ (
+            document.querySelector(`input[name="portfolioIcon"][value="${curIcon}"]`)
+        );
         if (iconRadio) iconRadio.checked = true;
         document.getElementById('portfolioSubmitBtn').textContent = 'Sauvegarder';
         modal.classList.add('open');
@@ -884,12 +1086,15 @@ export const events = {
             return;
         }
 
-        results.forEach(item => {
+        results.forEach((item) => {
             const sym = item.displaySymbol || item.symbol;
             const row = document.createElement('div');
             row.className = 'search-result-row';
 
-            const isCrypto = (item.type || '').toLowerCase().includes('crypto') || sym.includes('BTC') || sym.includes('ETH');
+            const isCrypto =
+                (item.type || '').toLowerCase().includes('crypto') ||
+                sym.includes('BTC') ||
+                sym.includes('ETH');
             const badgeColor = isCrypto ? '#e5e7eb' : '#dbeafe';
             const exchangeName = Utils.getExchangeName(sym);
 

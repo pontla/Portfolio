@@ -14,24 +14,36 @@ export const shell = {
         const t = theme === 'light' ? 'light' : 'dark';
         if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
         else document.documentElement.removeAttribute('data-theme');
-        try { localStorage.setItem(CONFIG.THEME_STORAGE, t); } catch (e) { /* ignore */ }
+        try {
+            localStorage.setItem(CONFIG.THEME_STORAGE, t);
+        } catch (e) {
+            /* ignore */
+        }
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute('content', t === 'light' ? '#f4f5f7' : '#0a0b0e');
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#themeSegmented .theme-seg-btn')).forEach(b => {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('#themeSegmented .theme-seg-btn')
+        ).forEach((b) => {
             b.setAttribute('aria-checked', b.dataset.themeChoice === t ? 'true' : 'false');
         });
     },
 
     initTheme() {
         let saved = 'dark';
-        try { saved = localStorage.getItem(CONFIG.THEME_STORAGE) || 'dark'; } catch (e) { /* ignore */ }
+        try {
+            saved = localStorage.getItem(CONFIG.THEME_STORAGE) || 'dark';
+        } catch (e) {
+            /* ignore */
+        }
         this.applyTheme(saved);
         const seg = document.getElementById('themeSegmented');
         if (seg && !seg._bound) {
             seg._bound = true;
-            /** @type {NodeListOf<HTMLElement>} */ (seg.querySelectorAll('.theme-seg-btn')).forEach(btn => {
-                btn.onclick = () => this.applyTheme(btn.dataset.themeChoice);
-            });
+            /** @type {NodeListOf<HTMLElement>} */ (seg.querySelectorAll('.theme-seg-btn')).forEach(
+                (btn) => {
+                    btn.onclick = () => this.applyTheme(btn.dataset.themeChoice);
+                }
+            );
         }
     },
 
@@ -40,7 +52,11 @@ export const shell = {
         const toggle = document.getElementById('sideToggleBtn');
         if (!cont) return;
         let open = true;
-        try { open = localStorage.getItem(CONFIG.SIDE_STORAGE) !== 'collapsed'; } catch (e) { /* ignore */ }
+        try {
+            open = localStorage.getItem(CONFIG.SIDE_STORAGE) !== 'collapsed';
+        } catch (e) {
+            /* ignore */
+        }
         const apply = () => {
             cont.setAttribute('data-side', open ? 'open' : 'collapsed');
             if (toggle) toggle.setAttribute('aria-expanded', String(open));
@@ -50,10 +66,20 @@ export const shell = {
             toggle._bound = true;
             toggle.onclick = () => {
                 open = !open;
-                try { localStorage.setItem(CONFIG.SIDE_STORAGE, open ? 'open' : 'collapsed'); } catch (e) { /* ignore */ }
+                try {
+                    localStorage.setItem(CONFIG.SIDE_STORAGE, open ? 'open' : 'collapsed');
+                } catch (e) {
+                    /* ignore */
+                }
                 apply();
-                [this.chart, this.profitChart, this.assetChart, this.classChart, this.currencyChart, this.sectorChart]
-                    .forEach(c => c && setTimeout(() => c.resize(), 220));
+                [
+                    this.chart,
+                    this.profitChart,
+                    this.assetChart,
+                    this.classChart,
+                    this.currencyChart,
+                    this.sectorChart,
+                ].forEach((c) => c && setTimeout(() => c.resize(), 220));
             };
         }
         const dsearch = document.getElementById('desktopSearchBtn');
@@ -74,7 +100,9 @@ export const shell = {
         Icons.render();
         this.initTheme();
         this.initSideNav();
-        const isRecovery = /type=recovery/.test(window.location.hash) || /type=recovery/.test(window.location.search);
+        const isRecovery =
+            /type=recovery/.test(window.location.hash) ||
+            /type=recovery/.test(window.location.search);
         this.setupAuthScreen(isRecovery);
         this.setupLandingScreen();
 
@@ -136,8 +164,10 @@ export const shell = {
         } catch (err) {
             if (isJwtTimingError(err)) {
                 await AuthService.signOut().catch(() => {});
-                alert("Session invalide : l'horloge de ton appareil est (ou était) désynchronisée. "
-                    + "Vérifie que la date et l'heure sont réglées automatiquement, puis reconnecte-toi.");
+                alert(
+                    "Session invalide : l'horloge de ton appareil est (ou était) désynchronisée. " +
+                        "Vérifie que la date et l'heure sont réglées automatiquement, puis reconnecte-toi."
+                );
             } else {
                 alert('Erreur de chargement des données : ' + err.message);
             }
@@ -173,8 +203,12 @@ export const shell = {
         const authInfo = document.getElementById('authInfo');
         const emailGroup = document.getElementById('authEmailGroup');
         const passwordGroup = document.getElementById('authPasswordGroup');
-        const emailInput = /** @type {HTMLInputElement} */ (authForm.querySelector('input[name="email"]'));
-        const passwordInput = /** @type {HTMLInputElement} */ (authForm.querySelector('input[name="password"]'));
+        const emailInput = /** @type {HTMLInputElement} */ (
+            authForm.querySelector('input[name="email"]')
+        );
+        const passwordInput = /** @type {HTMLInputElement} */ (
+            authForm.querySelector('input[name="password"]')
+        );
         let mode = startInRecovery ? 'recovery' : 'signin';
 
         const applyMode = () => {
@@ -206,7 +240,7 @@ export const shell = {
         };
 
         authToggleBtn.onclick = () => {
-            mode = mode === 'signin' ? 'signup' : (mode === 'reset' ? 'signin' : 'signin');
+            mode = mode === 'signin' ? 'signup' : mode === 'reset' ? 'signin' : 'signin';
             applyMode();
         };
 
@@ -232,14 +266,17 @@ export const shell = {
                     if (data.session) {
                         await this.startApp();
                     } else {
-                        alert('Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis connecte-toi.');
+                        alert(
+                            'Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis connecte-toi.'
+                        );
                         mode = 'signin';
                         applyMode();
                         authForm.reset();
                     }
                 } else if (mode === 'reset') {
                     await AuthService.resetPasswordForEmail(email);
-                    authInfo.textContent = 'Email envoyé ! Vérifie ta boîte mail pour réinitialiser ton mot de passe.';
+                    authInfo.textContent =
+                        'Email envoyé ! Vérifie ta boîte mail pour réinitialiser ton mot de passe.';
                     authInfo.style.display = 'block';
                 } else if (mode === 'recovery') {
                     await AuthService.updatePassword(password);

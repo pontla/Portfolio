@@ -30,11 +30,15 @@ test.describe('modale de transaction', () => {
 
         await expect(page.locator('#transactionModalTitle')).toHaveText('Nouvelle Transaction');
         const today = new Date();
-        const iso = [today.getFullYear(),
+        const iso = [
+            today.getFullYear(),
             String(today.getMonth() + 1).padStart(2, '0'),
-            String(today.getDate()).padStart(2, '0')].join('-');
+            String(today.getDate()).padStart(2, '0'),
+        ].join('-');
         await expect(page.locator('#transactionForm input[name="date"]')).toHaveValue(iso);
-        await expect(page.locator('#transactionForm input[name="type"]:checked')).toHaveValue('BUY');
+        await expect(page.locator('#transactionForm input[name="type"]:checked')).toHaveValue(
+            'BUY'
+        );
         await expect(page.locator('#targetPortfolioSelect')).toHaveValue('e2e-pf');
     });
 
@@ -124,7 +128,9 @@ test.describe('actions sur les lignes existantes', () => {
 
         await expect(page.locator('#transactionModal')).toHaveClass(/open/);
         await expect(page.locator('#transactionModalTitle')).toHaveText('Modifier la transaction');
-        await expect(page.locator('#transactionForm input[name="type"]:checked')).toHaveValue('BUY');
+        await expect(page.locator('#transactionForm input[name="type"]:checked')).toHaveValue(
+            'BUY'
+        );
         await expect(page.locator('#symbolInputField')).toHaveValue('AAPL');
         await expect(page.locator('#qtyInputField')).toHaveValue('10');
         await expect(page.locator('#priceInputField')).toHaveValue('150');
@@ -155,7 +161,9 @@ test.describe('actions sur les lignes existantes', () => {
 
         await expect(page.locator('#transactionModal')).toHaveClass(/open/);
         await expect(page.locator('#transactionModalTitle')).toHaveText('Vendre AAPL');
-        await expect(page.locator('#transactionForm input[name="type"]:checked')).toHaveValue('SELL');
+        await expect(page.locator('#transactionForm input[name="type"]:checked')).toHaveValue(
+            'SELL'
+        );
         await expect(page.locator('#symbolInputField')).toHaveValue('AAPL');
         await expect(page.locator('#qtyInputField')).toHaveValue('10');
     });
@@ -281,7 +289,9 @@ test.describe('reglages', () => {
         await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     });
 
-    test('le champ de cle IA reste inactif tant qu aucun fournisseur n est choisi', async ({ page }) => {
+    test('le champ de cle IA reste inactif tant qu aucun fournisseur n est choisi', async ({
+        page,
+    }) => {
         await expect(page.locator('#aiKeyInput')).toBeDisabled();
 
         await page.locator('#aiProviderSelect').selectOption('anthropic');

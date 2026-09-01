@@ -1,21 +1,27 @@
 {
-    // Verification de types uniquement : `noEmit` + JSDoc. Aucune etape de build,
-    // aucun fichier .ts, aucun impact sur le runtime (cf. README « Zero-build »).
-    // Le service worker a sa propre config (lib WebWorker, incompatible avec DOM).
-    "compilerOptions": {
-        "target": "ES2022",
-        "lib": ["ES2022", "DOM", "DOM.Iterable"],
-        "module": "ESNext",
-        "moduleResolution": "bundler",
-        "allowJs": true,
-        "checkJs": true,
-        "noEmit": true,
-        "skipLibCheck": true,
-        "types": ["node"],
-        "strict": false,
-        "noImplicitAny": false,
-        "useUnknownInCatchVariables": false,
-        "forceConsistentCasingInFileNames": true
-    },
-    "include": ["public/js/**/*.js", "public/js/**/*.d.ts", "worker/**/*.js", "e2e/**/*.js", "scripts/**/*.mjs"]
+  // Verification de types uniquement : `noEmit` + JSDoc. Aucune etape de build,
+  // aucun fichier .ts, aucun impact sur le runtime (cf. README « Zero-build »).
+  // Le service worker a sa propre config (lib WebWorker, incompatible avec DOM).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "strict": false,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "public/js/**/*.js",
+    "public/js/**/*.d.ts",
+    "worker/**/*.js",
+    "e2e/**/*.js",
+    "scripts/**/*.mjs"
+  ]
 }

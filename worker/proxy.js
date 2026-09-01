@@ -33,7 +33,8 @@
  */
 
 const YAHOO_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+    'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
 };
 
 // Seules ces origines (navigateur) peuvent consommer le proxy. Une requete sans
@@ -42,7 +43,7 @@ const YAHOO_HEADERS = {
 const ALLOWED_ORIGINS = [
     'https://portfolio.jrichardeau-cloudflare.workers.dev',
     'http://localhost:8788',
-    'http://127.0.0.1:8788'
+    'http://127.0.0.1:8788',
 ];
 
 // Quota journalier par IP, tous chemins confondus (defense en profondeur contre
@@ -60,9 +61,9 @@ function resolveOrigin(request) {
 function corsHeaders(origin = '*') {
     return {
         'Access-Control-Allow-Origin': origin || '*',
-        'Vary': 'Origin',
+        Vary: 'Origin',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 }
 
@@ -83,7 +84,7 @@ async function enforceRateLimit(request, env) {
 function jsonResponse(data, status = 200, cacheSeconds = 0) {
     const headers = {
         'Content-Type': 'application/json',
-        ...corsHeaders()
+        ...corsHeaders(),
     };
     if (cacheSeconds > 0) {
         headers['Cache-Control'] = `public, s-maxage=${cacheSeconds}`;
@@ -93,7 +94,14 @@ function jsonResponse(data, status = 200, cacheSeconds = 0) {
 
 function toUnixSeconds(dateStr, endOfDay = false) {
     const [y, m, d] = dateStr.split('-').map(Number);
-    const ms = Date.UTC(y, (m || 1) - 1, d || 1, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+    const ms = Date.UTC(
+        y,
+        (m || 1) - 1,
+        d || 1,
+        endOfDay ? 23 : 0,
+        endOfDay ? 59 : 0,
+        endOfDay ? 59 : 0
+    );
     return Math.floor(ms / 1000);
 }
 
@@ -105,7 +113,9 @@ async function fetchYahooChart(symbol, period1, period2) {
     const result = data && data.chart && data.chart.result && data.chart.result[0];
     if (!result) {
         const err = data && data.chart && data.chart.error;
-        throw new Error(err ? `Yahoo error: ${err.description || err.code}` : 'Symbole introuvable');
+        throw new Error(
+            err ? `Yahoo error: ${err.description || err.code}` : 'Symbole introuvable'
+        );
     }
     return result;
 }
@@ -117,19 +127,31 @@ async function handleQuote(symbol) {
     let price = meta.regularMarketPrice;
 
     if (price === undefined || price === null) {
-        const closes = (result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close) || [];
+        const closes =
+            (result.indicators &&
+                result.indicators.quote &&
+                result.indicators.quote[0] &&
+                result.indicators.quote[0].close) ||
+            [];
         for (let i = closes.length - 1; i >= 0; i--) {
-            if (closes[i] !== null && closes[i] !== undefined) { price = closes[i]; break; }
+            if (closes[i] !== null && closes[i] !== undefined) {
+                price = closes[i];
+                break;
+            }
         }
     }
 
     if (price === undefined || price === null) throw new Error('Prix indisponible');
 
-    return jsonResponse({
-        symbol: meta.symbol || symbol,
-        price,
-        currency: meta.currency || 'USD'
-    }, 200, 60);
+    return jsonResponse(
+        {
+            symbol: meta.symbol || symbol,
+            price,
+            currency: meta.currency || 'USD',
+        },
+        200,
+        60
+    );
 }
 
 async function handleHistory(symbol, from, to) {
@@ -138,7 +160,12 @@ async function handleHistory(symbol, from, to) {
     const result = await fetchYahooChart(symbol, period1, period2);
 
     const timestamps = result.timestamp || [];
-    const closes = (result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close) || [];
+    const closes =
+        (result.indicators &&
+            result.indicators.quote &&
+            result.indicators.quote[0] &&
+            result.indicators.quote[0].close) ||
+        [];
 
     const daily = {};
     timestamps.forEach((ts, idx) => {
@@ -158,11 +185,13 @@ async function handleDividends(symbol, from, to) {
     const result = await fetchYahooChart(symbol, period1, period2);
 
     const dividends = (result.events && result.events.dividends) || {};
-    const list = Object.values(dividends).map(ev => {
-        const d = new Date(ev.date * 1000);
-        const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-        return { date: dateStr, amountPerShare: ev.amount };
-    }).sort((a, b) => a.date.localeCompare(b.date));
+    const list = Object.values(dividends)
+        .map((ev) => {
+            const d = new Date(ev.date * 1000);
+            const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            return { date: dateStr, amountPerShare: ev.amount };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
 
     return jsonResponse(list, 200, 21600); // cache 6h
 }
@@ -183,17 +212,38 @@ async function handleSector(symbol, apiKey) {
     return jsonResponse({ sector: data.finnhubIndustry || null }, 200, 604800); // cache 7j
 }
 
-const numOrNull = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
+const numOrNull = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
 
 async function handleFundamentals(symbol, apiKey) {
     const now = Math.floor(Date.now() / 1000);
     const out = {
-        symbol, name: null, currency: 'USD', price: null, previousClose: null,
-        dayHigh: null, dayLow: null, fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null,
-        volume: null, exchange: null, marketCap: null, peTTM: null, pbAnnual: null,
-        psTTM: null, epsTTM: null, dividendYield: null, beta: null, roeTTM: null,
-        netMarginTTM: null, revenueGrowthTTM: null, industry: null, country: null,
-        ipo: null, weburl: null, logo: null, fundamentalsSource: null
+        symbol,
+        name: null,
+        currency: 'USD',
+        price: null,
+        previousClose: null,
+        dayHigh: null,
+        dayLow: null,
+        fiftyTwoWeekHigh: null,
+        fiftyTwoWeekLow: null,
+        volume: null,
+        exchange: null,
+        marketCap: null,
+        peTTM: null,
+        pbAnnual: null,
+        psTTM: null,
+        epsTTM: null,
+        dividendYield: null,
+        beta: null,
+        roeTTM: null,
+        netMarginTTM: null,
+        revenueGrowthTTM: null,
+        industry: null,
+        country: null,
+        ipo: null,
+        weburl: null,
+        logo: null,
+        fundamentalsSource: null,
     };
 
     // Meta Yahoo : disponible pour tous les marches (US, Euronext, crypto...)
@@ -210,23 +260,34 @@ async function handleFundamentals(symbol, apiKey) {
         out.volume = numOrNull(meta.regularMarketVolume);
         out.exchange = meta.fullExchangeName || meta.exchangeName || null;
         out.name = meta.longName || meta.shortName || null;
-    } catch (e) { /* pas de meta -> champs a null */ }
+    } catch (e) {
+        /* pas de meta -> champs a null */
+    }
 
     // Ratios fondamentaux : Finnhub gratuit = actions US uniquement.
-    const isUS = apiKey && !symbol.includes('.') && !symbol.startsWith('$') && !symbol.endsWith('-USD');
+    const isUS =
+        apiKey && !symbol.includes('.') && !symbol.startsWith('$') && !symbol.endsWith('-USD');
     if (isUS) {
         try {
             const [mRes, pRes] = await Promise.all([
-                fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${apiKey}`),
-                fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`)
+                fetch(
+                    `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${apiKey}`
+                ),
+                fetch(
+                    `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`
+                ),
             ]);
             if (mRes.ok) {
                 const m = (await mRes.json()).metric || {};
                 out.peTTM = numOrNull(m.peTTM ?? m.peBasicExclExtraTTM);
                 out.pbAnnual = numOrNull(m.pbAnnual ?? m.pbQuarterly);
                 out.psTTM = numOrNull(m.psTTM);
-                out.epsTTM = numOrNull(m.epsTTM ?? m.epsBasicExclExtraItemsTTM ?? m.epsInclExtraItemsTTM);
-                out.dividendYield = numOrNull(m.dividendYieldIndicatedAnnual ?? m.currentDividendYieldTTM);
+                out.epsTTM = numOrNull(
+                    m.epsTTM ?? m.epsBasicExclExtraItemsTTM ?? m.epsInclExtraItemsTTM
+                );
+                out.dividendYield = numOrNull(
+                    m.dividendYieldIndicatedAnnual ?? m.currentDividendYieldTTM
+                );
                 out.beta = numOrNull(m.beta);
                 out.roeTTM = numOrNull(m.roeTTM);
                 out.netMarginTTM = numOrNull(m.netProfitMarginTTM);
@@ -237,7 +298,8 @@ async function handleFundamentals(symbol, apiKey) {
             }
             if (pRes.ok) {
                 const p = await pRes.json();
-                if (typeof p.marketCapitalization === 'number') out.marketCap = p.marketCapitalization * 1e6;
+                if (typeof p.marketCapitalization === 'number')
+                    out.marketCap = p.marketCapitalization * 1e6;
                 out.industry = p.finnhubIndustry || null;
                 out.country = p.country || null;
                 out.ipo = p.ipo || null;
@@ -246,7 +308,9 @@ async function handleFundamentals(symbol, apiKey) {
                 if (!out.name) out.name = p.name || null;
                 if (!out.exchange) out.exchange = p.exchange || null;
             }
-        } catch (e) { /* fondamentaux indisponibles */ }
+        } catch (e) {
+            /* fondamentaux indisponibles */
+        }
     }
 
     return jsonResponse(out, 200, 3600); // cache 1h
@@ -271,12 +335,16 @@ async function handleEarnings(symbol, apiKey) {
     const next = list.slice().sort((a, b) => a.date.localeCompare(b.date))[0];
     if (!next) return jsonResponse({ date: null }, 200, 21600);
 
-    return jsonResponse({
-        date: next.date,
-        hour: next.hour || null,
-        epsEstimate: next.epsEstimate ?? null,
-        revenueEstimate: next.revenueEstimate ?? null
-    }, 200, 21600); // cache 6h
+    return jsonResponse(
+        {
+            date: next.date,
+            hour: next.hour || null,
+            epsEstimate: next.epsEstimate ?? null,
+            revenueEstimate: next.revenueEstimate ?? null,
+        },
+        200,
+        21600
+    ); // cache 6h
 }
 
 async function handleWebSearch(query, apiKey, kv) {
@@ -305,16 +373,16 @@ async function handleWebSearch(query, apiKey, kv) {
             topic: 'news',
             days: 30,
             max_results: 5,
-            include_answer: false
-        })
+            include_answer: false,
+        }),
     });
     if (!res.ok) throw new Error(`Tavily HTTP ${res.status}`);
     const data = await res.json();
-    const results = (data.results || []).map(r => ({
+    const results = (data.results || []).map((r) => ({
         title: r.title || '',
         url: r.url || '',
         content: r.content || '',
-        publishedDate: r.published_date || null
+        publishedDate: r.published_date || null,
     }));
 
     if (kv) await kv.put(cacheKey, JSON.stringify(results), { expirationTtl: 1800 });
@@ -330,11 +398,11 @@ async function handleSearch(query) {
     const quotes = (data && data.quotes) || [];
 
     const results = quotes
-        .filter(q => q.symbol)
-        .map(q => ({
+        .filter((q) => q.symbol)
+        .map((q) => ({
             displaySymbol: q.symbol,
             description: q.shortname || q.longname || q.symbol,
-            type: q.quoteType || 'EQUITY'
+            type: q.quoteType || 'EQUITY',
         }));
 
     return jsonResponse(results, 200, 3600); // cache 1h
@@ -360,17 +428,22 @@ async function getYahooAuth(force = false) {
     let cookie = '';
     try {
         const r = await fetch('https://fc.yahoo.com/', { headers: YAHOO_HEADERS });
-        const jar = (typeof r.headers.getSetCookie === 'function' && r.headers.getSetCookie())
-            || [r.headers.get('set-cookie')].filter(Boolean);
-        cookie = jar.map(c => c.split(';')[0]).join('; ');
-    } catch (e) { /* pas de cookie -> on tente sans */ }
+        const jar =
+            (typeof r.headers.getSetCookie === 'function' && r.headers.getSetCookie()) ||
+            [r.headers.get('set-cookie')].filter(Boolean);
+        cookie = jar.map((c) => c.split(';')[0]).join('; ');
+    } catch (e) {
+        /* pas de cookie -> on tente sans */
+    }
     let crumb = '';
     try {
         const r = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-            headers: { ...YAHOO_HEADERS, ...(cookie ? { Cookie: cookie } : {}) }
+            headers: { ...YAHOO_HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
         });
         if (r.ok) crumb = (await r.text()).trim();
-    } catch (e) { /* crumb best-effort */ }
+    } catch (e) {
+        /* crumb best-effort */
+    }
     _yahooAuth = { cookie, crumb, ts: Date.now() };
     return _yahooAuth;
 }
@@ -378,12 +451,14 @@ async function getYahooAuth(force = false) {
 // Yahoo enveloppe les nombres dans { raw, fmt } ; parfois valeur nue.
 const rawNum = (v) => {
     if (typeof v === 'number') return isFinite(v) ? v : null;
-    if (v && typeof v === 'object' && typeof v.raw === 'number') return isFinite(v.raw) ? v.raw : null;
+    if (v && typeof v === 'object' && typeof v.raw === 'number')
+        return isFinite(v.raw) ? v.raw : null;
     return null;
 };
 
 async function fetchQuoteSummary(symbol) {
-    const modules = 'defaultKeyStatistics,financialData,summaryDetail,recommendationTrend,earningsTrend,price,assetProfile';
+    const modules =
+        'defaultKeyStatistics,financialData,summaryDetail,recommendationTrend,earningsTrend,price,assetProfile';
     const base = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
     const run = async (withAuth) => {
         const headers = /** @type {Record<string, string>} */ ({ ...YAHOO_HEADERS });
@@ -416,13 +491,13 @@ function normalizeQuoteSummary(symbol, r) {
     const t0 = ((r.recommendationTrend && r.recommendationTrend.trend) || [])[0] || {};
     const exTs = rawNum(sd.exDividendDate);
     const estimates = ((r.earningsTrend && r.earningsTrend.trend) || [])
-        .filter(x => ['0q', '+1q', '0y', '+1y'].includes(x.period))
-        .map(x => ({
+        .filter((x) => ['0q', '+1q', '0y', '+1y'].includes(x.period))
+        .map((x) => ({
             period: x.period,
             endDate: x.endDate || null,
             epsAvg: rawNum(x.earningsEstimate && x.earningsEstimate.avg),
             revenueAvg: rawNum(x.revenueEstimate && x.revenueEstimate.avg),
-            analysts: rawNum(x.earningsEstimate && x.earningsEstimate.numberOfAnalysts)
+            analysts: rawNum(x.earningsEstimate && x.earningsEstimate.numberOfAnalysts),
         }));
 
     return {
@@ -451,18 +526,18 @@ function normalizeQuoteSummary(symbol, r) {
         totalDebt: rawNum(fd.totalDebt),
         currentRatio: rawNum(fd.currentRatio),
         quickRatio: rawNum(fd.quickRatio),
-        debtToEquity: rawNum(fd.debtToEquity),          // exprime en % (150 = 1,5x)
-        returnOnEquity: rawNum(fd.returnOnEquity),       // fraction
-        returnOnAssets: rawNum(fd.returnOnAssets),       // fraction
-        grossMargins: rawNum(fd.grossMargins),           // fraction
-        operatingMargins: rawNum(fd.operatingMargins),   // fraction
+        debtToEquity: rawNum(fd.debtToEquity), // exprime en % (150 = 1,5x)
+        returnOnEquity: rawNum(fd.returnOnEquity), // fraction
+        returnOnAssets: rawNum(fd.returnOnAssets), // fraction
+        grossMargins: rawNum(fd.grossMargins), // fraction
+        operatingMargins: rawNum(fd.operatingMargins), // fraction
         profitMargins: rawNum(fd.profitMargins) ?? rawNum(dks.profitMargins),
-        revenueGrowth: rawNum(fd.revenueGrowth),         // fraction YoY
-        earningsGrowth: rawNum(fd.earningsGrowth),       // fraction YoY
+        revenueGrowth: rawNum(fd.revenueGrowth), // fraction YoY
+        earningsGrowth: rawNum(fd.earningsGrowth), // fraction YoY
         totalRevenue: rawNum(fd.totalRevenue),
         dividendYield: rawNum(sd.dividendYield) ?? rawNum(sd.trailingAnnualDividendYield), // fraction
         dividendRate: rawNum(sd.dividendRate),
-        payoutRatio: rawNum(sd.payoutRatio),             // fraction
+        payoutRatio: rawNum(sd.payoutRatio), // fraction
         fiveYearAvgDividendYield: rawNum(sd.fiveYearAvgDividendYield),
         exDividendDate: exTs ? new Date(exTs * 1000).toISOString().slice(0, 10) : null,
         beta: rawNum(sd.beta) ?? rawNum(dks.beta),
@@ -479,7 +554,7 @@ function normalizeQuoteSummary(symbol, r) {
         shortRatio: rawNum(dks.shortRatio),
         shortPercentOfFloat: rawNum(dks.shortPercentOfFloat), // fraction
         heldPercentInstitutions: rawNum(dks.heldPercentInstitutions), // fraction
-        heldPercentInsiders: rawNum(dks.heldPercentInsiders),         // fraction
+        heldPercentInsiders: rawNum(dks.heldPercentInsiders), // fraction
         targetMeanPrice: rawNum(fd.targetMeanPrice),
         targetLowPrice: rawNum(fd.targetLowPrice),
         targetHighPrice: rawNum(fd.targetHighPrice),
@@ -488,8 +563,11 @@ function normalizeQuoteSummary(symbol, r) {
         recommendationKey: fd.recommendationKey || null,
         numberOfAnalystOpinions: rawNum(fd.numberOfAnalystOpinions),
         recommendationTrend: {
-            strongBuy: t0.strongBuy ?? null, buy: t0.buy ?? null, hold: t0.hold ?? null,
-            sell: t0.sell ?? null, strongSell: t0.strongSell ?? null
+            strongBuy: t0.strongBuy ?? null,
+            buy: t0.buy ?? null,
+            hold: t0.hold ?? null,
+            sell: t0.sell ?? null,
+            strongSell: t0.strongSell ?? null,
         },
         estimates,
         sector: ap.sector || null,
@@ -506,8 +584,8 @@ function normalizeQuoteSummary(symbol, r) {
             audit: rawNum(ap.auditRisk),
             board: rawNum(ap.boardRisk),
             compensation: rawNum(ap.compensationRisk),
-            shareholderRights: rawNum(ap.shareHolderRightsRisk)
-        }
+            shareholderRights: rawNum(ap.shareHolderRightsRisk),
+        },
     };
 }
 
@@ -526,7 +604,7 @@ const FMP_RESOURCES = {
     cashflow: (s) => `cash-flow-statement/${s}?period=annual&limit=6`,
     estimates: (s) => `analyst-estimates/${s}?period=annual&limit=4`,
     peers: (s) => `stock_peers?symbol=${s}`,
-    dcf: (s) => `discounted-cash-flow/${s}`
+    dcf: (s) => `discounted-cash-flow/${s}`,
 };
 
 async function handleFmp(resource, symbol, apiKey) {
@@ -539,7 +617,9 @@ async function handleFmp(resource, symbol, apiKey) {
     if (isNonUsSymbol(symbol)) return jsonResponse({ unavailable: true, data: null }, 200, 86400);
     const pathPart = build(encodeURIComponent(symbol.toUpperCase()));
     const sep = pathPart.includes('?') ? '&' : '?';
-    const res = await fetch(`https://financialmodelingprep.com/api/v3/${pathPart}${sep}apikey=${apiKey}`);
+    const res = await fetch(
+        `https://financialmodelingprep.com/api/v3/${pathPart}${sep}apikey=${apiKey}`
+    );
     if (!res.ok) throw new Error(`FMP HTTP ${res.status}`);
     const data = await res.json();
     // FMP renvoie {"Error Message": "..."} avec un statut 200 quand le plan gratuit
@@ -555,9 +635,13 @@ async function handleFinnhubExtra(kind, symbol, apiKey) {
     if (isNonUsSymbol(symbol)) return jsonResponse({ unavailable: true, data: null }, 200, 86400);
     const sym = encodeURIComponent(symbol);
     let path, cache;
-    if (kind === 'recommendation') { path = `stock/recommendation?symbol=${sym}`; cache = 86400; }
-    else if (kind === 'peers') { path = `stock/peers?symbol=${sym}`; cache = 604800; }
-    else {
+    if (kind === 'recommendation') {
+        path = `stock/recommendation?symbol=${sym}`;
+        cache = 86400;
+    } else if (kind === 'peers') {
+        path = `stock/peers?symbol=${sym}`;
+        cache = 604800;
+    } else {
         const to = new Date().toISOString().slice(0, 10);
         const from = new Date(Date.now() - 180 * 86400_000).toISOString().slice(0, 10);
         path = `stock/insider-transactions?symbol=${sym}&from=${from}&to=${to}`;
@@ -577,8 +661,14 @@ async function handleFinnhubExtra(kind, symbol, apiKey) {
 
 async function httpErr(name, res) {
     let detail = '';
-    try { detail = (await res.text()).slice(0, 200); } catch (e) { /* corps illisible */ }
-    const err = /** @type {HttpError} */ (new Error(`${name} API HTTP ${res.status}${detail ? ' : ' + detail : ''}`));
+    try {
+        detail = (await res.text()).slice(0, 200);
+    } catch (e) {
+        /* corps illisible */
+    }
+    const err = /** @type {HttpError} */ (
+        new Error(`${name} API HTTP ${res.status}${detail ? ' : ' + detail : ''}`)
+    );
     err.statusCode = 502;
     return err;
 }
@@ -595,18 +685,27 @@ const AI_PROVIDERS = {
                 model: 'claude-sonnet-5',
                 max_tokens: 16000,
                 output_config: { effort: 'medium' },
-                messages: [{ role: 'user', content: prompt }]
+                messages: [{ role: 'user', content: prompt }],
             };
-            if (liveSearch) body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }];
+            if (liveSearch)
+                body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }];
             const res = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
-                headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-                body: JSON.stringify(body)
+                headers: {
+                    'content-type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                },
+                body: JSON.stringify(body),
             });
             if (!res.ok) throw await httpErr('Anthropic', res);
             const data = await res.json();
-            return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-        }
+            return (data.content || [])
+                .filter((b) => b.type === 'text')
+                .map((b) => b.text)
+                .join('\n')
+                .trim();
+        },
     },
     openai: {
         async call(apiKey, prompt, liveSearch) {
@@ -615,27 +714,38 @@ const AI_PROVIDERS = {
             const res = await fetch('https://api.openai.com/v1/responses', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-                body: JSON.stringify(body)
+                body: JSON.stringify(body),
             });
             if (!res.ok) throw await httpErr('OpenAI', res);
             const data = await res.json();
-            const msg = (data.output || []).find(o => o.type === 'message');
-            const block = msg && (msg.content || []).find(c => c.type === 'output_text');
+            const msg = (data.output || []).find((o) => o.type === 'message');
+            const block = msg && (msg.content || []).find((c) => c.type === 'output_text');
             return (block && block.text) || '';
-        }
+        },
     },
     gemini: {
         async call(apiKey, prompt) {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${encodeURIComponent(apiKey)}`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${encodeURIComponent(apiKey)}`,
+                {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+                }
+            );
             if (!res.ok) throw await httpErr('Gemini', res);
             const data = await res.json();
-            const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-            return parts.map(p => p.text || '').join('\n').trim();
-        }
+            const parts =
+                (data.candidates &&
+                    data.candidates[0] &&
+                    data.candidates[0].content &&
+                    data.candidates[0].content.parts) ||
+                [];
+            return parts
+                .map((p) => p.text || '')
+                .join('\n')
+                .trim();
+        },
     },
     grok: {
         async call(apiKey, prompt, liveSearch) {
@@ -645,13 +755,19 @@ const AI_PROVIDERS = {
                 body: JSON.stringify({
                     model: 'grok-4-latest',
                     messages: [{ role: 'user', content: prompt }],
-                    search_parameters: { mode: liveSearch ? 'auto' : 'off' }
-                })
+                    search_parameters: { mode: liveSearch ? 'auto' : 'off' },
+                }),
             });
             if (!res.ok) throw await httpErr('Grok', res);
             const data = await res.json();
-            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-        }
+            return (
+                (data.choices &&
+                    data.choices[0] &&
+                    data.choices[0].message &&
+                    data.choices[0].message.content) ||
+                ''
+            );
+        },
     },
     groq: {
         async call(apiKey, prompt) {
@@ -661,14 +777,20 @@ const AI_PROVIDERS = {
                 body: JSON.stringify({
                     model: 'llama-3.3-70b-versatile',
                     messages: [{ role: 'user', content: prompt }],
-                    temperature: 0.3
-                })
+                    temperature: 0.3,
+                }),
             });
             if (!res.ok) throw await httpErr('Groq', res);
             const data = await res.json();
-            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-        }
-    }
+            return (
+                (data.choices &&
+                    data.choices[0] &&
+                    data.choices[0].message &&
+                    data.choices[0].message.content) ||
+                ''
+            );
+        },
+    },
 };
 
 function authError(msg) {
@@ -683,7 +805,7 @@ async function verifySupabaseJwt(request, env) {
         throw authError('Authentification requise');
     }
     const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
-        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: auth }
+        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: auth },
     });
     if (!res.ok) throw authError('Session invalide');
     const user = await res.json().catch(() => null);
@@ -692,14 +814,16 @@ async function verifySupabaseJwt(request, env) {
 }
 
 async function importEncKey(env) {
-    const raw = Uint8Array.from(atob(env.AI_ENC_KEY), c => c.charCodeAt(0));
+    const raw = Uint8Array.from(atob(env.AI_ENC_KEY), (c) => c.charCodeAt(0));
     return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
 async function encryptSecret(env, text) {
     const key = await importEncKey(env);
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+    const ct = new Uint8Array(
+        await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text))
+    );
     const blob = new Uint8Array(iv.length + ct.length);
     blob.set(iv);
     blob.set(ct, iv.length);
@@ -708,8 +832,12 @@ async function encryptSecret(env, text) {
 
 async function decryptSecret(env, b64) {
     const key = await importEncKey(env);
-    const blob = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12) }, key, blob.slice(12));
+    const blob = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const pt = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: blob.slice(0, 12) },
+        key,
+        blob.slice(12)
+    );
     return new TextDecoder().decode(pt);
 }
 
@@ -718,32 +846,43 @@ function supabaseRest(env, request, method, path, body) {
     const headers = {
         apikey: env.SUPABASE_ANON_KEY,
         Authorization: request.headers.get('Authorization'),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
     };
     if (method === 'POST') headers.Prefer = 'resolution=merge-duplicates,return=representation';
     return fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined ? undefined : JSON.stringify(body),
     });
 }
 
 // Source de verite du marqueur "quels fournisseurs ont une cle" = la ligne
 // user_settings (et non un list() KV, dont la coherence est differee).
 async function readConfiguredProviders(env, request, userId) {
-    const res = await supabaseRest(env, request, 'GET',
-        `/user_settings?user_id=eq.${userId}&select=ai_providers_configured`);
+    const res = await supabaseRest(
+        env,
+        request,
+        'GET',
+        `/user_settings?user_id=eq.${userId}&select=ai_providers_configured`
+    );
     if (!res.ok) return [];
     const rows = await res.json().catch(() => []);
     return (rows[0] && rows[0].ai_providers_configured) || [];
 }
 
 async function writeAiConfig(request, env, userId, body) {
-    const res = await supabaseRest(env, request, 'POST', '/user_settings',
-        { user_id: userId, updated_at: new Date().toISOString(), ...body });
+    const res = await supabaseRest(env, request, 'POST', '/user_settings', {
+        user_id: userId,
+        updated_at: new Date().toISOString(),
+        ...body,
+    });
     if (!res.ok) {
         const detail = await res.text().catch(() => '');
-        const err = /** @type {HttpError} */ (new Error(`Enregistrement du compte echoue (HTTP ${res.status}) ${detail.slice(0, 300)}`));
+        const err = /** @type {HttpError} */ (
+            new Error(
+                `Enregistrement du compte echoue (HTTP ${res.status}) ${detail.slice(0, 300)}`
+            )
+        );
         err.statusCode = 502;
         throw err;
     }
@@ -764,14 +903,19 @@ async function enforceUserAiQuota(env, userId) {
 
 async function handleAiKeySet(request, env) {
     const userId = await verifySupabaseJwt(request, env);
-    if (!env.AI_ENC_KEY || !env.WEBSEARCH_KV) return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
+    if (!env.AI_ENC_KEY || !env.WEBSEARCH_KV)
+        return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
     const { provider, key } = await request.json().catch(() => ({}));
     if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
-    if (typeof key !== 'string' || key.trim().length < 8) return jsonResponse({ error: 'Cle API invalide' }, 400);
+    if (typeof key !== 'string' || key.trim().length < 8)
+        return jsonResponse({ error: 'Cle API invalide' }, 400);
     await env.WEBSEARCH_KV.put(`aikey:${userId}:${provider}`, await encryptSecret(env, key.trim()));
     const current = await readConfiguredProviders(env, request, userId);
     const configured = [...new Set([...current, provider])];
-    await writeAiConfig(request, env, userId, { ai_provider: provider, ai_providers_configured: configured });
+    await writeAiConfig(request, env, userId, {
+        ai_provider: provider,
+        ai_providers_configured: configured,
+    });
     return jsonResponse({ ok: true, provider, configured });
 }
 
@@ -781,7 +925,7 @@ async function handleAiKeyDelete(request, env, url) {
     if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
     if (env.WEBSEARCH_KV) await env.WEBSEARCH_KV.delete(`aikey:${userId}:${provider}`);
     const current = await readConfiguredProviders(env, request, userId);
-    const configured = current.filter(p => p !== provider);
+    const configured = current.filter((p) => p !== provider);
     const body = { ai_providers_configured: configured };
     if (!configured.length) body.ai_provider = null;
     await writeAiConfig(request, env, userId, body);
@@ -790,10 +934,12 @@ async function handleAiKeyDelete(request, env, url) {
 
 async function handleAiInsights(request, env) {
     const userId = await verifySupabaseJwt(request, env);
-    if (!env.WEBSEARCH_KV || !env.AI_ENC_KEY) return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
+    if (!env.WEBSEARCH_KV || !env.AI_ENC_KEY)
+        return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
     const { provider, prompt, liveSearch } = await request.json().catch(() => ({}));
     if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
-    if (typeof prompt !== 'string' || !prompt.trim()) return jsonResponse({ error: 'prompt requis' }, 400);
+    if (typeof prompt !== 'string' || !prompt.trim())
+        return jsonResponse({ error: 'prompt requis' }, 400);
     const enc = await env.WEBSEARCH_KV.get(`aikey:${userId}:${provider}`);
     if (!enc) return jsonResponse({ error: 'Aucune cle enregistree pour ce fournisseur' }, 400);
     await enforceUserAiQuota(env, userId);
@@ -847,7 +993,9 @@ async function enforceStockAnalysisRefresh(env, userId, symbol) {
     if (!kv) return;
     const key = `stockairl:${userId}:${symbol}`;
     if (await kv.get(key)) {
-        const err = /** @type {HttpError} */ (new Error('Analyse deja regeneree recemment : reessayez dans une heure'));
+        const err = /** @type {HttpError} */ (
+            new Error('Analyse deja regeneree recemment : reessayez dans une heure')
+        );
         err.statusCode = 429;
         throw err;
     }
@@ -856,14 +1004,21 @@ async function enforceStockAnalysisRefresh(env, userId, symbol) {
 
 async function handleAiStockAnalysis(request, env) {
     const userId = await verifySupabaseJwt(request, env);
-    if (!env.WEBSEARCH_KV || !env.AI_ENC_KEY) return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
+    if (!env.WEBSEARCH_KV || !env.AI_ENC_KEY)
+        return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
     const { provider, data, force } = await request.json().catch(() => ({}));
     if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
-    if (!data || typeof data !== 'object' || typeof data.symbol !== 'string' || !data.symbol.trim()) {
+    if (
+        !data ||
+        typeof data !== 'object' ||
+        typeof data.symbol !== 'string' ||
+        !data.symbol.trim()
+    ) {
         return jsonResponse({ error: 'donnees d analyse requises' }, 400);
     }
     const payload = JSON.stringify(data);
-    if (payload.length > STOCK_ANALYSIS_MAX_PAYLOAD) return jsonResponse({ error: 'Donnees d analyse trop volumineuses' }, 413);
+    if (payload.length > STOCK_ANALYSIS_MAX_PAYLOAD)
+        return jsonResponse({ error: 'Donnees d analyse trop volumineuses' }, 413);
 
     const symbol = data.symbol.trim().toUpperCase().slice(0, 24);
     const cacheKey = `stockai:${userId}:${provider}:${symbol}:${todayKey()}`;
@@ -873,7 +1028,11 @@ async function handleAiStockAnalysis(request, env) {
         // Une entree illisible est traitee comme absente : on regenere plutot
         // que de renvoyer une erreur a l'utilisateur.
         let parsed = null;
-        try { parsed = hit ? JSON.parse(hit) : null; } catch (e) { /* entree illisible : on regenere */ }
+        try {
+            parsed = hit ? JSON.parse(hit) : null;
+        } catch (e) {
+            /* entree illisible : on regenere */
+        }
         if (parsed && parsed.text) return jsonResponse({ ...parsed, cached: true });
     } else {
         await enforceStockAnalysisRefresh(env, userId, symbol);
@@ -886,7 +1045,11 @@ async function handleAiStockAnalysis(request, env) {
     const apiKey = await decryptSecret(env, enc);
     // liveSearch volontairement desactive : le modele ne doit rien aller chercher
     // lui-meme, il ne dispose que des donnees deja calculees par l'application.
-    const text = await AI_PROVIDERS[provider].call(apiKey, `${STOCK_ANALYSIS_SYSTEM_PROMPT}\n\nDONNEES DE LA VALEUR (JSON) :\n${payload}`, false);
+    const text = await AI_PROVIDERS[provider].call(
+        apiKey,
+        `${STOCK_ANALYSIS_SYSTEM_PROMPT}\n\nDONNEES DE LA VALEUR (JSON) :\n${payload}`,
+        false
+    );
     if (!text || !text.trim()) {
         const err = /** @type {HttpError} */ (new Error('Reponse vide du fournisseur IA'));
         err.statusCode = 502;
@@ -975,7 +1138,11 @@ async function route(request, url, env) {
         return await handleFmp(resource, symbol, env.FMP_API_KEY);
     }
 
-    if (url.pathname === '/recommendation' || url.pathname === '/insider' || url.pathname === '/peers') {
+    if (
+        url.pathname === '/recommendation' ||
+        url.pathname === '/insider' ||
+        url.pathname === '/peers'
+    ) {
         const symbol = url.searchParams.get('symbol');
         if (!symbol) return jsonResponse({ error: 'symbol requis' }, 400);
         return await handleFinnhubExtra(url.pathname.slice(1), symbol, env.FINNHUB_API_KEY);
@@ -987,7 +1154,28 @@ async function route(request, url, env) {
         return await handleWebSearch(q, env.TAVILY_API_KEY, env.WEBSEARCH_KV);
     }
 
-    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/quoteSummary?symbol=', '/fmp?symbol=&resource=', '/recommendation?symbol=', '/insider?symbol=', '/peers?symbol=', '/search?q=', '/websearch?q=', 'POST /ai/key', 'DELETE /ai/key?provider=', 'POST /ai/insights', 'POST /ai/stock-analysis'] });
+    return jsonResponse({
+        status: 'ok',
+        routes: [
+            '/quote?symbol=',
+            '/history?symbol=&from=&to=',
+            '/dividends?symbol=&from=&to=',
+            '/sector?symbol=',
+            '/earnings?symbol=',
+            '/fundamentals?symbol=',
+            '/quoteSummary?symbol=',
+            '/fmp?symbol=&resource=',
+            '/recommendation?symbol=',
+            '/insider?symbol=',
+            '/peers?symbol=',
+            '/search?q=',
+            '/websearch?q=',
+            'POST /ai/key',
+            'DELETE /ai/key?provider=',
+            'POST /ai/insights',
+            'POST /ai/stock-analysis',
+        ],
+    });
 }
 
 export default {
@@ -1004,7 +1192,11 @@ export default {
         if (origin === null) {
             return new Response(JSON.stringify({ error: 'Origine non autorisee' }), {
                 status: 403,
-                headers: { 'Content-Type': 'application/json', ...cors, 'Access-Control-Allow-Origin': '*' }
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...cors,
+                    'Access-Control-Allow-Origin': '*',
+                },
             });
         }
 
@@ -1021,5 +1213,5 @@ export default {
         headers.set('Access-Control-Allow-Origin', origin);
         headers.set('Vary', 'Origin');
         return new Response(res.body, { status: res.status, headers });
-    }
+    },
 };

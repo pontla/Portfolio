@@ -40,81 +40,246 @@ const FUNDAMENTALS = {
 
 // Sortie deja normalisee du worker /quoteSummary (cf. normalizeQuoteSummary).
 const QUOTE_SUMMARY = {
-    symbol: 'AAPL', source: 'yahoo-quoteSummary', name: 'Apple Inc', currency: 'USD',
-    exchange: 'NasdaqGS', price: 192.5, previousClose: 190, marketCap: 3000000000000,
-    peTrailing: 31.2, peForward: 27.4, pegRatio: 2.3,
-    priceToBook: 44.0, priceToSales: 7.6,
-    enterpriseToEbitda: 22.1, enterpriseToRevenue: 7.1,
-    trailingEps: 6.16, forwardEps: 7.1, ebitda: 130000000000, freeCashflow: 99000000000,
-    totalCash: 61000000000, totalDebt: 108000000000,
-    currentRatio: 0.99, quickRatio: 0.85, debtToEquity: 140,
-    returnOnEquity: 1.5, returnOnAssets: 0.28,
-    grossMargins: 0.46, operatingMargins: 0.30, profitMargins: 0.25,
-    revenueGrowth: 0.08, earningsGrowth: 0.11,
-    dividendYield: 0.005, dividendRate: 0.96, payoutRatio: 0.15, fiveYearAvgDividendYield: 0.62,
+    symbol: 'AAPL',
+    source: 'yahoo-quoteSummary',
+    name: 'Apple Inc',
+    currency: 'USD',
+    exchange: 'NasdaqGS',
+    price: 192.5,
+    previousClose: 190,
+    marketCap: 3000000000000,
+    peTrailing: 31.2,
+    peForward: 27.4,
+    pegRatio: 2.3,
+    priceToBook: 44.0,
+    priceToSales: 7.6,
+    enterpriseToEbitda: 22.1,
+    enterpriseToRevenue: 7.1,
+    trailingEps: 6.16,
+    forwardEps: 7.1,
+    ebitda: 130000000000,
+    freeCashflow: 99000000000,
+    totalCash: 61000000000,
+    totalDebt: 108000000000,
+    currentRatio: 0.99,
+    quickRatio: 0.85,
+    debtToEquity: 140,
+    returnOnEquity: 1.5,
+    returnOnAssets: 0.28,
+    grossMargins: 0.46,
+    operatingMargins: 0.3,
+    profitMargins: 0.25,
+    revenueGrowth: 0.08,
+    earningsGrowth: 0.11,
+    dividendYield: 0.005,
+    dividendRate: 0.96,
+    payoutRatio: 0.15,
+    fiveYearAvgDividendYield: 0.62,
     exDividendDate: '2025-08-11',
-    beta: 1.24, fiftyTwoWeekHigh: 210, fiftyTwoWeekLow: 150,
-    fiftyDayAverage: 195, twoHundredDayAverage: 185,
-    regularMarketVolume: 64000000, averageVolume: 58000000, averageVolume10Days: 61000000,
-    sharesOutstanding: 15500000000, floatShares: 15400000000,
-    sharesShort: 120000000, shortRatio: 1.5, shortPercentOfFloat: 0.008,
-    heldPercentInstitutions: 0.61, heldPercentInsiders: 0.0007,
-    targetMeanPrice: 220, targetLowPrice: 170, targetHighPrice: 260, targetMedianPrice: 225,
-    recommendationMean: 2.0, recommendationKey: 'buy', numberOfAnalystOpinions: 38,
+    beta: 1.24,
+    fiftyTwoWeekHigh: 210,
+    fiftyTwoWeekLow: 150,
+    fiftyDayAverage: 195,
+    twoHundredDayAverage: 185,
+    regularMarketVolume: 64000000,
+    averageVolume: 58000000,
+    averageVolume10Days: 61000000,
+    sharesOutstanding: 15500000000,
+    floatShares: 15400000000,
+    sharesShort: 120000000,
+    shortRatio: 1.5,
+    shortPercentOfFloat: 0.008,
+    heldPercentInstitutions: 0.61,
+    heldPercentInsiders: 0.0007,
+    targetMeanPrice: 220,
+    targetLowPrice: 170,
+    targetHighPrice: 260,
+    targetMedianPrice: 225,
+    recommendationMean: 2.0,
+    recommendationKey: 'buy',
+    numberOfAnalystOpinions: 38,
     recommendationTrend: { strongBuy: 12, buy: 18, hold: 6, sell: 1, strongSell: 0 },
     estimates: [
         { period: '0q', endDate: '2025-06-30', epsAvg: 1.9, revenueAvg: 89000000000, analysts: 24 },
-        { period: '+1q', endDate: '2025-09-30', epsAvg: 2.1, revenueAvg: 95000000000, analysts: 25 }
+        {
+            period: '+1q',
+            endDate: '2025-09-30',
+            epsAvg: 2.1,
+            revenueAvg: 95000000000,
+            analysts: 25,
+        },
     ],
-    sector: 'Technology', industry: 'Consumer Electronics', country: 'United States',
-    website: 'https://www.apple.com', fullTimeEmployees: 161000,
-    longBusinessSummary: 'Apple Inc. conçoit, fabrique et commercialise des smartphones, ordinateurs et services.',
-    governance: { overall: 1, audit: 7, board: 1, compensation: 5, shareholderRights: 1 }
+    sector: 'Technology',
+    industry: 'Consumer Electronics',
+    country: 'United States',
+    website: 'https://www.apple.com',
+    fullTimeEmployees: 161000,
+    longBusinessSummary:
+        'Apple Inc. conçoit, fabrique et commercialise des smartphones, ordinateurs et services.',
+    governance: { overall: 1, audit: 7, board: 1, compensation: 5, shareholderRights: 1 },
 };
 
 // Comparables : seules les metriques du tableau sectoriel varient d'un pair a
 // l'autre, le reste reprend QUOTE_SUMMARY.
 const PEER_SUMMARY = {
-    MSFT: { symbol: 'MSFT', name: 'Microsoft', marketCap: 3.1e12, peTrailing: 35, profitMargins: 0.36, revenueGrowth: 0.16, returnOnEquity: 0.39 },
-    GOOGL: { symbol: 'GOOGL', name: 'Alphabet', marketCap: 2.1e12, peTrailing: 24, profitMargins: 0.28, revenueGrowth: 0.14, returnOnEquity: 0.30 },
-    AMZN: { symbol: 'AMZN', name: 'Amazon', marketCap: 1.9e12, peTrailing: 40, profitMargins: 0.08, revenueGrowth: 0.11, returnOnEquity: 0.20 },
-    DELL: { symbol: 'DELL', name: 'Dell Technologies', marketCap: 8.5e10, peTrailing: 18, profitMargins: 0.04, revenueGrowth: 0.02, returnOnEquity: null }
+    MSFT: {
+        symbol: 'MSFT',
+        name: 'Microsoft',
+        marketCap: 3.1e12,
+        peTrailing: 35,
+        profitMargins: 0.36,
+        revenueGrowth: 0.16,
+        returnOnEquity: 0.39,
+    },
+    GOOGL: {
+        symbol: 'GOOGL',
+        name: 'Alphabet',
+        marketCap: 2.1e12,
+        peTrailing: 24,
+        profitMargins: 0.28,
+        revenueGrowth: 0.14,
+        returnOnEquity: 0.3,
+    },
+    AMZN: {
+        symbol: 'AMZN',
+        name: 'Amazon',
+        marketCap: 1.9e12,
+        peTrailing: 40,
+        profitMargins: 0.08,
+        revenueGrowth: 0.11,
+        returnOnEquity: 0.2,
+    },
+    DELL: {
+        symbol: 'DELL',
+        name: 'Dell Technologies',
+        marketCap: 8.5e10,
+        peTrailing: 18,
+        profitMargins: 0.04,
+        revenueGrowth: 0.02,
+        returnOnEquity: null,
+    },
 };
 
 // Reponses FMP par ressource (tableaux du plus recent au plus ancien, comme l'API).
 const FMP = {
-    profile: [{
-        companyName: 'Apple Inc.', sector: 'Technology', industry: 'Consumer Electronics',
-        country: 'US', website: 'https://www.apple.com', ipoDate: '1980-12-12',
-        mktCap: 3000000000000, exchangeShortName: 'NASDAQ', fullTimeEmployees: 161000,
-        description: 'Apple Inc. conçoit et vend des produits électroniques grand public et des services.'
-    }],
+    profile: [
+        {
+            companyName: 'Apple Inc.',
+            sector: 'Technology',
+            industry: 'Consumer Electronics',
+            country: 'US',
+            website: 'https://www.apple.com',
+            ipoDate: '1980-12-12',
+            mktCap: 3000000000000,
+            exchangeShortName: 'NASDAQ',
+            fullTimeEmployees: 161000,
+            description:
+                'Apple Inc. conçoit et vend des produits électroniques grand public et des services.',
+        },
+    ],
     ratios: [
-        { calendarYear: '2023', priceEarningsRatio: 29, priceToBookRatio: 40, priceToSalesRatio: 7.0, enterpriseValueMultiple: 21, grossProfitMargin: 0.45, operatingProfitMargin: 0.29, netProfitMargin: 0.25, currentRatio: 1.0, quickRatio: 0.9, debtEquityRatio: 1.5, interestCoverage: 30, netDebtToEBITDA: 0.4, payoutRatio: 0.15 },
-        { calendarYear: '2022', priceEarningsRatio: 25, priceToBookRatio: 35, priceToSalesRatio: 6.2, enterpriseValueMultiple: 19, grossProfitMargin: 0.43, operatingProfitMargin: 0.30, netProfitMargin: 0.25 },
-        { calendarYear: '2021', priceEarningsRatio: 27, priceToBookRatio: 33, priceToSalesRatio: 6.8, enterpriseValueMultiple: 20, grossProfitMargin: 0.42, operatingProfitMargin: 0.30, netProfitMargin: 0.26 },
-        { calendarYear: '2020', priceEarningsRatio: 33, priceToBookRatio: 30, priceToSalesRatio: 7.4, enterpriseValueMultiple: 24, grossProfitMargin: 0.38, operatingProfitMargin: 0.24, netProfitMargin: 0.21 },
-        { calendarYear: '2019', priceEarningsRatio: 22, priceToBookRatio: 12, priceToSalesRatio: 4.4, enterpriseValueMultiple: 16, grossProfitMargin: 0.38, operatingProfitMargin: 0.25, netProfitMargin: 0.21 }
+        {
+            calendarYear: '2023',
+            priceEarningsRatio: 29,
+            priceToBookRatio: 40,
+            priceToSalesRatio: 7.0,
+            enterpriseValueMultiple: 21,
+            grossProfitMargin: 0.45,
+            operatingProfitMargin: 0.29,
+            netProfitMargin: 0.25,
+            currentRatio: 1.0,
+            quickRatio: 0.9,
+            debtEquityRatio: 1.5,
+            interestCoverage: 30,
+            netDebtToEBITDA: 0.4,
+            payoutRatio: 0.15,
+        },
+        {
+            calendarYear: '2022',
+            priceEarningsRatio: 25,
+            priceToBookRatio: 35,
+            priceToSalesRatio: 6.2,
+            enterpriseValueMultiple: 19,
+            grossProfitMargin: 0.43,
+            operatingProfitMargin: 0.3,
+            netProfitMargin: 0.25,
+        },
+        {
+            calendarYear: '2021',
+            priceEarningsRatio: 27,
+            priceToBookRatio: 33,
+            priceToSalesRatio: 6.8,
+            enterpriseValueMultiple: 20,
+            grossProfitMargin: 0.42,
+            operatingProfitMargin: 0.3,
+            netProfitMargin: 0.26,
+        },
+        {
+            calendarYear: '2020',
+            priceEarningsRatio: 33,
+            priceToBookRatio: 30,
+            priceToSalesRatio: 7.4,
+            enterpriseValueMultiple: 24,
+            grossProfitMargin: 0.38,
+            operatingProfitMargin: 0.24,
+            netProfitMargin: 0.21,
+        },
+        {
+            calendarYear: '2019',
+            priceEarningsRatio: 22,
+            priceToBookRatio: 12,
+            priceToSalesRatio: 4.4,
+            enterpriseValueMultiple: 16,
+            grossProfitMargin: 0.38,
+            operatingProfitMargin: 0.25,
+            netProfitMargin: 0.21,
+        },
     ],
     income: [
         { calendarYear: '2023', revenue: 383000000000, eps: 6.13 },
         { calendarYear: '2022', revenue: 394000000000, eps: 6.11 },
         { calendarYear: '2021', revenue: 365000000000, eps: 5.61 },
         { calendarYear: '2020', revenue: 274000000000, eps: 3.28 },
-        { calendarYear: '2019', revenue: 260000000000, eps: 2.97 }
+        { calendarYear: '2019', revenue: 260000000000, eps: 2.97 },
     ],
     cashflow: [
         { calendarYear: '2023', freeCashFlow: 99000000000 },
         { calendarYear: '2022', freeCashFlow: 111000000000 },
         { calendarYear: '2021', freeCashFlow: 92000000000 },
         { calendarYear: '2020', freeCashFlow: 73000000000 },
-        { calendarYear: '2019', freeCashFlow: 58000000000 }
+        { calendarYear: '2019', freeCashFlow: 58000000000 },
     ],
-    keyMetricsTtm: [{ roicTTM: 0.55, freeCashFlowYieldTTM: 0.033, enterpriseValueOverEBITDATTM: 22.5, netDebtToEBITDATTM: 0.4 }],
-    ratiosTtm: [{ peRatioTTM: 31.2, pegRatioTTM: 2.3, returnOnEquityTTM: 1.5, returnOnAssetsTTM: 0.28, dividendYieldTTM: 0.005, payoutRatioTTM: 0.15, currentRatioTTM: 0.99, quickRatioTTM: 0.85, interestCoverageTTM: 30 }],
-    estimates: [{ date: '2024-12-31', estimatedRevenueAvg: 400000000000, estimatedEpsAvg: 6.7, numberAnalystsEstimatedEps: 28 }],
+    keyMetricsTtm: [
+        {
+            roicTTM: 0.55,
+            freeCashFlowYieldTTM: 0.033,
+            enterpriseValueOverEBITDATTM: 22.5,
+            netDebtToEBITDATTM: 0.4,
+        },
+    ],
+    ratiosTtm: [
+        {
+            peRatioTTM: 31.2,
+            pegRatioTTM: 2.3,
+            returnOnEquityTTM: 1.5,
+            returnOnAssetsTTM: 0.28,
+            dividendYieldTTM: 0.005,
+            payoutRatioTTM: 0.15,
+            currentRatioTTM: 0.99,
+            quickRatioTTM: 0.85,
+            interestCoverageTTM: 30,
+        },
+    ],
+    estimates: [
+        {
+            date: '2024-12-31',
+            estimatedRevenueAvg: 400000000000,
+            estimatedEpsAvg: 6.7,
+            numberAnalystsEstimatedEps: 28,
+        },
+    ],
     peers: [{ symbol: 'AAPL', peersList: ['MSFT', 'GOOGL', 'AMZN', 'DELL'] }],
-    dcf: { symbol: 'AAPL', date: '2024-01-01', dcf: 180, 'Stock Price': 192.5 }
+    dcf: { symbol: 'AAPL', date: '2024-01-01', dcf: 180, 'Stock Price': 192.5 },
 };
 
 function buildHistory(fromStr, toStr) {
@@ -137,12 +302,12 @@ function buildHistory(fromStr, toStr) {
 // troncature « Afficher plus ».
 const AI_ANALYSIS_TEXT = [
     "Apple Inc. presente un profil de societe tres rentable dont la valorisation reste exigeante, ce qui justifie un signal Conserver plutot qu'un signal d'achat.",
-    "Sur la valorisation, le PER de 31,2 fois se situe au-dessus de sa moyenne des cinq dernieres annees et le VE/EBITDA de 22,1 fois confirme une prime de marche. Le rendement du free cash-flow de 3,3 % reste le point le plus favorable de cette dimension.",
+    'Sur la valorisation, le PER de 31,2 fois se situe au-dessus de sa moyenne des cinq dernieres annees et le VE/EBITDA de 22,1 fois confirme une prime de marche. Le rendement du free cash-flow de 3,3 % reste le point le plus favorable de cette dimension.',
     "La croissance est moderee : le chiffre d'affaires progresse de 8 % sur un an et le benefice par action de 11 %, des rythmes soutenus mais inferieurs a la prime payee sur le titre.",
     "La sante financiere est solide, avec une dette nette representant 0,4 fois l'EBITDA et des interets couverts 30 fois. La liquidite generale, a 0,99 fois, reste le seul point de vigilance de cette dimension.",
-    "La rentabilite est le point fort du dossier : un ROE de 150 %, un ROIC de 55 % et une marge nette de 25 % traduisent une efficacite du capital nettement superieure a la moyenne.",
-    "Du cote du sentiment, le consensus des analystes ressort a 2,0 sur 5 pour 38 suivis, avec un objectif moyen superieur au cours actuel, dans une tendance de moyennes mobiles orientee a la hausse.",
-    "Au total, la qualite economique et la solidite du bilan s'opposent a une valorisation deja genereuse et a une croissance moderee. L'analyse reste par ailleurs limitee par les metriques non disponibles pour cette valeur, qui n'ont pas pu etre prises en compte."
+    'La rentabilite est le point fort du dossier : un ROE de 150 %, un ROIC de 55 % et une marge nette de 25 % traduisent une efficacite du capital nettement superieure a la moyenne.',
+    'Du cote du sentiment, le consensus des analystes ressort a 2,0 sur 5 pour 38 suivis, avec un objectif moyen superieur au cours actuel, dans une tendance de moyennes mobiles orientee a la hausse.',
+    "Au total, la qualite economique et la solidite du bilan s'opposent a une valorisation deja genereuse et a une croissance moderee. L'analyse reste par ailleurs limitee par les metriques non disponibles pour cette valeur, qui n'ont pas pu etre prises en compte.",
 ].join('\n\n');
 
 const SUPABASE_STUB = `
@@ -222,7 +387,13 @@ export async function bootApp(page, opts = {}) {
     const profile = opts.profile || 'full';
     // `ai` : simule un compte ayant enregistre une cle IA (analyse redigee active).
     const userSettings = opts.ai
-        ? [{ user_id: 'e2e-user', ai_provider: 'anthropic', ai_providers_configured: ['anthropic'] }]
+        ? [
+              {
+                  user_id: 'e2e-user',
+                  ai_provider: 'anthropic',
+                  ai_providers_configured: ['anthropic'],
+              },
+          ]
         : [];
     const supabaseStub = SUPABASE_STUB.replace('__USER_SETTINGS__', JSON.stringify(userSettings));
 
@@ -235,22 +406,44 @@ export async function bootApp(page, opts = {}) {
     await page.route(/fragrant-band-1476\.[^/]*\.workers\.dev/, async (route) => {
         const url = new URL(route.request().url());
         const p = url.pathname;
-        const json = (body) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+        const json = (body) =>
+            route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
 
         if (p.endsWith('/search')) {
             const q = (url.searchParams.get('q') || 'AAPL').toUpperCase();
-            return json([{ displaySymbol: q, symbol: q, description: q === 'AAPL' ? 'Apple Inc' : q, type: 'Common Stock' }]);
+            return json([
+                {
+                    displaySymbol: q,
+                    symbol: q,
+                    description: q === 'AAPL' ? 'Apple Inc' : q,
+                    type: 'Common Stock',
+                },
+            ]);
         }
 
         // Hors périmètre Finnhub/FMP : seuls le cours et l'historique répondent.
         if (profile === 'sparse') {
             if (p.endsWith('/quote')) return json({ symbol: 'MC.PA', price: 640, currency: 'EUR' });
-            if (p.endsWith('/history')) return json(buildHistory(url.searchParams.get('from'), url.searchParams.get('to')));
-            if (p.endsWith('/quoteSummary')) return json({
-                symbol: 'MC.PA', source: 'yahoo-quoteSummary', name: 'LVMH', currency: 'EUR',
-                exchange: 'Paris', price: 640, previousClose: 635, marketCap: 320000000000,
-                governance: { overall: null, audit: null, board: null, compensation: null, shareholderRights: null }
-            });
+            if (p.endsWith('/history'))
+                return json(buildHistory(url.searchParams.get('from'), url.searchParams.get('to')));
+            if (p.endsWith('/quoteSummary'))
+                return json({
+                    symbol: 'MC.PA',
+                    source: 'yahoo-quoteSummary',
+                    name: 'LVMH',
+                    currency: 'EUR',
+                    exchange: 'Paris',
+                    price: 640,
+                    previousClose: 635,
+                    marketCap: 320000000000,
+                    governance: {
+                        overall: null,
+                        audit: null,
+                        board: null,
+                        compensation: null,
+                        shareholderRights: null,
+                    },
+                });
             if (p.endsWith('/fundamentals')) return json(null);
             if (p.endsWith('/fmp')) return json({ unavailable: true });
             if (p.endsWith('/peers')) return json([]);
@@ -261,26 +454,38 @@ export async function bootApp(page, opts = {}) {
             if (p.endsWith('/sector')) return json({ sector: null });
             if (p.endsWith('/websearch')) return json({ results: [] });
             if (p === '/ai/key') return json({ ok: true, provider: 'anthropic', configured: [] });
-            if (p === '/ai/stock-analysis') return json({ text: AI_ANALYSIS_TEXT, generatedAt: new Date().toISOString(), cached: false });
+            if (p === '/ai/stock-analysis')
+                return json({
+                    text: AI_ANALYSIS_TEXT,
+                    generatedAt: new Date().toISOString(),
+                    cached: false,
+                });
             return json({});
         }
 
         // Action US identique au profil complet, mais sans aucun dividende.
         if (profile === 'nodiv') {
             if (p.endsWith('/dividends')) return json([]);
-            if (p.endsWith('/quoteSummary')) return json({
-                ...QUOTE_SUMMARY,
-                dividendYield: null, dividendRate: null, payoutRatio: null,
-                fiveYearAvgDividendYield: null, exDividendDate: null
-            });
+            if (p.endsWith('/quoteSummary'))
+                return json({
+                    ...QUOTE_SUMMARY,
+                    dividendYield: null,
+                    dividendRate: null,
+                    payoutRatio: null,
+                    fiveYearAvgDividendYield: null,
+                    exDividendDate: null,
+                });
             if (p.endsWith('/fundamentals')) return json({ ...FUNDAMENTALS, dividendYield: null });
             if (p.endsWith('/fmp')) {
                 const r = url.searchParams.get('resource');
                 const data = Object.prototype.hasOwnProperty.call(FMP, r) ? FMP[r] : [];
                 // FMP porte aussi un rendement/payout : sans ça la valeur passerait
                 // pour distributrice alors qu'elle ne verse rien.
-                if (r === 'ratiosTtm') return json(data.map(x => ({ ...x, dividendYieldTTM: null, payoutRatioTTM: null })));
-                if (r === 'ratios') return json(data.map(x => ({ ...x, payoutRatio: null })));
+                if (r === 'ratiosTtm')
+                    return json(
+                        data.map((x) => ({ ...x, dividendYieldTTM: null, payoutRatioTTM: null }))
+                    );
+                if (r === 'ratios') return json(data.map((x) => ({ ...x, payoutRatio: null })));
                 return json(data);
             }
         }
@@ -289,29 +494,60 @@ export async function bootApp(page, opts = {}) {
         if (p.endsWith('/history')) {
             return json(buildHistory(url.searchParams.get('from'), url.searchParams.get('to')));
         }
-        if (p.endsWith('/dividends')) return json([
-            { date: '2021-05-07', amountPerShare: 0.22 }, { date: '2021-08-06', amountPerShare: 0.22 },
-            { date: '2022-05-06', amountPerShare: 0.23 }, { date: '2022-08-05', amountPerShare: 0.23 },
-            { date: '2023-05-12', amountPerShare: 0.24 }, { date: '2023-08-11', amountPerShare: 0.24 },
-            { date: '2024-05-10', amountPerShare: 0.25 }
-        ]);
+        if (p.endsWith('/dividends'))
+            return json([
+                { date: '2021-05-07', amountPerShare: 0.22 },
+                { date: '2021-08-06', amountPerShare: 0.22 },
+                { date: '2022-05-06', amountPerShare: 0.23 },
+                { date: '2022-08-05', amountPerShare: 0.23 },
+                { date: '2023-05-12', amountPerShare: 0.24 },
+                { date: '2023-08-11', amountPerShare: 0.24 },
+                { date: '2024-05-10', amountPerShare: 0.25 },
+            ]);
         if (p.endsWith('/sector')) return json({ sector: 'Technology' });
-        if (p.endsWith('/earnings')) return json({ date: '2025-07-31', hour: 'amc', epsEstimate: 1.9, revenueEstimate: 89000000000 });
+        if (p.endsWith('/earnings'))
+            return json({
+                date: '2025-07-31',
+                hour: 'amc',
+                epsEstimate: 1.9,
+                revenueEstimate: 89000000000,
+            });
         if (p.endsWith('/quoteSummary')) {
             const sym = url.searchParams.get('symbol');
-            return json(sym && PEER_SUMMARY[sym] ? { ...QUOTE_SUMMARY, ...PEER_SUMMARY[sym] } : QUOTE_SUMMARY);
+            return json(
+                sym && PEER_SUMMARY[sym]
+                    ? { ...QUOTE_SUMMARY, ...PEER_SUMMARY[sym] }
+                    : QUOTE_SUMMARY
+            );
         }
         if (p.endsWith('/fmp')) {
             const r = url.searchParams.get('resource');
             return json(Object.prototype.hasOwnProperty.call(FMP, r) ? FMP[r] : []);
         }
-        if (p.endsWith('/recommendation')) return json([{ symbol: 'AAPL', period: '2025-01-01', strongBuy: 12, buy: 18, hold: 6, sell: 1, strongSell: 0 }]);
+        if (p.endsWith('/recommendation'))
+            return json([
+                {
+                    symbol: 'AAPL',
+                    period: '2025-01-01',
+                    strongBuy: 12,
+                    buy: 18,
+                    hold: 6,
+                    sell: 1,
+                    strongSell: 0,
+                },
+            ]);
         if (p.endsWith('/insider')) return json({ symbol: 'AAPL', data: [] });
         if (p.endsWith('/peers')) return json(['MSFT', 'GOOGL', 'AMZN', 'DELL']);
         if (p.endsWith('/websearch')) return json({ results: [] });
-        if (p === '/ai/key') return json({ ok: true, provider: 'anthropic', configured: ['anthropic'] });
+        if (p === '/ai/key')
+            return json({ ok: true, provider: 'anthropic', configured: ['anthropic'] });
         if (p === '/ai/insights') return json({ text: '{"summary":"ok","portfolio":[]}' });
-        if (p === '/ai/stock-analysis') return json({ text: AI_ANALYSIS_TEXT, generatedAt: new Date().toISOString(), cached: false });
+        if (p === '/ai/stock-analysis')
+            return json({
+                text: AI_ANALYSIS_TEXT,
+                generatedAt: new Date().toISOString(),
+                cached: false,
+            });
         return json({});
     });
 

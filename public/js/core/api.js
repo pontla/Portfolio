@@ -20,28 +20,34 @@ export const APIService = {
 
     async searchSymbol(query) {
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/search?q=${encodeURIComponent(query)}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/search?q=${encodeURIComponent(query)}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) return data;
         } catch (e) {
-            console.warn("Search proxy error, repli sur liste locale", e);
+            console.warn('Search proxy error, repli sur liste locale', e);
         }
 
-        const mockEntries = Object.keys(CONFIG.MOCK_PRICES).map(s => ({
+        const mockEntries = Object.keys(CONFIG.MOCK_PRICES).map((s) => ({
             displaySymbol: s,
             description: `${s} Asset`,
-            type: s.includes('.PA') ? 'Common Stock' : s.includes('BTC') ? 'Crypto' : 'Stock'
+            type: s.includes('.PA') ? 'Common Stock' : s.includes('BTC') ? 'Crypto' : 'Stock',
         }));
-        return mockEntries.filter(m => m.displaySymbol.toLowerCase().includes(query.toLowerCase()));
+        return mockEntries.filter((m) =>
+            m.displaySymbol.toLowerCase().includes(query.toLowerCase())
+        );
     },
 
     async webSearch(query) {
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/websearch?q=${encodeURIComponent(query)}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/websearch?q=${encodeURIComponent(query)}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
-            return (data && Array.isArray(data.results)) ? data.results : [];
+            return data && Array.isArray(data.results) ? data.results : [];
         } catch (e) {
             console.warn('Websearch proxy error', e);
             return [];
@@ -55,8 +61,11 @@ export const APIService = {
         if (!session) throw new Error('Session expirée');
         const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/insights`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-            body: JSON.stringify({ provider, prompt, liveSearch: !!liveSearch })
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ provider, prompt, liveSearch: !!liveSearch }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
@@ -70,8 +79,11 @@ export const APIService = {
         if (!session) throw new Error('Session expirée');
         const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/stock-analysis`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-            body: JSON.stringify({ provider, data, force: !!force })
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ provider, data, force: !!force }),
         });
         const payload = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(payload.error || `proxy HTTP ${res.status}`);
@@ -83,8 +95,11 @@ export const APIService = {
         if (!session) throw new Error('Session expirée');
         const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/key`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-            body: JSON.stringify({ provider, key })
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ provider, key }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
@@ -94,10 +109,13 @@ export const APIService = {
     async aiKeyDelete(provider) {
         const session = await AuthService.getSession();
         if (!session) throw new Error('Session expirée');
-        const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/key?provider=${encodeURIComponent(provider)}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${session.access_token}` }
-        });
+        const res = await fetch(
+            `${CONFIG.PROXY_BASE_URL}/ai/key?provider=${encodeURIComponent(provider)}`,
+            {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${session.access_token}` },
+            }
+        );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
         return data.configured || [];
@@ -107,12 +125,14 @@ export const APIService = {
         if (symbol.startsWith('$')) return 1.0;
 
         const now = Date.now();
-        if (this.quoteCache[symbol] && (now - this.quoteCache[symbol].timestamp < 300000)) {
+        if (this.quoteCache[symbol] && now - this.quoteCache[symbol].timestamp < 300000) {
             return this.quoteCache[symbol].price;
         }
 
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             if (data && typeof data.price === 'number' && data.price > 0) {
@@ -138,12 +158,14 @@ export const APIService = {
         const now = Date.now();
         this.cachedFxRates = this.cachedFxRates || {};
         const cached = this.cachedFxRates[cur];
-        if (cached && (now - cached.timestamp < 3600000)) {
+        if (cached && now - cached.timestamp < 3600000) {
             return cached.rate;
         }
 
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/quote?symbol=${encodeURIComponent(cur + 'USD=X')}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/quote?symbol=${encodeURIComponent(cur + 'USD=X')}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             if (data && typeof data.price === 'number' && data.price > 0) {
@@ -161,9 +183,11 @@ export const APIService = {
     async getExchangeRates() {
         const currencies = Object.keys(this.FX_FALLBACK);
         const rates = /** @type {Record<string, number|null>} */ ({ USD: 1 });
-        await Promise.all(currencies.map(async (cur) => {
-            rates[cur] = await this.getExchangeRate(cur);
-        }));
+        await Promise.all(
+            currencies.map(async (cur) => {
+                rates[cur] = await this.getExchangeRate(cur);
+            })
+        );
         return rates;
     },
 
@@ -187,7 +211,9 @@ export const APIService = {
         try {
             const from = Utils.getDateString(startDate);
             const to = Utils.getDateString(endDate);
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/history?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/history?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const daily = await res.json();
             if (daily && Object.keys(daily).length > 0) {
@@ -199,7 +225,13 @@ export const APIService = {
             console.warn(`History proxy error pour ${symbol}, repli simulation`, e);
         }
 
-        const daily = this.generateRealisticDailyHistory(symbol, startDate, endDate, anchorPriceStart, currentPriceEnd);
+        const daily = this.generateRealisticDailyHistory(
+            symbol,
+            startDate,
+            endDate,
+            anchorPriceStart,
+            currentPriceEnd
+        );
         // Marqueur non enumerable : `Object.keys` / `JSON.stringify` continuent de
         // ne voir que des couples date -> cours, mais tout consommateur peut savoir
         // que la serie est simulee. Elle reste utile pour interpoler la courbe du
@@ -223,7 +255,9 @@ export const APIService = {
     async getDividends(symbol, from, to) {
         if (symbol.startsWith('$')) return [];
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/dividends?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/dividends?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const list = await res.json();
             return Array.isArray(list) ? list : [];
@@ -236,7 +270,9 @@ export const APIService = {
     async getSector(symbol) {
         if (symbol.startsWith('$')) return null;
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/sector?symbol=${encodeURIComponent(symbol)}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/sector?symbol=${encodeURIComponent(symbol)}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             return data.sector || null;
@@ -249,7 +285,9 @@ export const APIService = {
     async getEarnings(symbol) {
         if (symbol.startsWith('$')) return null;
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/earnings?symbol=${encodeURIComponent(symbol)}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/earnings?symbol=${encodeURIComponent(symbol)}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             return data && data.date ? data : null;
@@ -264,9 +302,11 @@ export const APIService = {
         if (!symbol || symbol.startsWith('$')) return null;
         const now = Date.now();
         const cached = this._fundCache[symbol];
-        if (cached && (now - cached.timestamp < 900000)) return cached.data;
+        if (cached && now - cached.timestamp < 900000) return cached.data;
         try {
-            const res = await fetch(`${CONFIG.PROXY_BASE_URL}/fundamentals?symbol=${encodeURIComponent(symbol)}`);
+            const res = await fetch(
+                `${CONFIG.PROXY_BASE_URL}/fundamentals?symbol=${encodeURIComponent(symbol)}`
+            );
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             this._fundCache[symbol] = { timestamp: now, data };
@@ -286,7 +326,7 @@ export const APIService = {
         const now = Date.now();
         const store = (this._ttlCache[bucket] = this._ttlCache[bucket] || {});
         const hit = store[key];
-        if (hit && (now - hit.ts < ttlMs)) return hit.data;
+        if (hit && now - hit.ts < ttlMs) return hit.data;
         try {
             const res = await fetch(`${CONFIG.PROXY_BASE_URL}${path}`);
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
@@ -300,24 +340,44 @@ export const APIService = {
     },
 
     getQuoteSummary(symbol) {
-        return this._getCached('quoteSummary', symbol, 3600000,
-            `/quoteSummary?symbol=${encodeURIComponent(symbol)}`);
+        return this._getCached(
+            'quoteSummary',
+            symbol,
+            3600000,
+            `/quoteSummary?symbol=${encodeURIComponent(symbol)}`
+        );
     },
     getFmp(resource, symbol) {
-        return this._getCached('fmp', `${resource}:${symbol}`, 86400000,
-            `/fmp?resource=${encodeURIComponent(resource)}&symbol=${encodeURIComponent(symbol)}`);
+        return this._getCached(
+            'fmp',
+            `${resource}:${symbol}`,
+            86400000,
+            `/fmp?resource=${encodeURIComponent(resource)}&symbol=${encodeURIComponent(symbol)}`
+        );
     },
     getRecommendation(symbol) {
-        return this._getCached('reco', symbol, 86400000,
-            `/recommendation?symbol=${encodeURIComponent(symbol)}`);
+        return this._getCached(
+            'reco',
+            symbol,
+            86400000,
+            `/recommendation?symbol=${encodeURIComponent(symbol)}`
+        );
     },
     getInsiderTransactions(symbol) {
-        return this._getCached('insider', symbol, 86400000,
-            `/insider?symbol=${encodeURIComponent(symbol)}`);
+        return this._getCached(
+            'insider',
+            symbol,
+            86400000,
+            `/insider?symbol=${encodeURIComponent(symbol)}`
+        );
     },
     getPeers(symbol) {
-        return this._getCached('peers', symbol, 604800000,
-            `/peers?symbol=${encodeURIComponent(symbol)}`);
+        return this._getCached(
+            'peers',
+            symbol,
+            604800000,
+            `/peers?symbol=${encodeURIComponent(symbol)}`
+        );
     },
 
     generateRealisticDailyHistory(symbol, startDate, endDate, startPrice, endPrice) {
@@ -326,8 +386,8 @@ export const APIService = {
         const eDate = Utils.parseDate(endDate);
         const totalDays = Math.max(1, Utils.daysBetween(sDate, eDate));
 
-        const p0 = startPrice > 0 ? startPrice : (CONFIG.MOCK_PRICES[symbol] || 100);
-        const pT = endPrice > 0 ? endPrice : (CONFIG.MOCK_PRICES[symbol] || p0);
+        const p0 = startPrice > 0 ? startPrice : CONFIG.MOCK_PRICES[symbol] || 100;
+        const pT = endPrice > 0 ? endPrice : CONFIG.MOCK_PRICES[symbol] || p0;
 
         let seed = 42;
         for (let i = 0; i < symbol.length; i++) {
@@ -336,7 +396,7 @@ export const APIService = {
 
         const pseudoNoise = (dayIndex) => {
             const x = Math.sin(seed + dayIndex * 15.789) * 43758.5453;
-            return (x - Math.floor(x)) - 0.49;
+            return x - Math.floor(x) - 0.49;
         };
 
         const totalGrowth = pT / Math.max(0.01, p0);
@@ -361,5 +421,5 @@ export const APIService = {
         }
 
         return dailyMap;
-    }
+    },
 };

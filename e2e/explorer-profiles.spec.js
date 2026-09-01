@@ -19,14 +19,26 @@ function viewText(page) {
 
 const GARBAGE = ['NaN', 'undefined', 'Invalid Date', 'null', '[object Object]'];
 
-test('profil 1 — action US complète : toutes les sections remplies, aucune valeur parasite', async ({ page }) => {
+test('profil 1 — action US complète : toutes les sections remplies, aucune valeur parasite', async ({
+    page,
+}) => {
     await bootApp(page);
     await openResearch(page, 'AAPL');
     await waitForAnalysis(page);
 
-    for (const id of ['researchScoreCard', 'researchValuationCard', 'researchGrowthCard',
-        'researchHealthCard', 'researchProfitCard', 'researchSentimentCard', 'researchTechCard',
-        'researchDivCard', 'researchPeersCard', 'researchQualCard', 'researchAboutCard']) {
+    for (const id of [
+        'researchScoreCard',
+        'researchValuationCard',
+        'researchGrowthCard',
+        'researchHealthCard',
+        'researchProfitCard',
+        'researchSentimentCard',
+        'researchTechCard',
+        'researchDivCard',
+        'researchPeersCard',
+        'researchQualCard',
+        'researchAboutCard',
+    ]) {
         await expect(page.locator(`#${id}`)).toBeVisible();
     }
 
@@ -36,7 +48,9 @@ test('profil 1 — action US complète : toutes les sections remplies, aucune va
     expect(txt).not.toMatch(/\d?\d?\/\s*\/|NaN\//);
 });
 
-test('profil 2 — valeur hors périmètre fondamental : dégradation propre, sans NaN', async ({ page }) => {
+test('profil 2 — valeur hors périmètre fondamental : dégradation propre, sans NaN', async ({
+    page,
+}) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
 
@@ -66,7 +80,9 @@ test('profil 2 — valeur hors périmètre fondamental : dégradation propre, sa
     expect(errors).toEqual([]);
 });
 
-test('profil 3 — action sans dividende : la carte Dividende disparaît, le reste tient', async ({ page }) => {
+test('profil 3 — action sans dividende : la carte Dividende disparaît, le reste tient', async ({
+    page,
+}) => {
     await bootApp(page, { profile: 'nodiv' });
     await openResearch(page, 'AAPL');
     await waitForAnalysis(page);
@@ -76,8 +92,9 @@ test('profil 3 — action sans dividende : la carte Dividende disparaît, le res
     await expect(page.locator('#researchProfitCard')).toBeVisible();
     await expect(page.locator('#researchQualCard')).toBeVisible();
     // le calendrier n'invente pas de détachement
-    await expect(page.locator('#researchQualBody').filter({ hasText: 'Calendrier' }))
-        .toContainText('Détachement du dividende');
+    await expect(page.locator('#researchQualBody').filter({ hasText: 'Calendrier' })).toContainText(
+        'Détachement du dividende'
+    );
 
     const txt = await viewText(page);
     for (const bad of GARBAGE) expect(txt).not.toContain(bad);
@@ -111,14 +128,20 @@ test('mobile 390 px : toutes les cartes tiennent sans débordement horizontal', 
     expect(overflow).toBeLessThanOrEqual(1);
 
     // le tableau sectoriel défile dans son propre conteneur, pas dans la page
-    const scrollable = await page.locator('.peers-wrap').evaluate(
-        (el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).overflowX === 'auto'
-    );
+    const scrollable = await page
+        .locator('.peers-wrap')
+        .evaluate(
+            (el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).overflowX === 'auto'
+        );
     expect(scrollable).toBe(true);
 
     // aucune carte ne dépasse la largeur du viewport
-    const widths = await page.locator('#researchContent .card').evaluateAll(
-        (els) => els.filter(e => /** @type {HTMLElement} */ (e).offsetParent !== null).map(e => e.getBoundingClientRect().right)
-    );
+    const widths = await page
+        .locator('#researchContent .card')
+        .evaluateAll((els) =>
+            els
+                .filter((e) => /** @type {HTMLElement} */ (e).offsetParent !== null)
+                .map((e) => e.getBoundingClientRect().right)
+        );
     for (const right of widths) expect(right).toBeLessThanOrEqual(391);
 });

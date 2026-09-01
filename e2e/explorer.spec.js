@@ -22,14 +22,14 @@ test('les cartes ont un padding cohérent (contenu décollé des bords)', async 
     await openResearch(page, 'AAPL');
 
     // Desktop : 20px sur les cartes, 16px sur la carte de recherche.
-    const headPad = await page.locator('#view-research .research-head-card').evaluate(
-        (el) => getComputedStyle(el).paddingTop
-    );
+    const headPad = await page
+        .locator('#view-research .research-head-card')
+        .evaluate((el) => getComputedStyle(el).paddingTop);
     expect(headPad).toBe('20px');
 
-    const searchPad = await page.locator('#view-research .research-search-card').evaluate(
-        (el) => getComputedStyle(el).paddingTop
-    );
+    const searchPad = await page
+        .locator('#view-research .research-search-card')
+        .evaluate((el) => getComputedStyle(el).paddingTop);
     expect(searchPad).toBe('16px');
 
     // Le logo ne touche pas le bord gauche de la carte.
@@ -61,7 +61,9 @@ test('la tuile de prix est stylée et alignée à droite en desktop', async ({ p
 test('le bouton Max recharge le graphe depuis le début de l’action', async ({ page }) => {
     await openResearch(page, 'AAPL');
 
-    const req = page.waitForRequest((r) => r.url().includes('/history') && /[?&]from=/.test(r.url()));
+    const req = page.waitForRequest(
+        (r) => r.url().includes('/history') && /[?&]from=/.test(r.url())
+    );
     await page.locator('#researchRange .range-btn[data-range="MAX"]').click();
     const from = new URL((await req).url()).searchParams.get('from');
 
@@ -125,10 +127,14 @@ test('synthèse : score global, signal et sous-scores justifiés', async ({ page
     await expect(page.locator('#researchScoreSubs')).not.toContainText('NaN');
 
     // avertissement visible
-    await expect(card.locator('.score-disclaimer')).toContainText('pas un conseil en investissement');
+    await expect(card.locator('.score-disclaimer')).toContainText(
+        'pas un conseil en investissement'
+    );
 });
 
-test('section Valorisation : rendue en différé avec repères moyenne 5 ans et aides', async ({ page }) => {
+test('section Valorisation : rendue en différé avec repères moyenne 5 ans et aides', async ({
+    page,
+}) => {
     await openResearch(page, 'AAPL');
 
     const card = page.locator('#researchValuationCard');
@@ -148,7 +154,9 @@ test('section Valorisation : rendue en différé avec repères moyenne 5 ans et 
     await expect(grid.locator('.kv-help').first()).toHaveAttribute('data-tip', /.+/);
 });
 
-test('section Croissance : historiques annuels en barres et consensus analystes', async ({ page }) => {
+test('section Croissance : historiques annuels en barres et consensus analystes', async ({
+    page,
+}) => {
     await openResearch(page, 'AAPL');
 
     const card = page.locator('#researchGrowthCard');
@@ -169,12 +177,17 @@ test('section Croissance : historiques annuels en barres et consensus analystes'
     await expect(series.locator('.gs-block')).toHaveCount(2);
     await expect(series.locator('.gs-row')).toHaveCount(10);
     await expect(series.locator('.gs-empty')).toHaveCount(0);
-    const w = await series.locator('.gs-bar').first().evaluate((el) => el.getBoundingClientRect().width);
+    const w = await series
+        .locator('.gs-bar')
+        .first()
+        .evaluate((el) => el.getBoundingClientRect().width);
     expect(w).toBeGreaterThan(0);
     await expect(series.locator('.gs-yoy.up').first()).toBeVisible();
 });
 
-test('section Santé financière : ratios avec pastilles de risque et historique FCF', async ({ page }) => {
+test('section Santé financière : ratios avec pastilles de risque et historique FCF', async ({
+    page,
+}) => {
     await openResearch(page, 'AAPL');
 
     const card = page.locator('#researchHealthCard');
@@ -210,7 +223,7 @@ test('section Rentabilité : ROIC/ROA/marges et sparklines 5 ans', async ({ page
     await expect(grid.locator('.research-kv')).toHaveCount(6);
     await expect(grid.locator('.research-kv-loading')).toHaveCount(0);
     await expect(grid).toContainText('ROIC');
-    await expect(grid).toContainText('55,00 %');   // roicTTM 0.55 (FMP key-metrics-ttm)
+    await expect(grid).toContainText('55,00 %'); // roicTTM 0.55 (FMP key-metrics-ttm)
     await expect(grid).toContainText('Marge brute');
 
     // trois courbes de marges, avec variation en points de pourcentage
@@ -221,7 +234,9 @@ test('section Rentabilité : ROIC/ROA/marges et sparklines 5 ans', async ({ page
     await expect(sparks.locator('.spark-delta').first()).toContainText('pts');
 });
 
-test('section Sentiment de marché : consensus, objectifs de cours et positionnement', async ({ page }) => {
+test('section Sentiment de marché : consensus, objectifs de cours et positionnement', async ({
+    page,
+}) => {
     await openResearch(page, 'AAPL');
 
     const card = page.locator('#researchSentimentCard');
@@ -241,10 +256,14 @@ test('section Sentiment de marché : consensus, objectifs de cours et positionne
     await expect(grid.locator('.kv-cmp.up').first()).toContainText('+14,29 %');
 
     // champs sans source gratuite : affichés explicitement en "Non disponible"
-    await expect(grid).toContainText('Révisions d\'objectif');
-    await expect(grid).toContainText('Transactions d\'initiés');
-    await expect(grid.locator('.research-kv', { hasText: 'Révisions' })).toContainText('Non disponible');
-    await expect(grid.locator('.research-kv', { hasText: 'Transactions' })).toContainText('Non disponible');
+    await expect(grid).toContainText("Révisions d'objectif");
+    await expect(grid).toContainText("Transactions d'initiés");
+    await expect(grid.locator('.research-kv', { hasText: 'Révisions' })).toContainText(
+        'Non disponible'
+    );
+    await expect(grid.locator('.research-kv', { hasText: 'Transactions' })).toContainText(
+        'Non disponible'
+    );
 
     // vente à découvert 0,8 % du flottant -> faible
     await expect(grid).toContainText('0,80 %');
@@ -252,7 +271,7 @@ test('section Sentiment de marché : consensus, objectifs de cours et positionne
 
     // barre de consensus (37 avis) + échelle d'objectifs 170 / 220 / 260
     const top = page.locator('#researchSentimentTop');
-    await expect(top.locator('.cons-seg:not(.cons-dot)')).toHaveCount(4);   // strongSell = 0 -> pas de segment
+    await expect(top.locator('.cons-seg:not(.cons-dot)')).toHaveCount(4); // strongSell = 0 -> pas de segment
     await expect(top.locator('.cons-legend .cons-leg')).toHaveCount(4);
     await expect(top.locator('.sent-empty')).toHaveCount(0);
     await expect(top.locator('.pt-track .pt-mark.cur')).toBeVisible();
@@ -261,7 +280,9 @@ test('section Sentiment de marché : consensus, objectifs de cours et positionne
     await expect(top.locator('.pt-legend')).toContainText('$260,00');
 });
 
-test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe', async ({ page }) => {
+test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe', async ({
+    page,
+}) => {
     await openResearch(page, 'AAPL');
 
     const card = page.locator('#researchTechCard');
@@ -287,10 +308,12 @@ test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe
     await expect(top.locator('.sent-empty')).toHaveCount(0);
 
     // le graphe de cours porte désormais 3 séries : cours + MM 50 + MM 200
-    const labels = await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label));
+    const labels = await page.evaluate(() =>
+        window.App.researchChart.data.datasets.map((d) => d.label)
+    );
     expect(labels.slice(1)).toEqual(['MM 50', 'MM 200']);
     const filled = await page.evaluate(
-        () => window.App.researchChart.data.datasets[2].data.filter(v => v != null).length
+        () => window.App.researchChart.data.datasets[2].data.filter((v) => v != null).length
     );
     expect(filled).toBeGreaterThan(50);
 });
@@ -308,8 +331,13 @@ test('graphe de cours : légende des moyennes mobiles et bascule d’affichage',
 
     // La pastille reprend la couleur réellement tracée sur le graphe.
     const swatch = await page.evaluate(() => {
-        const el = /** @type {HTMLElement} */ (document.querySelector('#researchMaLegend [data-ma-swatch="ma50"]'));
-        return { inline: el.style.borderTopColor, chart: window.App.researchChart.data.datasets[1].borderColor };
+        const el = /** @type {HTMLElement} */ (
+            document.querySelector('#researchMaLegend [data-ma-swatch="ma50"]')
+        );
+        return {
+            inline: el.style.borderTopColor,
+            chart: window.App.researchChart.data.datasets[1].borderColor,
+        };
     });
     expect(swatch.inline).not.toBe('');
 
@@ -317,23 +345,30 @@ test('graphe de cours : légende des moyennes mobiles et bascule d’affichage',
     await toggles.nth(0).click();
     await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'false');
     await expect(toggles.nth(0)).not.toHaveClass(/active/);
-    expect(await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label)))
-        .toEqual(['AAPL', 'MM 200']);
+    expect(
+        await page.evaluate(() => window.App.researchChart.data.datasets.map((d) => d.label))
+    ).toEqual(['AAPL', 'MM 200']);
 
     // Masquer les deux : il ne reste que la courbe de cours, la légende demeure
     // visible sinon l'interrupteur deviendrait introuvable.
     await toggles.nth(1).click();
-    expect(await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL']);
+    expect(
+        await page.evaluate(() => window.App.researchChart.data.datasets.map((d) => d.label))
+    ).toEqual(['AAPL']);
     await expect(legend).toBeVisible();
 
     // Le choix survit à un changement de plage.
     await page.locator('#researchRange .range-btn', { hasText: '3M' }).click();
-    await expect.poll(async () => page.evaluate(() => window.App.researchChart.data.datasets.length)).toBe(1);
+    await expect
+        .poll(async () => page.evaluate(() => window.App.researchChart.data.datasets.length))
+        .toBe(1);
     await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'false');
 
     // Réafficher la MM 50.
     await toggles.nth(0).click();
-    expect(await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL', 'MM 50']);
+    expect(
+        await page.evaluate(() => window.App.researchChart.data.datasets.map((d) => d.label))
+    ).toEqual(['AAPL', 'MM 50']);
 });
 
 test('section Dividende : rendement, distribution et historique par action', async ({ page }) => {
@@ -355,7 +390,9 @@ test('section Dividende : rendement, distribution et historique par action', asy
     // payout 15 % -> soutenable ; 2 exercices complets de hausse (2021 < 2022 < 2023)
     await expect(grid).toContainText('15,00 %');
     await expect(grid).toContainText('soutenable');
-    await expect(grid.locator('.research-kv', { hasText: 'Hausses consécutives' })).toContainText('2 ans');
+    await expect(grid.locator('.research-kv', { hasText: 'Hausses consécutives' })).toContainText(
+        '2 ans'
+    );
 
     // 4 années civiles de versements
     const series = page.locator('#researchDivSeries');
@@ -363,7 +400,9 @@ test('section Dividende : rendement, distribution et historique par action', asy
     await expect(series.locator('.gs-empty')).toHaveCount(0);
 });
 
-test('section Comparaison sectorielle : tableau des pairs avec médiane du groupe', async ({ page }) => {
+test('section Comparaison sectorielle : tableau des pairs avec médiane du groupe', async ({
+    page,
+}) => {
     await openResearch(page, 'AAPL');
 
     const card = page.locator('#researchPeersCard');
@@ -394,7 +433,9 @@ test('section Comparaison sectorielle : tableau des pairs avec médiane du group
     // ROE très au-dessus (150,2 % vs 34,5 %)
     await expect(self.locator('td.worse')).toHaveCount(1);
     await expect(self.locator('td.better')).toHaveCount(1);
-    await expect(table.locator('tbody tr:not(.self) td.better, tbody tr:not(.self) td.worse')).toHaveCount(0);
+    await expect(
+        table.locator('tbody tr:not(.self) td.better, tbody tr:not(.self) td.worse')
+    ).toHaveCount(0);
 
     await expect(page.locator('#researchPeersSrc')).toContainText('4 comparables');
 });
@@ -407,28 +448,44 @@ test('section Profil & risques : activité, risques publiés et calendrier', asy
 
     const body = page.locator('#researchQualBody');
     const secs = body.locator('.qual-sec');
-    await expect(secs).toHaveCount(3);   // Activité + Risques + Calendrier
+    await expect(secs).toHaveCount(3); // Activité + Risques + Calendrier
 
     // Activité : texte de l'émetteur repris tel quel
     await expect(body).toContainText('Activité');
-    await expect(body.locator('.qual-text')).toContainText('Apple Inc. conçoit, fabrique et commercialise');
+    await expect(body.locator('.qual-text')).toContainText(
+        'Apple Inc. conçoit, fabrique et commercialise'
+    );
     await expect(body).toContainText('161 k salariés');
 
     // Risques : bêta 1,24 -> plus volatil ; gouvernance 1..10 avec pastilles
     const risk = secs.filter({ hasText: 'Risques' });
-    await expect(risk.locator('.research-kv', { hasText: 'Volatilité (bêta)' })).toContainText('1,24');
-    await expect(risk.locator('.research-kv', { hasText: 'Volatilité (bêta)' }).locator('.kv-tag')).toHaveText('plus volatil');
-    await expect(risk.locator('.research-kv', { hasText: 'Gouvernance (global)' })).toContainText('1 / 10');
-    await expect(risk.locator('.research-kv', { hasText: 'Audit' }).locator('.kv-tag')).toHaveText('élevé');
-    await expect(risk.locator('.research-kv', { hasText: 'Rémunération des dirigeants' }).locator('.kv-tag')).toHaveText('modéré');
+    await expect(risk.locator('.research-kv', { hasText: 'Volatilité (bêta)' })).toContainText(
+        '1,24'
+    );
+    await expect(
+        risk.locator('.research-kv', { hasText: 'Volatilité (bêta)' }).locator('.kv-tag')
+    ).toHaveText('plus volatil');
+    await expect(risk.locator('.research-kv', { hasText: 'Gouvernance (global)' })).toContainText(
+        '1 / 10'
+    );
+    await expect(risk.locator('.research-kv', { hasText: 'Audit' }).locator('.kv-tag')).toHaveText(
+        'élevé'
+    );
+    await expect(
+        risk.locator('.research-kv', { hasText: 'Rémunération des dirigeants' }).locator('.kv-tag')
+    ).toHaveText('modéré');
 
     // Calendrier : la date de résultats a quitté "À propos" pour cette section
     await expect(page.locator('#researchAboutGrid')).not.toContainText('Prochains résultats');
     const cal = secs.filter({ hasText: 'Calendrier' });
-    await expect(cal.locator('.research-kv', { hasText: 'Prochains résultats' })).toContainText('après clôture');
+    await expect(cal.locator('.research-kv', { hasText: 'Prochains résultats' })).toContainText(
+        'après clôture'
+    );
     await expect(cal.locator('.research-kv', { hasText: 'BPA attendu' })).toContainText('$1,90');
     await expect(cal.locator('.research-kv', { hasText: 'CA attendu' })).toContainText('$89 Md');
-    await expect(cal.locator('.research-kv', { hasText: 'Détachement du dividende' })).not.toContainText('Non disponible');
+    await expect(
+        cal.locator('.research-kv', { hasText: 'Détachement du dividende' })
+    ).not.toContainText('Non disponible');
 
     // chaque métrique porte son aide contextuelle
     await expect(body.locator('.kv-help').first()).toHaveAttribute('data-tip', /.+/);
@@ -446,9 +503,9 @@ test('mobile : la carte d’en-tête reste lisible et sans scroll horizontal', a
     await page.setViewportSize({ width: 390, height: 844 });
     await openResearch(page, 'AAPL');
 
-    const pad = await page.locator('#view-research .research-head-card').evaluate(
-        (el) => getComputedStyle(el).paddingTop
-    );
+    const pad = await page
+        .locator('#view-research .research-head-card')
+        .evaluate((el) => getComputedStyle(el).paddingTop);
     expect(pad).toBe('16px');
 
     // La tuile de prix prend toute la largeur du contenu de la carte.

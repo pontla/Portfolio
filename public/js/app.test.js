@@ -15,15 +15,47 @@ function makeEl() {
     const el = {
         style: {},
         dataset: {},
-        classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-        setAttribute() {}, getAttribute() { return null; }, removeAttribute() {},
-        appendChild(c) { return c; }, removeChild() {}, append() {},
-        addEventListener() {}, removeEventListener() {},
-        querySelector() { return null; }, querySelectorAll() { return []; },
-        insertAdjacentHTML() {}, getContext() { return {}; },
-        click() {}, focus() {}, blur() {}, remove() {}, scrollIntoView() {},
-        getBoundingClientRect() { return { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 }; },
-        textContent: '', innerHTML: '', hidden: false,
+        classList: {
+            add() {},
+            remove() {},
+            toggle() {},
+            contains() {
+                return false;
+            },
+        },
+        setAttribute() {},
+        getAttribute() {
+            return null;
+        },
+        removeAttribute() {},
+        appendChild(c) {
+            return c;
+        },
+        removeChild() {},
+        append() {},
+        addEventListener() {},
+        removeEventListener() {},
+        querySelector() {
+            return null;
+        },
+        querySelectorAll() {
+            return [];
+        },
+        insertAdjacentHTML() {},
+        getContext() {
+            return {};
+        },
+        click() {},
+        focus() {},
+        blur() {},
+        remove() {},
+        scrollIntoView() {},
+        getBoundingClientRect() {
+            return { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 };
+        },
+        textContent: '',
+        innerHTML: '',
+        hidden: false,
     };
     return el;
 }
@@ -42,13 +74,24 @@ const documentStub = {
 
 const store = new Map();
 const windowStub = /** @type {any} */ ({
-    supabase: { createClient: () => ({
-        from: () => ({}),
-        auth: { getSession: async () => ({ data: { session: null } }) },
-    }) },
+    supabase: {
+        createClient: () => ({
+            from: () => ({}),
+            auth: { getSession: async () => ({ data: { session: null } }) },
+        }),
+    },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
-    addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
-    location: { href: 'https://test.local/', origin: 'https://test.local', pathname: '/', reload() {} },
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {
+        return true;
+    },
+    location: {
+        href: 'https://test.local/',
+        origin: 'https://test.local',
+        pathname: '/',
+        reload() {},
+    },
     requestAnimationFrame: () => 0,
     cancelAnimationFrame() {},
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
@@ -60,9 +103,15 @@ Object.assign(globalThis, {
     document: documentStub,
     localStorage: {
         getItem: (k) => (store.has(k) ? store.get(k) : null),
-        setItem: (k, v) => { store.set(k, String(v)); },
-        removeItem: (k) => { store.delete(k); },
-        clear: () => { store.clear(); },
+        setItem: (k, v) => {
+            store.set(k, String(v));
+        },
+        removeItem: (k) => {
+            store.delete(k);
+        },
+        clear: () => {
+            store.clear();
+        },
     },
     matchMedia: windowStub.matchMedia,
     requestAnimationFrame: windowStub.requestAnimationFrame,
@@ -70,9 +119,16 @@ Object.assign(globalThis, {
     getComputedStyle: windowStub.getComputedStyle,
     alert: () => {},
     confirm: () => true,
-    Chart: class { constructor() {} update() {} destroy() {} resize() {} },
+    Chart: class {
+        constructor() {}
+        update() {}
+        destroy() {}
+        resize() {}
+    },
 });
-globalThis.fetch = /** @type {any} */ (async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '' }));
+globalThis.fetch = /** @type {any} */ (
+    async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '' })
+);
 
 // Import apres l'installation des globales : app.js cree le client Supabase et
 // pose ses ecouteurs au chargement du module.
@@ -114,18 +170,23 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
             return Promise.resolve({ '2026-01-02': 10, '2026-01-03': 12 });
         };
         /** @type {any} */ (globalThis).Chart = class {
-            constructor(ctx, config) { lastChartConfig = config; }
-            update() {} destroy() {}
+            constructor(ctx, config) {
+                lastChartConfig = config;
+            }
+            update() {}
+            destroy() {}
         };
-        documentStub.getElementById = /** @type {any} */ ((id) =>
-            (canvas && id === 'researchChart' ? { getContext: () => ({}) } : null));
+        documentStub.getElementById = /** @type {any} */ (
+            (id) => (canvas && id === 'researchChart' ? { getContext: () => ({}) } : null)
+        );
     }
 
     it("MAX : date de debut = 50 ans avant aujourd'hui (meme mois/jour)", async () => {
         setup('MAX');
         const ref = new Date();
         await App.renderResearchChart('AAPL');
-        const exp = new Date(ref); exp.setFullYear(exp.getFullYear() - 50);
+        const exp = new Date(ref);
+        exp.setFullYear(exp.getFullYear() - 50);
         expect(captured.start.getFullYear()).toBe(exp.getFullYear());
         expect(captured.start.getMonth()).toBe(exp.getMonth());
         expect(captured.start.getDate()).toBe(exp.getDate());
@@ -135,7 +196,8 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
         setup('1Y');
         const ref = new Date();
         await App.renderResearchChart('AAPL');
-        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 12);
+        const exp = new Date(ref);
+        exp.setMonth(exp.getMonth() - 12);
         expect(captured.start.getFullYear()).toBe(exp.getFullYear());
         expect(captured.start.getMonth()).toBe(exp.getMonth());
         expect(captured.start.getDate()).toBe(exp.getDate());
@@ -145,7 +207,8 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
         setup('1M');
         const ref = new Date();
         await App.renderResearchChart('AAPL');
-        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 1);
+        const exp = new Date(ref);
+        exp.setMonth(exp.getMonth() - 1);
         expect(captured.start.getFullYear()).toBe(exp.getFullYear());
         expect(captured.start.getMonth()).toBe(exp.getMonth());
         expect(captured.start.getDate()).toBe(exp.getDate());
@@ -155,7 +218,8 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
         setup('5Y');
         const ref = new Date();
         await App.renderResearchChart('AAPL');
-        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 60);
+        const exp = new Date(ref);
+        exp.setMonth(exp.getMonth() - 60);
         expect(captured.start.getFullYear()).toBe(exp.getFullYear());
         expect(captured.start.getMonth()).toBe(exp.getMonth());
         expect(captured.start.getDate()).toBe(exp.getDate());
@@ -165,7 +229,8 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
         setup('ZZZ');
         const ref = new Date();
         await App.renderResearchChart('AAPL');
-        const exp = new Date(ref); exp.setMonth(exp.getMonth() - 12);
+        const exp = new Date(ref);
+        exp.setMonth(exp.getMonth() - 12);
         expect(captured.start.getFullYear()).toBe(exp.getFullYear());
         expect(captured.start.getMonth()).toBe(exp.getMonth());
         expect(captured.start.getDate()).toBe(exp.getDate());
@@ -197,7 +262,11 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
     it('options : interaction et tooltip en mode index', async () => {
         setup('1Y');
         await App.renderResearchChart('AAPL');
-        expect(lastChartConfig.options.interaction).toEqual({ mode: 'index', axis: 'x', intersect: false });
+        expect(lastChartConfig.options.interaction).toEqual({
+            mode: 'index',
+            axis: 'x',
+            intersect: false,
+        });
         expect(lastChartConfig.options.plugins.tooltip.mode).toBe('index');
         expect(lastChartConfig.options.plugins.tooltip.intersect).toBe(false);
     });
@@ -220,7 +289,9 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
         const existing = {
             data: { labels: [], datasets: [{}] },
             options: { plugins: { tooltip: { callbacks: {} } }, scales: { y: { ticks: {} } } },
-            update() { this._updated = true; },
+            update() {
+                this._updated = true;
+            },
         };
         App.researchChart = existing;
         await App.renderResearchChart('AAPL');
