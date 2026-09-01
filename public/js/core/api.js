@@ -30,7 +30,7 @@ export const APIService = {
             console.warn('Search proxy error, repli sur liste locale', e);
         }
 
-        const mockEntries = Object.keys(CONFIG.MOCK_PRICES).map((s) => ({
+        const mockEntries = CONFIG.KNOWN_SYMBOLS.map((s) => ({
             displaySymbol: s,
             description: `${s} Asset`,
             type: s.includes('.PA') ? 'Common Stock' : s.includes('BTC') ? 'Crypto' : 'Stock',
@@ -141,13 +141,27 @@ export const APIService = {
             }
             throw new Error('prix invalide');
         } catch (e) {
-            console.warn(`Quote proxy error pour ${symbol}, repli mock`, e);
-            return CONFIG.MOCK_PRICES[symbol.toUpperCase()] || 100.0;
+            // Pas de cours de repli : un prix invente serait affiche comme un
+            // prix reel et produirait une plus-value fausse. L'appelant traite
+            // `null` comme « indisponible » et valorise la position a son cout.
+            console.warn(`Quote proxy error pour ${symbol}, cours indisponible`, e);
+            return null;
         }
     },
 
-    // Taux USD par unite de devise (USD/EUR ~1.08, USD/GBP ~1.27, USD/CAD ~0.73).
+    // Taux USD par unite de devise. Contrairement aux cours, un taux de change
+    // ne peut pas etre omis : sans lui aucune conversion n'est possible et tout
+    // le portefeuille devient inaffichable. On garde donc une estimation de
+    // dernier recours, mais on signale qu'elle en est une (cf. fxEstimated).
     FX_FALLBACK: { EUR: 1.08, GBP: 1.27, CAD: 0.73 },
+
+    /** Devises dont le dernier taux servi n'est pas un taux live. */
+    fxEstimated: /** @type {Record<string, 'perime' | 'estimation'>} */ ({}),
+
+    /** Devises actuellement servies par un taux perime ou une estimation. */
+    fxEstimatedCurrencies() {
+        return Object.keys(this.fxEstimated);
+    },
 
     async getExchangeRate(currency = 'EUR') {
         const cur = (currency || 'EUR').toUpperCase();
@@ -170,12 +184,21 @@ export const APIService = {
             const data = await res.json();
             if (data && typeof data.price === 'number' && data.price > 0) {
                 this.cachedFxRates[cur] = { timestamp: now, rate: data.price };
+                delete this.fxEstimated[cur];
                 return data.price;
             }
             throw new Error('taux invalide');
         } catch (e) {
-            console.warn(`FX proxy error ${cur}, repli ${fallback}`, e);
-            this.cachedFxRates[cur] = { timestamp: now, rate: fallback };
+            // Un taux live deja obtenu, meme perime, vaut mieux qu'une constante
+            // de 2024 : on le reutilise sans ecraser son horodatage, pour que la
+            // prochaine tentative reessaie le reseau.
+            if (cached && cached.rate > 0) {
+                console.warn(`FX proxy error ${cur}, dernier taux connu conserve`, e);
+                this.fxEstimated[cur] = 'perime';
+                return cached.rate;
+            }
+            console.warn(`FX proxy error ${cur}, estimation ${fallback}`, e);
+            this.fxEstimated[cur] = 'estimation';
             return fallback;
         }
     },
@@ -386,8 +409,13 @@ export const APIService = {
         const eDate = Utils.parseDate(endDate);
         const totalDays = Math.max(1, Utils.daysBetween(sDate, eDate));
 
-        const p0 = startPrice > 0 ? startPrice : CONFIG.MOCK_PRICES[symbol] || 100;
-        const pT = endPrice > 0 ? endPrice : CONFIG.MOCK_PRICES[symbol] || p0;
+        // Sans aucune ancre reelle, il n'y a rien a interpoler : renvoyer une
+        // serie ancree sur un prix arbitraire reviendrait a inventer un
+        // historique de marche. L'appelant traite une serie vide comme absente.
+        if (!(startPrice > 0) && !(endPrice > 0)) return dailyMap;
+
+        const p0 = startPrice > 0 ? startPrice : endPrice;
+        const pT = endPrice > 0 ? endPrice : p0;
 
         let seed = 42;
         for (let i = 0; i < symbol.length; i++) {

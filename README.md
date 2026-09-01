@@ -100,6 +100,7 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 │           ├── portfolio-io.test.js         # persistance Supabase, CRUD, CSV
 │           ├── portfolio-aggregates.test.js # variations, dividendes, résultats
 │           ├── portfolio-timeline.test.js   # référence figée de la série quotidienne
+│           ├── api.test.js                  # comportement du proxy en panne
 │           └── *.test.js                    # import direct, aucun stub de DOM
 ├── e2e/                      # Parcours Playwright
 ├── scripts/
@@ -147,6 +148,21 @@ nombre de jours et de lignes détenues. `portfolio-timeline.test.js` fige la
 sortie de l'ancienne implémentation en instantanés, sur treize portefeuilles de
 référence et quatre plages, pour que la refonte soit prouvée équivalente et pas
 seulement plus rapide.
+
+### Données de marché indisponibles
+
+Aucun cours n'est jamais inventé. Si le proxy ne répond pas, `getCurrentPrice`
+renvoie `null` : la position est alors valorisée à son **prix de revient**, sa
+plus-value latente s'affiche « — cours indisponible » plutôt que chiffrée à
+zéro, et un avertissement nomme les valeurs concernées. Auparavant un cours codé
+en dur de 2024 était servi en repli, produisant un P&L faux présenté avec la
+même autorité qu'un vrai.
+
+Le taux de change est la seule exception, et elle est assumée : sans taux aucune
+conversion n'est possible et le portefeuille devient inaffichable. L'ordre de
+préférence est donc taux live → dernier taux live connu même périmé →
+estimation de dernier recours, les deux derniers cas étant signalés à
+l'utilisateur.
 
 Les fragments de `public/js/ui/` sont fusionnés dans un unique objet `App` par
 `Object.assign` : ils partagent donc le même `this`, et l'état commun est

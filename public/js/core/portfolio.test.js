@@ -559,6 +559,96 @@ describe('PortfolioService.calculatePortfolio', () => {
     });
 });
 
+describe('PortfolioService.calculatePortfolio : cours indisponible', () => {
+    function svcWith(prices) {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = [
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 10,
+                price: 100,
+                amount: 1000,
+                fees: 0,
+                date: '2026-01-02',
+            },
+            {
+                id: 'b2',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'MSFT',
+                qty: 5,
+                price: 200,
+                amount: 1000,
+                fees: 0,
+                date: '2026-01-03',
+            },
+        ];
+        svc.marketPrices = prices;
+        svc.dailyPriceCache = {};
+        return svc;
+    }
+
+    it('sans cours, la position est valorisee a son prix de revient', () => {
+        // Le repli d'avant renvoyait un cours code en dur de 2024 : la position
+        // affichait une plus-value entierement fabriquee. Valoriser au cout donne
+        // une plus-value nulle, ce qui est faux aussi — d'ou le drapeau.
+        const stats = svcWith({}).calculatePortfolio('USD');
+        const aapl = stats.holdings.find((h) => h.symbol === 'AAPL');
+        expect(aapl.currentPrice).toBe(100);
+        expect(aapl.gainNative).toBe(0);
+        expect(aapl.priceUnavailable).toBe(true);
+    });
+
+    it('les symboles concernes sont listes dans le resultat', () => {
+        const stats = svcWith({ MSFT: 260 }).calculatePortfolio('USD');
+        expect(stats.unavailablePrices).toEqual(['AAPL']);
+        expect(stats.holdings.find((h) => h.symbol === 'MSFT').priceUnavailable).toBe(false);
+    });
+
+    it('tous les cours disponibles : aucun signalement', () => {
+        const stats = svcWith({ AAPL: 130, MSFT: 260 }).calculatePortfolio('USD');
+        expect(stats.unavailablePrices).toEqual([]);
+        expect(stats.holdings.every((h) => h.priceUnavailable === false)).toBe(true);
+    });
+
+    it('un cours nul ou negatif compte comme indisponible', () => {
+        const stats = svcWith({ AAPL: 0, MSFT: -5 }).calculatePortfolio('USD');
+        expect(stats.unavailablePrices).toEqual(['AAPL', 'MSFT']);
+    });
+
+    it('la plus-value latente totale n integre aucun montant invente', () => {
+        const stats = svcWith({ MSFT: 260 }).calculatePortfolio('USD');
+        // Seul MSFT contribue : 5 x (260 - 200) = 300.
+        expect(stats.unrealizedPnL).toBeCloseTo(300);
+    });
+
+    it('ne signale que les devises effectivement detenues', () => {
+        const svc = svcWith({ AAPL: 130, MSFT: 260 });
+        svc.estimatedFxCurrencies = ['EUR', 'CAD'];
+        // Le portefeuille n'a que des titres en USD : rien a signaler.
+        expect(svc.calculatePortfolio('USD').estimatedFxCurrencies).toEqual([]);
+
+        svc.trades.push({
+            id: 'b3',
+            portfolioId: 'p1',
+            type: 'BUY',
+            symbol: 'MC.PA',
+            qty: 1,
+            price: 600,
+            amount: 600,
+            fees: 0,
+            date: '2026-01-04',
+        });
+        svc.marketPrices['MC.PA'] = 660;
+        expect(svc.calculatePortfolio('USD').estimatedFxCurrencies).toEqual(['EUR']);
+    });
+});
+
 describe('helpers JWT (garde-fou horloge desynchronisee)', () => {
     const mkToken = (payload) => {
         const b64 = (o) =>

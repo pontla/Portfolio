@@ -35,6 +35,10 @@ export class PortfolioService {
         this.activePortfolioId = 'GLOBAL';
         this.trades = [];
         this.marketPrices = {};
+        /** @type {string[]} Symboles sans cours disponible au dernier rafraichissement. */
+        this.unavailablePrices = [];
+        /** @type {string[]} Devises dont le taux servi n'est pas un taux live. */
+        this.estimatedFxCurrencies = [];
         this.dailyPriceCache = {};
         this.fxRate = 1.08;
         this.fxRates = /** @type {Record<string, number|null>} */ ({
@@ -302,15 +306,23 @@ export class PortfolioService {
             ),
         ];
         this.marketPrices = {};
+        // Symboles dont le cours n'a pu etre obtenu : la position sera valorisee
+        // a son cout d'achat, et l'UI doit le dire. Aucun cours n'est invente.
+        this.unavailablePrices = [];
 
         await Promise.all(
             uniqueSymbols.map(async (sym) => {
-                this.marketPrices[sym] = await APIService.getCurrentPrice(sym);
+                const price = await APIService.getCurrentPrice(sym);
+                if (price > 0) this.marketPrices[sym] = price;
+                else this.unavailablePrices.push(sym);
             })
         );
+        this.unavailablePrices.sort();
 
         this.fxRates = await APIService.getExchangeRates();
         this.fxRate = this.fxRates.EUR || 1.08;
+        // Devises servies par un taux perime ou une estimation de dernier recours.
+        this.estimatedFxCurrencies = APIService.fxEstimatedCurrencies();
 
         const earliestDate =
             this.getFirstTradeDate() || new Date(Date.now() - 365 * 24 * 3600 * 1000);
@@ -324,8 +336,11 @@ export class PortfolioService {
                         (a, b) =>
                             Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime()
                     );
+                // Sans achat connu ni cours live, il n'y a aucune ancre reelle :
+                // APIService renvoie alors une serie vide plutot qu'un historique
+                // ancre sur un prix arbitraire.
                 const anchorBuyPrice =
-                    symTrades.length > 0 ? symTrades[0].price : this.marketPrices[sym] || 100;
+                    symTrades.length > 0 ? symTrades[0].price : this.marketPrices[sym] || 0;
                 const currentPrice = this.marketPrices[sym] || anchorBuyPrice;
 
                 const dailyPrices = await APIService.getDailyHistory(
@@ -916,7 +931,12 @@ export class PortfolioService {
             .map(([symbol, data]) => {
                 if (data.qty < 0.0001) return null;
 
-                const currentPriceNative = this.marketPrices[symbol] || data.avgPriceNative;
+                // Cours indisponible : la position est valorisee a son prix de
+                // revient, ce qui affiche une plus-value nulle plutot qu'un
+                // montant fabrique. Le drapeau permet a l'UI de le signaler.
+                const livePrice = this.marketPrices[symbol];
+                const priceUnavailable = !(livePrice > 0);
+                const currentPriceNative = priceUnavailable ? data.avgPriceNative : livePrice;
                 const valueNative = data.qty * currentPriceNative;
                 const costNative = data.qty * data.avgPriceNative;
                 const gainNative = valueNative - costNative;
@@ -942,6 +962,7 @@ export class PortfolioService {
                     valueUSD,
                     currency: data.currency,
                     weightPercent: 0,
+                    priceUnavailable,
                     portfolios: Array.from(data.portfolios || []),
                 };
             })
@@ -984,6 +1005,14 @@ export class PortfolioService {
             holdings: holdingsList,
             firstTradeDate,
             fxRate: FX,
+            // Qualite des donnees de marche sous-jacentes. Vide = tout est live.
+            // Les positions concernees sont valorisees a leur cout d'achat : leur
+            // plus-value affichee est nulle, pas inconnue, d'ou la necessite de le
+            // dire explicitement a l'utilisateur.
+            unavailablePrices: holdingsList.filter((h) => h.priceUnavailable).map((h) => h.symbol),
+            estimatedFxCurrencies: (this.estimatedFxCurrencies || []).filter((cur) =>
+                holdingsList.some((h) => h.currency === cur)
+            ),
         };
     }
 

@@ -367,3 +367,81 @@ test.describe('controles de la vue d ensemble', () => {
         await expect(page.locator('.tab-btn.active[data-tab="analysis"]')).toHaveCount(3);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Qualite des donnees de marche : ne jamais presenter un montant invente
+// comme un montant reel.
+// ---------------------------------------------------------------------------
+
+test.describe('cours indisponible', () => {
+    /**
+     * Coupe le proxy de cotation, puis relance le rafraichissement des prix.
+     *
+     * Un `page.reload()` serait plus fidele mais impossible ici : la balise
+     * <script> du SDK Supabase porte un hash SRI, que le stub du harnais ne
+     * satisfait pas au second chargement. On repasse donc par le chemin de
+     * production reel — refreshPrices() puis render() — sans recharger.
+     */
+    async function withoutQuotes(page) {
+        await page.route('**/quote?**', (route) =>
+            route.fulfill({
+                status: 502,
+                contentType: 'application/json',
+                body: JSON.stringify({ error: 'proxy injoignable' }),
+            })
+        );
+        await page.evaluate(async () => {
+            // Le cache de cotations garde 5 minutes le dernier cours reel : on le
+            // vide pour que la panne soit visible immediatement.
+            // Chemin construit a l'execution : le module est resolu par le
+            // navigateur, pas par tsc (qui ne connait pas la racine du serveur).
+            const modulePath = ['', 'js', 'core', 'api.js'].join('/');
+            const api = (await import(modulePath)).APIService;
+            api.quoteCache = {};
+            api.cachedFxRates = {};
+            api.fxEstimated = {};
+            await window.App.service.refreshPrices();
+            await window.App.render();
+        });
+    }
+
+    test('un avertissement nomme la valeur concernee', async ({ page }) => {
+        await withoutQuotes(page);
+
+        const notice = page.locator('#dataNotice');
+        await expect(notice).toBeVisible();
+        await expect(notice).toContainText('AAPL');
+        await expect(notice).toContainText('prix de revient');
+    });
+
+    test('la plus-value latente n est pas chiffree a zero', async ({ page }) => {
+        await withoutQuotes(page);
+        await goToTab(page, 'holdings');
+
+        // Avant correction : un cours code en dur de 2024 produisait une
+        // plus-value chiffree, presentee comme reelle. Elle est inconnue.
+        const gainCell = page.locator('#holdingsTableBody td[data-label="+/- Latente"]').first();
+        await expect(gainCell).toContainText('cours indisponible');
+        await expect(gainCell).not.toContainText('%');
+    });
+
+    test('le cours affiche est le prix de revient, signale comme tel', async ({ page }) => {
+        await withoutQuotes(page);
+        await goToTab(page, 'holdings');
+
+        const priceCell = page.locator('#holdingsTableBody td[data-label="Prix Actuel"]').first();
+        await expect(priceCell).toHaveClass(/price-stale/);
+        // Le PRU de la fixture est de 150 : c'est ce qui doit s'afficher, pas 225,50.
+        await expect(priceCell).toContainText('150');
+        await expect(priceCell).not.toContainText('225');
+    });
+
+    test('cours disponibles : aucun avertissement', async ({ page }) => {
+        await expect(page.locator('#statsGrid .stat-value').first()).toBeVisible();
+        await expect(page.locator('#dataNotice')).toBeHidden();
+
+        await goToTab(page, 'holdings');
+        const priceCell = page.locator('#holdingsTableBody td[data-label="Prix Actuel"]').first();
+        await expect(priceCell).not.toHaveClass(/price-stale/);
+    });
+});

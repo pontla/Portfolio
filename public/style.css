@@ -43,6 +43,7 @@
     /* sémantique */
     --up: #2ebd85;
     --dn: #f6465c;
+    --warn: #e8b23a;
     --accTxt: #00d3f2;
 
     /* accent d'action — constant dans les deux thèmes */
@@ -120,6 +121,7 @@
 
     --up: #0b9c66;
     --dn: #d92c43;
+    --warn: #9a6b00;
     --accTxt: #0b8ba4;
 }
 
@@ -6959,4 +6961,55 @@ select option {
         height: 15px;
         flex: none;
     }
+}
+
+/* --- Avertissement sur la qualité des données de marché -----------------
+   Affiché quand un cours n'a pas pu être récupéré : la position est alors
+   valorisée à son prix de revient, donc sa plus-value affichée est nulle et
+   non réelle. Le dire est la seule façon honnête de présenter le chiffre. */
+.data-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+    border-left: 3px solid var(--warn);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--warn) 10%, var(--surf));
+    color: var(--soft);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.data-notice[hidden] {
+    display: none;
+}
+
+.data-notice .dn-icon {
+    flex: 0 0 auto;
+    color: var(--warn);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.3;
+}
+
+.data-notice strong {
+    color: var(--txt);
+    font-weight: 600;
+}
+
+/* Valeur dont on ne connaît pas le cours : ni verte, ni rouge, ni chiffrée. */
+.val-unknown {
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.price-stale {
+    color: var(--warn) !important;
+}
+
+.price-stale::after {
+    content: ' ·';
+    opacity: 0.6;
 }

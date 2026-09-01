@@ -208,6 +208,7 @@ const realApi = {
     getExchangeRates: APIService.getExchangeRates,
     getDailyHistory: APIService.getDailyHistory,
     getDividends: APIService.getDividends,
+    fxEstimatedCurrencies: APIService.fxEstimatedCurrencies,
 };
 
 /** Prix et taux inertes : refreshPrices est declenche par presque tout le CRUD. */
@@ -215,6 +216,7 @@ function stubMarket({ prices = {}, rates = { USD: 1, EUR: 1.08 }, history = {} }
     const seen = { history: [] };
     APIService.getCurrentPrice = async (sym) => prices[sym] ?? 0;
     APIService.getExchangeRates = async () => rates;
+    APIService.fxEstimatedCurrencies = () => [];
     APIService.getDailyHistory = async (sym, start, end, anchor, current) => {
         seen.history.push({ sym, anchor, current });
         return history[sym] || {};
@@ -836,6 +838,26 @@ describe('PortfolioService.refreshPrices', () => {
         const seen = stubMarket({ prices: {} });
         await svc.refreshPrices();
         expect(seen.history[0]).toMatchObject({ anchor: 100, current: 100 });
+    });
+
+    it('cours indisponible : le symbole est liste, aucun prix invente', async () => {
+        APIService.getCurrentPrice = async () => null;
+        await svc.refreshPrices();
+        expect(svc.marketPrices).toEqual({});
+        expect(svc.unavailablePrices).toEqual(['AAPL']);
+    });
+
+    it('cours disponible : rien n est signale', async () => {
+        stubMarket({ prices: { AAPL: 250 } });
+        await svc.refreshPrices();
+        expect(svc.unavailablePrices).toEqual([]);
+    });
+
+    it('taux de change estime : la devise est signalee', async () => {
+        APIService.getExchangeRates = async () => ({ USD: 1, EUR: 1.08 });
+        APIService.fxEstimatedCurrencies = () => ['EUR'];
+        await svc.refreshPrices();
+        expect(svc.estimatedFxCurrencies).toEqual(['EUR']);
     });
 
     it('remplit le cache quotidien par symbole', async () => {

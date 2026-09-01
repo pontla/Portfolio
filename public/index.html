@@ -43,7 +43,7 @@
         crossorigin="anonymous"></script>
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=58">
+    <link rel="stylesheet" href="style.css?v=59">
 </head>
 
 <body>
@@ -266,6 +266,9 @@
                 <button type="button" class="btn-outline" id="emptyImportBtn">Importer un CSV</button>
             </div>
         </div>
+
+        <!-- Avertissement sur la qualité des données de marché (rempli par overview.js) -->
+        <div class="data-notice" id="dataNotice" hidden></div>
 
         <!-- Stats Grid -->
         <div class="stats-grid" id="statsGrid">
@@ -1033,7 +1036,7 @@
 
     <!-- App Logic -->
     <!-- Modules ES natifs (aucun bundler) : le moteur vit dans js/core/. -->
-    <script type="module" src="js/app.js?v=112"></script>
+    <script type="module" src="js/app.js?v=113"></script>
 </body>
 
 </html>

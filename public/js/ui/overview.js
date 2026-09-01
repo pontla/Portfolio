@@ -102,6 +102,48 @@ export const overview = {
         Icons.render();
     },
 
+    /**
+     * Avertit quand les montants affiches reposent sur des donnees de marche
+     * incompletes. Sans cours, une position est valorisee a son prix de revient :
+     * sa plus-value paraitrait nulle alors qu'elle est inconnue, et la valeur
+     * totale du portefeuille est sous-estimee d'autant. Le taux de change de
+     * repli, lui, decale toute la valorisation des lignes en devise etrangere.
+     */
+    renderDataNotice(stats) {
+        const el = document.getElementById('dataNotice');
+        if (!el) return;
+
+        const noPrice = stats.unavailablePrices || [];
+        const estimatedFx = stats.estimatedFxCurrencies || [];
+        if (!noPrice.length && !estimatedFx.length) {
+            el.hidden = true;
+            el.innerHTML = '';
+            return;
+        }
+
+        const parts = [];
+        if (noPrice.length) {
+            const list = noPrice.map((s) => `<strong>${Utils.escapeHtml(s)}</strong>`).join(', ');
+            parts.push(
+                noPrice.length === 1
+                    ? `Cours indisponible pour ${list} : la position est comptée à son prix de revient, sa plus-value latente n'est pas connue.`
+                    : `Cours indisponibles pour ${list} : ces positions sont comptées à leur prix de revient, leurs plus-values latentes ne sont pas connues.`
+            );
+        }
+        if (estimatedFx.length) {
+            const list = estimatedFx
+                .map((c) => `<strong>${Utils.escapeHtml(c)}</strong>`)
+                .join(', ');
+            parts.push(
+                `Taux de change estimé pour ${list} : les montants convertis sont approximatifs.`
+            );
+        }
+        parts.push('Les autres chiffres restent exacts. Réessaie plus tard.');
+
+        el.innerHTML = `<span class="dn-icon" aria-hidden="true">!</span><div>${parts.join(' ')}</div>`;
+        el.hidden = false;
+    },
+
     render() {
         const curr = this.chartState.currency;
         const stats = this.service.calculatePortfolio(curr);
@@ -109,6 +151,8 @@ export const overview = {
 
         // Render Switcher Dropdown
         this.renderPortfolioSwitcher();
+
+        this.renderDataNotice(stats);
 
         // Titre de la carte graphique = nom du portefeuille selectionne
         const chartTitleEl = document.getElementById('chartPortfolioTitle');
@@ -203,6 +247,11 @@ export const overview = {
 
                           const assetName = this.assetNameCache[h.symbol];
                           const isPriceUp = h.currentPrice >= h.avgPrice;
+                          // Cours indisponible : la valorisation retombe sur le
+                          // prix de revient, donc la plus-value affichee serait
+                          // nulle. Elle est inconnue, pas nulle : on ne chiffre
+                          // rien plutot que d'annoncer 0.
+                          const noPrice = h.priceUnavailable;
 
                           return `
                     <tr>
@@ -220,11 +269,16 @@ export const overview = {
                         </td>
                         <td data-label="Quantité">${h.qty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
                         <td data-label="Prix Moyen">${Utils.formatCurrency(h.avgPrice, h.currency)}</td>
-                        <td data-label="Prix Actuel" class="${isPriceUp ? 'text-green' : 'text-red'}">${Utils.formatCurrency(h.currentPrice, h.currency)}</td>
+                        <td data-label="Prix Actuel" class="${noPrice ? 'price-stale' : isPriceUp ? 'text-green' : 'text-red'}"
+                            ${noPrice ? 'title="Cours indisponible : valeur estimée au prix de revient"' : ''}>${noPrice ? Utils.formatCurrency(h.avgPrice, h.currency) : Utils.formatCurrency(h.currentPrice, h.currency)}</td>
                         <td data-label="Valeur" style="font-weight:700;">${Utils.formatCurrency(h.valueNative, h.currency)}</td>
-                        <td data-label="+/- Latente" class="${isProfit ? 'text-green' : 'text-red'}" style="font-weight:600;">
-                            ${isProfit ? '+' : ''}${Utils.formatCurrency(h.gainNative, h.currency)}
-                            <br><span style="font-size:12px;">(${Utils.formatPercent(h.gainPercent)})</span>
+                        <td data-label="+/- Latente" class="${noPrice ? 'val-unknown' : isProfit ? 'text-green' : 'text-red'}" style="font-weight:600;">
+                            ${
+                                noPrice
+                                    ? '—<br><span style="font-size:12px;">cours indisponible</span>'
+                                    : `${isProfit ? '+' : ''}${Utils.formatCurrency(h.gainNative, h.currency)}
+                            <br><span style="font-size:12px;">(${Utils.formatPercent(h.gainPercent)})</span>`
+                            }
                         </td>
                         <td data-label="Actions">
                             <button class="btn-sm btn-primary quick-sell-btn"
@@ -258,6 +312,7 @@ export const overview = {
                       .map((h) => {
                           const isProfit = h.gainNative >= 0;
                           const isPriceUp = h.currentPrice >= h.avgPrice;
+                          const noPrice = h.priceUnavailable;
                           const nm =
                               this.assetNameCache[h.symbol] || Utils.getExchangeName(h.symbol);
                           const barW = Math.max(2, Math.min(100, h.weightPercent || 0));
@@ -276,13 +331,13 @@ export const overview = {
                         </div>
                         <div class="hc-row2">
                             <span class="hc-name">${Utils.escapeHtml(nm)}</span>
-                            <span class="hc-gain ${isProfit ? 'text-green' : 'text-red'}">${isProfit ? '+' : ''}${Utils.formatCurrency(h.gainNative, h.currency)} · ${Utils.formatPercent(h.gainPercent)}</span>
+                            <span class="hc-gain ${noPrice ? 'val-unknown' : isProfit ? 'text-green' : 'text-red'}">${noPrice ? '— cours indisponible' : `${isProfit ? '+' : ''}${Utils.formatCurrency(h.gainNative, h.currency)} · ${Utils.formatPercent(h.gainPercent)}`}</span>
                         </div>
                         <div class="hc-bar"><i style="width:${barW}%"></i></div>
                         <div class="hc-grid">
                             <div><div class="hc-cell-label">Qté</div><div class="hc-cell-val">${h.qty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</div></div>
                             <div><div class="hc-cell-label">PRU</div><div class="hc-cell-val">${Utils.formatCurrency(h.avgPrice, h.currency)}</div></div>
-                            <div><div class="hc-cell-label">Cours</div><div class="hc-cell-val ${isPriceUp ? 'text-green' : 'text-red'}">${Utils.formatCurrency(h.currentPrice, h.currency)}</div></div>
+                            <div><div class="hc-cell-label">Cours</div><div class="hc-cell-val ${noPrice ? 'price-stale' : isPriceUp ? 'text-green' : 'text-red'}">${noPrice ? Utils.formatCurrency(h.avgPrice, h.currency) : Utils.formatCurrency(h.currentPrice, h.currency)}</div></div>
                         </div>
                     </div>
                 </div>`;
