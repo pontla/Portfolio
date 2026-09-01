@@ -269,10 +269,38 @@ export const research = {
         // requetes/jour), donc elle n'est plus declenchee automatiquement.
         // L'utilisateur la lance via le bouton dedie ; si elle est deja en
         // cache pour ce symbole, on la reaffiche sans nouvelle requete.
-        this.clearResearchAnalysis();
         const cachedAnalysis = AnalysisService.cached(symbol);
-        if (cachedAnalysis) this.applyResearchAnalysis(symbol, cachedAnalysis);
-        else this.showResearchDeepCta();
+        if (cachedAnalysis) {
+            this.clearResearchAnalysis();
+            this.applyResearchAnalysis(symbol, cachedAnalysis);
+            return;
+        }
+        // Sinon : apercu gratuit (Yahoo seul) affiche immediatement, l'appel a
+        // l'analyse approfondie reste propose pour completer le reste.
+        this.clearResearchAnalysis({ loading: true });
+        this.showResearchDeepCta();
+        await this.renderResearchLight(symbol);
+    },
+
+    // Remplit les cartes d'analyse avec les seules donnees Yahoo (gratuites).
+    // En cas d'echec, les cartes repassent masquees plutot que de rester
+    // bloquees sur « Chargement… ».
+    async renderResearchLight(symbol) {
+        const light = await AnalysisService.buildLight(symbol).catch((e) => {
+            console.warn('AnalysisService.buildLight KO', e);
+            return null;
+        });
+        if (this.researchSymbol !== symbol) return; // course annulee entre-temps
+        // Une analyse complete lancee entre-temps ne doit pas etre ecrasee.
+        if (this.deepAnalysisRunning) return;
+        if (this.researchAnalysis && !this.researchAnalysis.partial) return;
+        if (!light) {
+            this.clearResearchAnalysis();
+            this.showResearchDeepCta();
+            return;
+        }
+        this.applyResearchAnalysis(symbol, light);
+        Icons.render();
     },
 
     // Cartes alimentees uniquement par l'analyse approfondie.
@@ -290,9 +318,10 @@ export const research = {
         'researchQualCard',
     ],
 
-    // Remet les cartes d'analyse approfondie a vide et les masque : tant que
-    // l'analyse n'est pas lancee, elles n'ont rien a montrer.
-    clearResearchAnalysis() {
+    // Remet les cartes d'analyse a vide. Par defaut elles sont masquees ; avec
+    // `loading`, elles restent visibles sur leur etat « Chargement… » le temps
+    // que l'apercu Yahoo arrive.
+    clearResearchAnalysis({ loading = false } = {}) {
         this.researchAnalysis = null;
         this.renderResearchScore(null);
         this.renderResearchAi(null);
@@ -305,6 +334,7 @@ export const research = {
         this.renderResearchDividend(null);
         this.renderResearchQualitative(null);
         this.renderResearchPeers(null);
+        if (loading) return;
         for (const id of this.DEEP_CARD_IDS) {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
@@ -326,8 +356,21 @@ export const research = {
         this.renderResearchQualitative(a);
         this.renderResearchPeers(a);
         this.applyResearchMaOverlay();
-        this.hideResearchDeepCta();
+        // L'apercu Yahoo laisse l'appel a l'analyse approfondie en place : c'est
+        // lui qui apportera les historiques 5 ans, les comparables et le texte.
+        if (a.partial) this.showResearchDeepCta();
+        else this.hideResearchDeepCta();
     },
+
+    // Texte affiche a la place d'une valeur absente. En apercu Yahoo,
+    // l'information peut encore arriver : on invite a lancer l'analyse plutot
+    // que de la declarer indisponible.
+    _researchND(a) {
+        return a && a.partial ? 'Demander une analyse' : 'Non disponible';
+    },
+
+    // Mention de source des cartes que l'analyse approfondie complete.
+    RESEARCH_PARTIAL_SRC: 'Yahoo Finance · le reste après analyse approfondie',
 
     showResearchDeepCta() {
         const card = document.getElementById('researchDeepCard');

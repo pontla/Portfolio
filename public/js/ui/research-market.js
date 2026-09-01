@@ -12,7 +12,7 @@ import { AnalysisUtils, AnalysisService } from '../core/analysis.js';
 
 export const researchMarket = {
     // Repartition des recommandations analystes en barre empilee + legende chiffree.
-    _consensusBar(c) {
+    _consensusBar(c, empty = 'Non disponible') {
         const defs = [
             ['sb', 'Achat fort', 'strongBuy'],
             ['b', 'Achat', 'buy'],
@@ -24,7 +24,7 @@ export const researchMarket = {
         const total = vals.reduce((s, v) => s + v.n, 0);
         const head = `<div class="sent-title">Recommandations des analystes ${this._kvHelp("Nombre d'analystes derrière chaque recommandation. Un consensus très majoritairement à l'achat est souvent déjà intégré dans le cours.")}</div>`;
         if (!total)
-            return `<div class="sent-block">${head}<div class="sent-empty">Non disponible</div></div>`;
+            return `<div class="sent-block">${head}<div class="sent-empty">${empty}</div></div>`;
         const bar = vals
             .map((v) =>
                 v.n
@@ -46,13 +46,13 @@ export const researchMarket = {
     },
 
     // Echelle objectif bas / moyen / haut, avec le cours actuel positionne dessus.
-    _ptScale(s, price, cur) {
+    _ptScale(s, price, cur, empty = 'Non disponible') {
         const head = `<div class="sent-title">Objectif de cours à 12 mois ${this._kvHelp("Fourchette des objectifs publiés par les analystes. Le repère clair est le cours actuel, le repère cyan l'objectif moyen.")}</div>`;
         const lo = s.targetLow,
             hi = s.targetHigh,
             avg = s.targetMean;
         if (lo == null || hi == null || hi <= lo) {
-            return `<div class="sent-block">${head}<div class="sent-empty">Non disponible</div></div>`;
+            return `<div class="sent-block">${head}<div class="sent-empty">${empty}</div></div>`;
         }
         const min = Math.min(lo, price != null ? price : lo);
         const max = Math.max(hi, price != null ? price : hi);
@@ -94,7 +94,7 @@ export const researchMarket = {
         const s = a.sentiment || {};
         const price = (a.price && a.price.current) != null ? a.price.current : null;
         const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const money = (x) => (x == null || !isFinite(x) ? null : Utils.formatCurrency(x, cur));
         const pct = (x) => (x == null || !isFinite(x) ? null : Utils.formatPercent(x, false));
         const num1 = (x) =>
@@ -164,7 +164,7 @@ export const researchMarket = {
                 `${Utils.formatCompact(ins.bought)} achetés / ${Utils.formatCompact(ins.sold)} vendus</span>`;
         }
 
-        top.innerHTML = this._consensusBar(s.consensus) + this._ptScale(s, price, cur);
+        top.innerHTML = this._consensusBar(s.consensus, ND) + this._ptScale(s, price, cur, ND);
 
         grid.innerHTML =
             kv(
@@ -231,19 +231,21 @@ export const researchMarket = {
 
         if (src) {
             const hasReco = !!(s.consensus || s.recommendationKey || s.targetMean != null);
-            src.textContent = hasReco
-                ? 'Yahoo Finance · consensus Finnhub'
-                : a.isUS
-                  ? 'Consensus analystes indisponible'
-                  : 'Consensus analystes : actions US uniquement';
+            src.textContent = a.partial
+                ? this.RESEARCH_PARTIAL_SRC
+                : hasReco
+                  ? 'Yahoo Finance · consensus Finnhub'
+                  : a.isUS
+                    ? 'Consensus analystes indisponible'
+                    : 'Consensus analystes : actions US uniquement';
         }
     },
 
     // Jauge horizontale bornee (RSI, position dans un range) : trait = valeur courante.
-    _gauge(title, tip, value, min, max, legend, cls = '') {
+    _gauge(title, tip, value, min, max, legend, cls = '', empty = 'Non disponible') {
         const head = `<div class="sent-title">${title} ${this._kvHelp(tip)}</div>`;
         if (value == null || !isFinite(value)) {
-            return `<div class="sent-block">${head}<div class="sent-empty">Non disponible</div></div>`;
+            return `<div class="sent-block">${head}<div class="sent-empty">${empty}</div></div>`;
         }
         const p = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
         return (
@@ -271,7 +273,7 @@ export const researchMarket = {
 
         const t = a.technical;
         const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
 
         if (!t) {
             top.innerHTML = '';
@@ -315,7 +317,8 @@ export const researchMarket = {
                 0,
                 100,
                 `<span>Survente <b>30</b></span><span><b>${num1(t.rsi14) || '—'}</b></span><span>Surachat <b>70</b></span>`,
-                'rsi'
+                'rsi',
+                ND
             );
 
         const trendTag = { haussière: 'ok', baissière: 'warn', neutre: 'mid' }[t.trend] || 'mid';
@@ -410,7 +413,7 @@ export const researchMarket = {
         card.hidden = false;
 
         const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const money = (x) => (x == null || !isFinite(x) ? null : Utils.formatCurrency(x, cur));
         const pct = (x) => (x == null || !isFinite(x) ? null : Utils.formatPercent(x, false));
 
@@ -499,7 +502,8 @@ export const researchMarket = {
             'Dividende annuel par action',
             annual,
             (x) => Utils.formatCurrency(x, cur),
-            "Somme des détachements de chaque année civile. La dernière année est souvent incomplète : elle n'entre pas dans le calcul des hausses consécutives."
+            "Somme des détachements de chaque année civile. La dernière année est souvent incomplète : elle n'entre pas dans le calcul des hausses consécutives.",
+            ND
         );
 
         if (src)
@@ -540,7 +544,7 @@ export const researchMarket = {
 
         if (sc.global == null) {
             top.innerHTML =
-                `<div class="score-side"><span class="score-signal hold">Non disponible</span>` +
+                `<div class="score-side"><span class="score-signal hold">${this._researchND(a)}</span>` +
                 `<span class="score-caption">Trop peu de données publiques sur cette valeur pour calculer un score fiable.</span></div>`;
             subsEl.innerHTML = '';
             if (src) src.textContent = '';
@@ -549,6 +553,9 @@ export const researchMarket = {
                 `<div class="score-dial"><span class="score-val">${r0(sc.global)}</span><span class="score-max">/ 100</span></div>` +
                 `<div class="score-side"><span class="score-signal ${signalCls}">${sc.signal}</span>` +
                 `<span class="score-caption">Synthèse de ${sc.subsUsed} dimension${sc.subsUsed > 1 ? 's' : ''} sur ${subs.length}. ` +
+                (a.partial
+                    ? "Score provisoire, calculé sur les seules données Yahoo : lancez l'analyse approfondie pour l'affiner. "
+                    : '') +
                 `${this._kvHelp(tipGlobal)}</span></div>`;
 
             subsEl.innerHTML = subs
@@ -561,14 +568,17 @@ export const researchMarket = {
                     return (
                         `<div class="score-sub">` +
                         `<span class="score-sub-lab">${s.label} ${this._kvHelp(`Pondération ${r0(s.weight * 100)} % du score global. ${s.used} critère${s.used > 1 ? 's' : ''} disponible${s.used > 1 ? 's' : ''} sur ${s.total}.`)}</span>` +
-                        `<span class="score-sub-val">${v == null ? 'Non disponible' : r0(v) + ' / 100'}</span>` +
+                        `<span class="score-sub-val">${v == null ? this._researchND(a) : r0(v) + ' / 100'}</span>` +
                         bar +
                         `<span class="score-note">${Utils.escapeHtml(s.note)}</span>` +
                         `</div>`
                     );
                 })
                 .join('');
-            if (src) src.textContent = `Mis à jour le ${Utils.formatDateDisplay(a.asOf)}`;
+            if (src)
+                src.textContent = a.partial
+                    ? `Aperçu Yahoo · ${Utils.formatDateDisplay(a.asOf)}`
+                    : `Mis à jour le ${Utils.formatDateDisplay(a.asOf)}`;
         }
     },
 
@@ -652,6 +662,15 @@ export const researchMarket = {
             return;
         }
         card.hidden = false;
+        // Apercu Yahoo : le texte redige coute un appel au fournisseur IA, il
+        // n'est produit qu'apres le lancement de l'analyse approfondie.
+        if (a.partial) {
+            body.innerHTML =
+                '<div class="insights-plain-note">Analyse rédigée disponible après le lancement de l\'analyse approfondie.</div>';
+            this._setResearchAiUpdated(null);
+            if (btn) btn.hidden = true;
+            return;
+        }
         this.refreshResearchAiAnalysis(false);
     },
 
@@ -663,7 +682,7 @@ export const researchMarket = {
         );
         const a = this.researchAnalysis;
         const symbol = this.researchSymbol;
-        if (!card || !body || !a || !symbol) return;
+        if (!card || !body || !a || a.partial || !symbol) return;
 
         const provider = this.service.aiProvider;
         const hasKey =
@@ -789,6 +808,14 @@ export const researchMarket = {
             return;
         }
 
+        if (a.partial) {
+            table.innerHTML = loading(
+                "Demander une analyse — les comparables sectoriels sont chargés par l'analyse approfondie."
+            );
+            if (src) src.textContent = '';
+            return;
+        }
+
         const symbol = a.symbol;
         table.innerHTML = loading('Chargement des comparables…');
         const d = await AnalysisService.buildPeers(a).catch((e) => {
@@ -867,7 +894,7 @@ export const researchMarket = {
             return;
         }
 
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const idn = a.identity || {};
         const r = a.risks || {};
         const kv = (label, valueStr, tip, extra = '') =>
@@ -1027,8 +1054,10 @@ export const researchMarket = {
         }
 
         if (src)
-            src.textContent = idn.description
-                ? 'Profil : émetteur · Risques : Yahoo Finance'
-                : 'Description indisponible';
+            src.textContent = a.partial
+                ? this.RESEARCH_PARTIAL_SRC
+                : idn.description
+                  ? 'Profil : émetteur · Risques : Yahoo Finance'
+                  : 'Description indisponible';
     },
 };

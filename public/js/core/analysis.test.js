@@ -634,6 +634,155 @@ describe('AnalysisService : comparaison sectorielle (phase 10)', () => {
     });
 });
 
+describe('AnalysisService.buildLight : apercu Yahoo sans quota', () => {
+    const S = AnalysisService;
+
+    // Sources gratuites uniquement : toute requete FMP ou Finnhub est un echec.
+    function stubApi(overrides = {}) {
+        const calls = [];
+        const track =
+            (name, value) =>
+            (...args) => {
+                calls.push(name + ':' + args[0]);
+                return Promise.resolve(typeof value === 'function' ? value(...args) : value);
+            };
+        const saved = {};
+        const stubs = {
+            getFundamentals: track('fundamentals', overrides.fund ?? null),
+            getQuoteSummary: track('quoteSummary', overrides.qs ?? null),
+            getDailyHistory: track('history', overrides.history ?? {}),
+            getDividends: track('dividends', overrides.dividends ?? []),
+            getFmp: track('fmp', () => {
+                throw new Error('FMP ne doit pas etre appele');
+            }),
+            getRecommendation: track('reco', () => {
+                throw new Error('Finnhub ne doit pas etre appele');
+            }),
+            getInsiderTransactions: track('insider', () => {
+                throw new Error('Finnhub ne doit pas etre appele');
+            }),
+            getPeers: track('peers', () => {
+                throw new Error('Finnhub ne doit pas etre appele');
+            }),
+            getEarnings: track('earnings', () => {
+                throw new Error('Finnhub ne doit pas etre appele');
+            }),
+        };
+        Object.keys(stubs).forEach((k) => {
+            saved[k] = APIService[k];
+            APIService[k] = stubs[k];
+        });
+        return {
+            calls,
+            restore: () => Object.keys(saved).forEach((k) => (APIService[k] = saved[k])),
+        };
+    }
+
+    afterEach(() => {
+        S._cache = {};
+        S._lightCache = {};
+    });
+
+    it("n'interroge que les sources Yahoo et marque l'analyse comme partielle", async () => {
+        const api = stubApi({
+            qs: {
+                name: 'Apple Inc',
+                currency: 'USD',
+                price: 192.5,
+                marketCap: 3e12,
+                peTrailing: 31.2,
+                profitMargins: 0.25,
+                targetMeanPrice: 220,
+                numberOfAnalystOpinions: 38,
+            },
+        });
+        S._cache = {};
+        S._lightCache = {};
+
+        const out = await S.buildLight('aapl');
+        api.restore();
+
+        expect(out.partial).toBe(true);
+        expect(out.symbol).toBe('AAPL');
+        expect(out.valuation.peTTM).toBe(31.2);
+        expect(out.sentiment.targetMean).toBe(220);
+        expect(api.calls.sort()).toEqual([
+            'dividends:AAPL',
+            'fundamentals:AAPL',
+            'history:AAPL',
+            'quoteSummary:AAPL',
+        ]);
+        // Les blocs alimentes par FMP restent vides, jamais inventes.
+        expect(out.growth.revenueAnnual).toEqual([]);
+        expect(out.health.fcfHistory).toEqual([]);
+        expect(out.peersSymbols).toEqual([]);
+        expect(out.earnings).toBeNull();
+    });
+
+    it('sert le cache puis cede la place a une analyse complete', async () => {
+        const api = stubApi({ qs: { name: 'Apple Inc', price: 192.5 } });
+        S._cache = {};
+        S._lightCache = {};
+
+        await S.buildLight('AAPL');
+        await S.buildLight('AAPL');
+        expect(api.calls.filter((c) => c.startsWith('quoteSummary'))).toHaveLength(1);
+
+        // Une analyse complete en cache prime sur l'apercu.
+        S._cache.AAPL = { ts: Date.now(), data: { symbol: 'AAPL', partial: false } };
+        expect(S.cachedLight('AAPL')).toEqual({ symbol: 'AAPL', partial: false });
+        api.restore();
+    });
+
+    it('une source Yahoo en panne laisse les champs vides sans lever', async () => {
+        const api = stubApi({});
+        APIService.getQuoteSummary = () => Promise.reject(new Error('proxy HTTP 500'));
+        S._cache = {};
+        S._lightCache = {};
+
+        const out = await S.buildLight('AAPL');
+        api.restore();
+
+        expect(out.partial).toBe(true);
+        expect(out.valuation.peTTM).toBeNull();
+        expect(out.meta.errors).toContain('quoteSummary');
+    });
+});
+
+describe('_normalize : replis calcules depuis les seules donnees Yahoo', () => {
+    const S = AnalysisService;
+
+    it('deduit le rendement FCF et la dette nette / EBITDA de quoteSummary', () => {
+        const out = S._normalize({
+            symbol: 'AAPL',
+            nonUS: false,
+            partial: true,
+            errors: [],
+            qs: {
+                marketCap: 3000,
+                freeCashflow: 150,
+                totalDebt: 400,
+                totalCash: 100,
+                ebitda: 200,
+            },
+        });
+        expect(out.valuation.fcfYield).toBeCloseTo(5, 6); // 150 / 3000
+        expect(out.health.netDebtToEbitda).toBeCloseTo(1.5, 6); // (400 - 100) / 200
+    });
+
+    it("n'invente pas de ratio quand l'EBITDA est nul ou negatif", () => {
+        const out = S._normalize({
+            symbol: 'XYZ',
+            nonUS: false,
+            errors: [],
+            qs: { marketCap: 0, freeCashflow: 10, totalDebt: 400, totalCash: 100, ebitda: -50 },
+        });
+        expect(out.valuation.fcfYield).toBeNull();
+        expect(out.health.netDebtToEbitda).toBeNull();
+        expect(out.partial).toBe(false);
+    });
+});
+
 describe('AnalysisService : score global (phase 11)', () => {
     const S = AnalysisService;
 
