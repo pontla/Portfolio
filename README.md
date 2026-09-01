@@ -55,15 +55,36 @@ Refonte visuelle et fonctionnelle complète de l'application de gestion de porte
 
 ```text
 .
-├── Dev/
-│   ├── db/
-│   │   └── schema.sql        # Schéma de base de données PostgreSQL
-│   └── public/
-│       ├── index.html        # Structure semantic HTML, modales & bottom sheets
-│       ├── style.css         # CSS Vanilla (~2000+ lignes), design tokens & thèmes
-│       ├── manifest.json     # Configuration PWA
-│       ├── js/
-│       │   └── app.js        # Gestion d'état, fonctions render* & appels API
-│       └── icons/            # Icônes PWA
-├── design/                   # Maquettes et prototypes de référence en HTML/CSS
-└── README.md                 # Documentation du projet
+├── db/
+│   └── schema.sql            # Schéma PostgreSQL (Supabase) + policies RLS
+├── worker/
+│   ├── proxy.js              # Worker BFF : marché (Yahoo/Finnhub/FMP), Tavily, /ai/*
+│   └── proxy.test.js
+├── public/
+│   ├── index.html            # HTML sémantique, modales & bottom sheets
+│   ├── style.css             # CSS vanilla (~5300 lignes), design tokens & thèmes
+│   ├── manifest.json         # Configuration PWA
+│   ├── sw.js                 # Service worker (réseau d'abord sur le code)
+│   ├── icons/                # Icônes PWA
+│   └── js/
+│       ├── app.js            # Contrôleur UI : rendu, événements, amorçage
+│       ├── app.test.js       # Tests du contrôleur (stubs DOM + import dynamique)
+│       ├── icons.js          # Registre d'icônes SVG inline
+│       ├── globals.d.ts      # Globales CDN & propriétés ad hoc sur les nœuds DOM
+│       └── core/             # Moteur financier — aucune dépendance au DOM
+│           ├── config.js     # Constantes
+│           ├── platform.js   # Stockage local & bus d'événements, tolérants à l'absence
+│           ├── supabase.js   # Point d'injection du client Supabase
+│           ├── auth.js       # Supabase Auth + garde-fous sur l'horodatage des jetons
+│           ├── utils.js      # Formatage, dates, classification, CSV
+│           ├── api.js        # Accès marché via le proxy
+│           ├── analysis.js   # Agrégation d'analyse de valeur & score global
+│           ├── portfolio.js  # P&L, allocations, séries historiques
+│           └── *.test.js     # Tests par import direct (pas de stub de DOM)
+├── e2e/                      # Parcours Playwright
+└── README.md
+```
+
+Le moteur (`public/js/core/`) ne touche ni au DOM ni au stockage direct : il
+s'importe tel quel sous Node, ce qui rend sa couverture réellement mesurable
+(`npx vitest run --coverage`).

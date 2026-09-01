@@ -76,11 +76,10 @@ test('le bouton Max recharge le graphe depuis le début de l’action', async ({
 test('le graphe expose un tooltip au survol (mode index)', async ({ page }) => {
     await openResearch(page, 'AAPL');
 
-    const mode = await page.evaluate(() => window.App?.researchChart?.options?.interaction?.mode
-        ?? App.researchChart.options.interaction.mode);
+    const mode = await page.evaluate(() => window.App.researchChart.options.interaction.mode);
     expect(mode).toBe('index');
 
-    const tip = await page.evaluate(() => App.researchChart.options.plugins.tooltip.mode);
+    const tip = await page.evaluate(() => window.App.researchChart.options.plugins.tooltip.mode);
     expect(tip).toBe('index');
 });
 
@@ -288,10 +287,10 @@ test('section Analyse technique : moyennes mobiles, RSI et overlay sur le graphe
     await expect(top.locator('.sent-empty')).toHaveCount(0);
 
     // le graphe de cours porte désormais 3 séries : cours + MM 50 + MM 200
-    const labels = await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label));
+    const labels = await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label));
     expect(labels.slice(1)).toEqual(['MM 50', 'MM 200']);
     const filled = await page.evaluate(
-        () => App.researchChart.data.datasets[2].data.filter(v => v != null).length
+        () => window.App.researchChart.data.datasets[2].data.filter(v => v != null).length
     );
     expect(filled).toBeGreaterThan(50);
 });
@@ -310,7 +309,7 @@ test('graphe de cours : légende des moyennes mobiles et bascule d’affichage',
     // La pastille reprend la couleur réellement tracée sur le graphe.
     const swatch = await page.evaluate(() => {
         const el = /** @type {HTMLElement} */ (document.querySelector('#researchMaLegend [data-ma-swatch="ma50"]'));
-        return { inline: el.style.borderTopColor, chart: App.researchChart.data.datasets[1].borderColor };
+        return { inline: el.style.borderTopColor, chart: window.App.researchChart.data.datasets[1].borderColor };
     });
     expect(swatch.inline).not.toBe('');
 
@@ -318,23 +317,23 @@ test('graphe de cours : légende des moyennes mobiles et bascule d’affichage',
     await toggles.nth(0).click();
     await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'false');
     await expect(toggles.nth(0)).not.toHaveClass(/active/);
-    expect(await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label)))
+    expect(await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label)))
         .toEqual(['AAPL', 'MM 200']);
 
     // Masquer les deux : il ne reste que la courbe de cours, la légende demeure
     // visible sinon l'interrupteur deviendrait introuvable.
     await toggles.nth(1).click();
-    expect(await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL']);
+    expect(await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL']);
     await expect(legend).toBeVisible();
 
     // Le choix survit à un changement de plage.
     await page.locator('#researchRange .range-btn', { hasText: '3M' }).click();
-    await expect.poll(async () => page.evaluate(() => App.researchChart.data.datasets.length)).toBe(1);
+    await expect.poll(async () => page.evaluate(() => window.App.researchChart.data.datasets.length)).toBe(1);
     await expect(toggles.nth(0)).toHaveAttribute('aria-pressed', 'false');
 
     // Réafficher la MM 50.
     await toggles.nth(0).click();
-    expect(await page.evaluate(() => App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL', 'MM 50']);
+    expect(await page.evaluate(() => window.App.researchChart.data.datasets.map(d => d.label))).toEqual(['AAPL', 'MM 50']);
 });
 
 test('section Dividende : rendement, distribution et historique par action', async ({ page }) => {

@@ -17,12 +17,8 @@ declare global {
         ): ChartJs<TType>;
     };
 
-    /** Shim de compatibilite defini dans app.js (remplace la lib lucide). */
-    const lucide: { createIcons: () => void };
-
     interface Window {
         supabase: { createClient: typeof createClient };
-        lucide: { createIcons: () => void };
         /** Controleur de l'app, expose pour les tests e2e (page.evaluate). */
         App?: Record<string, any>;
     }
