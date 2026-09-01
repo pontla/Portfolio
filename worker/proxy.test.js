@@ -213,6 +213,113 @@ describe('/ai/* : cles IA jamais exposees au navigateur', () => {
         expect(res.status).toBe(400);
     });
 
+    const STOCK_DATA = {
+        symbol: 'AAPL', nom: 'Apple Inc.', scoreGlobal: 72, signal: 'Achat',
+        sousScores: [{ dimension: 'Valorisation', score: 40 }],
+        metriques: { valorisation: { 'PER (12 derniers mois)': 30 } },
+        nonDisponible: ['ROIC (%)']
+    };
+
+    it('POST /ai/stock-analysis : construit le prompt cote worker et renvoie le texte', async () => {
+        const env = AI_ENV();
+        let sentPrompt = null;
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })],
+            ['api.anthropic.com', (_u, opts) => {
+                const body = JSON.parse(opts.body);
+                sentPrompt = body.messages[0].content;
+                return { ok: true, json: async () => ({ content: [{ type: 'text', text: 'ANALYSE REDIGEE' }] }) };
+            }]
+        ]));
+
+        await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        const res = await aiCall('/ai/stock-analysis', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', data: STOCK_DATA }
+        });
+        const data = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(data.text).toBe('ANALYSE REDIGEE');
+        expect(data.cached).toBe(false);
+        expect(data.generatedAt).toBeTruthy();
+        // le prompt systeme vient du worker, pas du navigateur
+        expect(sentPrompt).toContain('analyste financier');
+        expect(sentPrompt).toContain('nonDisponible');
+        expect(sentPrompt).toContain('"scoreGlobal":72');
+        // le modele ne doit rien aller chercher lui-meme
+        expect(JSON.parse(fetchMock.mock.calls.at(-1)[1].body).tools).toBeUndefined();
+    });
+
+    it('POST /ai/stock-analysis : sert le cache du jour sans rappeler le fournisseur', async () => {
+        const env = AI_ENV();
+        let providerCalls = 0;
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })],
+            ['api.anthropic.com', () => {
+                providerCalls++;
+                return { ok: true, json: async () => ({ content: [{ type: 'text', text: 'ANALYSE REDIGEE' }] }) };
+            }]
+        ]));
+        await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        const body = { provider: 'anthropic', data: STOCK_DATA };
+        await aiCall('/ai/stock-analysis', { env, headers: { Authorization: 'Bearer jwt-xyz' }, body });
+        const res2 = await aiCall('/ai/stock-analysis', { env, headers: { Authorization: 'Bearer jwt-xyz' }, body });
+        const data2 = await res2.json();
+
+        expect(providerCalls).toBe(1);
+        expect(data2.cached).toBe(true);
+        expect(data2.text).toBe('ANALYSE REDIGEE');
+    });
+
+    it('POST /ai/stock-analysis : force regenere une fois, puis 429 dans l heure', async () => {
+        const env = AI_ENV();
+        let providerCalls = 0;
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })],
+            ['/rest/v1/user_settings', () => ({ ok: true, json: async () => ([]) })],
+            ['api.anthropic.com', () => {
+                providerCalls++;
+                return { ok: true, json: async () => ({ content: [{ type: 'text', text: 'ANALYSE REDIGEE' }] }) };
+            }]
+        ]));
+        await aiCall('/ai/key', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' },
+            body: { provider: 'anthropic', key: 'sk-ant-SECRET-KEY' }
+        });
+        const body = { provider: 'anthropic', data: STOCK_DATA, force: true };
+        const res1 = await aiCall('/ai/stock-analysis', { env, headers: { Authorization: 'Bearer jwt-xyz' }, body });
+        const res2 = await aiCall('/ai/stock-analysis', { env, headers: { Authorization: 'Bearer jwt-xyz' }, body });
+
+        expect(res1.status).toBe(200);
+        expect(res2.status).toBe(429);
+        expect(providerCalls).toBe(1);
+    });
+
+    it('POST /ai/stock-analysis : 400 sans donnees d analyse', async () => {
+        const env = AI_ENV();
+        fetchMock.mockImplementation(routeFetch([
+            ['/auth/v1/user', () => ({ ok: true, json: async () => ({ id: 'user-42' }) })]
+        ]));
+        const res = await aiCall('/ai/stock-analysis', {
+            env, headers: { Authorization: 'Bearer jwt-xyz' }, body: { provider: 'anthropic' }
+        });
+        expect(res.status).toBe(400);
+    });
+
+    it('POST /ai/stock-analysis : 401 sans en-tete Authorization', async () => {
+        const res = await aiCall('/ai/stock-analysis', { env: AI_ENV(), body: { provider: 'anthropic', data: STOCK_DATA } });
+        expect(res.status).toBe(401);
+    });
+
     it('DELETE /ai/key : retire la cle stockee', async () => {
         const env = AI_ENV();
         env.WEBSEARCH_KV._map.set('aikey:user-42:anthropic', 'chiffre');

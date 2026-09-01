@@ -445,3 +445,13 @@ test('analyse approfondie : aucun appel FMP avant le clic sur le bouton', async 
     await expect(page.locator('#researchDeepCard')).toBeHidden();
     expect(fmpCalls.length).toBeGreaterThan(0);
 });
+
+test('analyse IA : sans clé IA, la carte invite à en configurer une', async ({ page }) => {
+    await openResearch(page, 'AAPL');
+
+    const card = page.locator('#researchAiCard');
+    await expect(card).toBeVisible();
+    await expect(card.locator('.insights-plain-note')).toContainText(/clé IA/i);
+    await expect(page.locator('#researchAiRefreshBtn')).toBeHidden();
+    await expect(page.locator('#researchAiUpdated')).toHaveText('');
+});

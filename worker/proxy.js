@@ -21,6 +21,7 @@
  *   POST /ai/key            { provider, key }  (Bearer JWT Supabase) -> chiffre + stocke la cle IA de l'utilisateur (KV), jamais renvoyee
  *   DELETE /ai/key?provider=P                  (Bearer JWT Supabase) -> supprime la cle stockee
  *   POST /ai/insights       { provider, prompt, liveSearch }  (Bearer JWT Supabase) -> { text }  (appel au fournisseur cote worker)
+ *   POST /ai/stock-analysis { provider, data, force }        (Bearer JWT Supabase) -> { text, generatedAt, cached }  (prompt systeme cote worker, cache KV 1 generation/valeur/jour)
  *
  * Vars publiques (wrangler.proxy.toml [vars]) : SUPABASE_URL, SUPABASE_ANON_KEY.
  * Secret requis pour /ai/* : AI_ENC_KEY (32 octets base64) -> `wrangler secret put AI_ENC_KEY -c wrangler.proxy.toml`.
@@ -786,6 +787,103 @@ async function handleAiInsights(request, env) {
     return jsonResponse({ text });
 }
 
+/* ======================= ANALYSE IA D'UNE VALEUR =======================
+ * Le prompt systeme vit ici (jamais dans le navigateur) : le client n'envoie que
+ * les donnees deja calculees par l'analyse approfondie, sous forme structuree.
+ * Une generation par utilisateur / fournisseur / valeur / jour est mise en cache
+ * dans KV ; `force` permet un rafraichissement manuel, limite a 1 par heure et
+ * par valeur.
+ */
+
+const STOCK_ANALYSIS_SYSTEM_PROMPT = `Tu es un analyste financier. Tu rediges une synthese d'investissement EN FRANCAIS a partir des donnees chiffrees fournies ci-dessous, et de rien d'autre.
+
+REGLES ABSOLUES :
+- N'utilise QUE les donnees du bloc JSON fourni. N'utilise jamais tes connaissances generales sur l'entreprise, son actualite, ses produits ou ses dirigeants : si ce n'est pas dans le JSON, cela n'existe pas pour cette analyse.
+- N'invente jamais un chiffre, un pourcentage, une date, un evenement, un nom de concurrent ou un fait. Ne recalcule pas les chiffres fournis, reprends-les tels quels.
+- Le champ "nonDisponible" liste les metriques absentes pour cette valeur. Mentionne explicitement les plus importantes d'entre elles comme une LIMITE de l'analyse, au lieu de les ignorer ou de les deviner.
+- Reste strictement coherent avec les scores fournis : ne dis jamais l'inverse de ce qu'indique un sous-score. Un sous-score >= 65/100 est un point fort, entre 45 et 65 il est moyen, en dessous de 45 c'est un point faible. Ta conclusion doit aller dans le meme sens que le signal fourni (Achat / Conserver / Vente).
+- Explique le POURQUOI derriere chaque sous-score en citant 2 a 3 metriques chiffrees de la dimension concernee, au lieu de repeter le score.
+- Ne donne aucune recommandation personnalisee, aucun objectif de cours invente, aucune injonction ("achetez", "vendez").
+
+TON ET FORME :
+- Factuel, mesure, sobre. Aucun superlatif, aucun langage promotionnel, aucune emphase.
+- Vouvoiement neutre ou tournures impersonnelles. Pas de titres, pas de listes a puces, pas de markdown, pas de gras : uniquement des paragraphes separes par une ligne vide.
+- Longueur totale : 250 a 350 mots.
+
+STRUCTURE ATTENDUE (dans cet ordre, sans intitules) :
+1. Une phrase d'ouverture qui resume la these d'investissement globale, coherente avec le score global et le signal.
+2. Un court paragraphe par dimension notee : valorisation, croissance, sante financiere, rentabilite, sentiment & technique. Ignore une dimension dont le sous-score est nul (non calcule) en signalant en une proposition qu'elle n'a pas pu etre evaluee.
+3. Un paragraphe de conclusion qui met explicitement en tension les points positifs ET les points de vigilance, en citant au moins un risque ou une limite reelle issue des donnees ou de la liste "nonDisponible".
+
+Reponds uniquement avec le texte de l'analyse, sans preambule ni commentaire.`;
+
+// Limite de taille du payload : le client n'a aucune raison d'envoyer plus, et
+// cela borne le cout en tokens d'entree.
+const STOCK_ANALYSIS_MAX_PAYLOAD = 24000;
+
+function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+// Un rafraichissement manuel par heure et par valeur : evite qu'un clic repete
+// sur l'icone consomme la cle API de l'utilisateur.
+async function enforceStockAnalysisRefresh(env, userId, symbol) {
+    const kv = env && env.WEBSEARCH_KV;
+    if (!kv) return;
+    const key = `stockairl:${userId}:${symbol}`;
+    if (await kv.get(key)) {
+        const err = new Error('Analyse deja regeneree recemment : reessayez dans une heure');
+        err.statusCode = 429;
+        throw err;
+    }
+    await kv.put(key, '1', { expirationTtl: 3600 });
+}
+
+async function handleAiStockAnalysis(request, env) {
+    const userId = await verifySupabaseJwt(request, env);
+    if (!env.WEBSEARCH_KV || !env.AI_ENC_KEY) return jsonResponse({ error: 'Stockage des cles IA non configure' }, 501);
+    const { provider, data, force } = await request.json().catch(() => ({}));
+    if (!AI_PROVIDERS[provider]) return jsonResponse({ error: 'Fournisseur IA inconnu' }, 400);
+    if (!data || typeof data !== 'object' || typeof data.symbol !== 'string' || !data.symbol.trim()) {
+        return jsonResponse({ error: 'donnees d analyse requises' }, 400);
+    }
+    const payload = JSON.stringify(data);
+    if (payload.length > STOCK_ANALYSIS_MAX_PAYLOAD) return jsonResponse({ error: 'Donnees d analyse trop volumineuses' }, 413);
+
+    const symbol = data.symbol.trim().toUpperCase().slice(0, 24);
+    const cacheKey = `stockai:${userId}:${provider}:${symbol}:${todayKey()}`;
+
+    if (!force) {
+        const hit = await env.WEBSEARCH_KV.get(cacheKey);
+        // Une entree illisible est traitee comme absente : on regenere plutot
+        // que de renvoyer une erreur a l'utilisateur.
+        let parsed = null;
+        try { parsed = hit ? JSON.parse(hit) : null; } catch (e) { parsed = null; }
+        if (parsed && parsed.text) return jsonResponse({ ...parsed, cached: true });
+    } else {
+        await enforceStockAnalysisRefresh(env, userId, symbol);
+    }
+
+    const enc = await env.WEBSEARCH_KV.get(`aikey:${userId}:${provider}`);
+    if (!enc) return jsonResponse({ error: 'Aucune cle enregistree pour ce fournisseur' }, 400);
+    await enforceUserAiQuota(env, userId);
+
+    const apiKey = await decryptSecret(env, enc);
+    // liveSearch volontairement desactive : le modele ne doit rien aller chercher
+    // lui-meme, il ne dispose que des donnees deja calculees par l'application.
+    const text = await AI_PROVIDERS[provider].call(apiKey, `${STOCK_ANALYSIS_SYSTEM_PROMPT}\n\nDONNEES DE LA VALEUR (JSON) :\n${payload}`, false);
+    if (!text || !text.trim()) {
+        const err = new Error('Reponse vide du fournisseur IA');
+        err.statusCode = 502;
+        throw err;
+    }
+
+    const body = { text: text.trim(), generatedAt: new Date().toISOString(), symbol, provider };
+    // 48 h de TTL pour une cle datee du jour : la valeur expire d'elle-meme.
+    await env.WEBSEARCH_KV.put(cacheKey, JSON.stringify(body), { expirationTtl: 172800 });
+    return jsonResponse({ ...body, cached: false });
+}
+
 async function route(request, url, env) {
     if (url.pathname === '/ai/key') {
         if (request.method === 'POST') return await handleAiKeySet(request, env);
@@ -796,6 +894,11 @@ async function route(request, url, env) {
     if (url.pathname === '/ai/insights') {
         if (request.method !== 'POST') return jsonResponse({ error: 'Methode non supportee' }, 405);
         return await handleAiInsights(request, env);
+    }
+
+    if (url.pathname === '/ai/stock-analysis') {
+        if (request.method !== 'POST') return jsonResponse({ error: 'Methode non supportee' }, 405);
+        return await handleAiStockAnalysis(request, env);
     }
 
     if (url.pathname === '/quote') {
@@ -869,7 +972,7 @@ async function route(request, url, env) {
         return await handleWebSearch(q, env.TAVILY_API_KEY, env.WEBSEARCH_KV);
     }
 
-    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/quoteSummary?symbol=', '/fmp?symbol=&resource=', '/recommendation?symbol=', '/insider?symbol=', '/peers?symbol=', '/search?q=', '/websearch?q=', 'POST /ai/key', 'DELETE /ai/key?provider=', 'POST /ai/insights'] });
+    return jsonResponse({ status: 'ok', routes: ['/quote?symbol=', '/history?symbol=&from=&to=', '/dividends?symbol=&from=&to=', '/sector?symbol=', '/earnings?symbol=', '/fundamentals?symbol=', '/quoteSummary?symbol=', '/fmp?symbol=&resource=', '/recommendation?symbol=', '/insider?symbol=', '/peers?symbol=', '/search?q=', '/websearch?q=', 'POST /ai/key', 'DELETE /ai/key?provider=', 'POST /ai/insights', 'POST /ai/stock-analysis'] });
 }
 
 export default {

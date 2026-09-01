@@ -1814,6 +1814,32 @@ input:focus {
     color: var(--text-secondary); font-size: 11.5px; line-height: 1.5;
 }
 
+/* Analyse detaillee redigee par l'IA : meme carte que la Synthese. Le texte est
+   tronque a 8 lignes au-dela d'un certain volume, avec le meme bouton
+   « Afficher plus » que le resume du portefeuille. */
+#researchAiCard .research-card-head h3 { display: flex; align-items: center; gap: 6px; }
+#researchAiCard .research-card-head h3 i[data-lucide] {
+    width: 15px; height: 15px; flex: none; color: var(--accTxt, var(--accent-blue));
+}
+#researchAiCard .research-sub { flex: 1 1 auto; }
+#researchAiCard .insights-summary-toggle { margin-top: 8px; }
+#researchAiCard .insights-plain-note { margin-bottom: 0; }
+.research-ai-text { font-size: 13px; line-height: 1.6; color: var(--text-primary); }
+.research-ai-text p { margin: 0 0 12px; }
+.research-ai-text p:last-child { margin-bottom: 0; }
+.research-ai-text.is-clamped {
+    display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden;
+}
+.research-ai-skeleton { display: grid; gap: 10px; }
+.research-ai-skeleton span {
+    display: block; height: 11px; border-radius: 999px;
+    background: var(--tile); animation: raiPulse 1.4s ease-in-out infinite;
+}
+.research-ai-skeleton span:nth-child(2) { animation-delay: .15s; }
+.research-ai-skeleton span:nth-child(3) { animation-delay: .3s; }
+.research-ai-skeleton span:nth-child(4) { width: 62%; animation-delay: .45s; }
+@keyframes raiPulse { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
+
 /* Comparaison sectorielle : tableau qui defile horizontalement sur mobile
    sans jamais elargir la page (premiere colonne collante pour garder le nom). */
 .peers-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
@@ -2109,6 +2135,7 @@ input:focus {
     color: var(--text-primary);
     cursor: pointer;
 }
+.insights-refresh[hidden] { display: none; }
 .insights-refresh:hover { color: var(--accTxt, var(--accent-blue)); }
 .insights-refresh i[data-lucide] { width: 15px; height: 15px; }
 

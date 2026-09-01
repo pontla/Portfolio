@@ -1294,3 +1294,144 @@ describe('AnalysisService : score global (phase 11)', () => {
         expect(out.signal).toBeNull();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 13 — donnees envoyees au modele pour l'analyse redigee
+// ---------------------------------------------------------------------------
+
+describe('AnalysisService.buildAiPayload (phase 13)', () => {
+    const { AnalysisService: S } = app;
+
+    const richAnalysis = () => ({
+        symbol: 'AAPL',
+        asOf: '2026-08-31',
+        identity: { name: 'Apple Inc.', sector: 'Technology', industry: 'Consumer Electronics', country: 'US', currency: 'USD' },
+        price: { current: 200, changePct: 1.234567, marketCap: 3.1e12 },
+        valuation: { peTTM: 30.123, peForward: 27, peg: 2.4, pb: 45, ps: 8, evEbitda: 22, fcfYield: 3.4, hist5y: { pe: 26 } },
+        growth: { revenueGrowthYoyPct: 6.2, epsGrowthYoyPct: 9.1, revenueCagrPct: 8, epsCagrPct: 12 },
+        health: { netDebtToEbitda: 0.4, debtToEquity: 1.5, currentRatio: 0.95, quickRatio: 0.8, interestCoverage: 30, fcfTrend: 'croissant' },
+        profitability: { roe: 145, roa: 22, roic: 40, grossMargin: 46, operatingMargin: 31, netMargin: 25 },
+        sentiment: { recommendationMean: 2.1, analystCount: 40, targetMean: 240, institutionalOwnership: 62, shortPercentOfFloat: 0.8 },
+        technical: { trend: 'haussière', rsi14: 55.6, rsiZone: 'neutre', rangePosition52: 72 },
+        dividend: { paysDividend: true, yieldPct: 0.5, avgYield5y: 0.7, payoutRatio: 0.15, growthStreakYears: 3 },
+        risks: { beta: 1.2 },
+        score: {
+            global: 61.7, signal: 'Conserver',
+            subs: [
+                { key: 'valuation', label: 'Valorisation', weight: 0.25, value: 38.4, note: 'PER de 30,1 ×', used: 5, total: 5 },
+                { key: 'growth', label: 'Croissance', weight: 0.2, value: null, note: 'Données insuffisantes pour noter cette dimension.', used: 0, total: 3 }
+            ]
+        }
+    });
+
+    it('reprend identite, score, sous-scores et metriques arrondies', () => {
+        const p = S.buildAiPayload(richAnalysis(), []);
+        expect(p.symbol).toBe('AAPL');
+        expect(p.nom).toBe('Apple Inc.');
+        expect(p.secteur).toBe('Technology');
+        expect(p.scoreGlobal).toBe(62);                       // arrondi, comme a l'ecran
+        expect(p.signal).toBe('Conserver');
+        expect(p.variationJourPct).toBe(1.23);                // 2 decimales max
+        expect(p.metriques.valorisation['PER (12 derniers mois)']).toBe(30.12);
+        expect(p.metriques.valorisation["PER moyen sur l'historique disponible"]).toBe(26);
+        expect(p.metriques.rentabilite['ROE (%)']).toBe(145);
+        expect(p.sousScores[0]).toMatchObject({
+            dimension: 'Valorisation', score: 38, criteresDisponibles: '5 sur 5'
+        });
+        expect(p.sousScores[1].score).toBeNull();
+        expect(p.seuilsSignal).toContain(String(S.SIGNAL_THRESHOLDS.buy));
+    });
+
+    it('transmet le poids reellement applique, pas le poids nominal', () => {
+        // Une seule dimension notee sur cinq : elle porte 100 % du score global,
+        // pas ses 25 % nominaux (les poids sont renormalises par _scoreBlock).
+        const a = richAnalysis();
+        a.score.subs = [
+            { key: 'valuation', label: 'Valorisation', weight: 0.25, value: 38.4, note: 'PER de 30,1 ×', used: 5, total: 5 },
+            { key: 'growth', label: 'Croissance', weight: 0.20, value: null, note: '—', used: 0, total: 3 }
+        ];
+        a.score.weightCoverage = 0.25;
+        const p = S.buildAiPayload(a, []);
+
+        expect(p.sousScores[0].poidsDansLeScorePct).toBe(100);
+        expect(p.sousScores[1].poidsDansLeScorePct).toBeNull();
+    });
+
+    it('objectif de cours nul ou negatif : ni objectif ni ecart transmis', () => {
+        const a = richAnalysis();
+        a.sentiment.targetMean = 0;
+        const p = S.buildAiPayload(a, []);
+
+        expect(p.metriques.sentimentTechnique).not.toHaveProperty('Objectif de cours moyen');
+        expect(p.nonDisponible).toContain('Objectif de cours moyen');
+        expect(p.nonDisponible).toContain('Écart entre objectif moyen et cours actuel (%)');
+    });
+
+    it('liste explicitement les metriques absentes au lieu de les omettre en silence', () => {
+        const a = richAnalysis();
+        a.valuation.peg = null;
+        a.profitability.roic = null;
+        a.technical.rsi14 = null;
+        const p = S.buildAiPayload(a, []);
+
+        expect(p.nonDisponible).toContain('PEG');
+        expect(p.nonDisponible).toContain('ROIC (%)');
+        expect(p.nonDisponible).toContain('RSI 14 jours');
+        // une metrique absente ne doit pas apparaitre aussi dans les valeurs
+        expect(p.metriques.valorisation).not.toHaveProperty('PEG');
+        expect(p.metriques.rentabilite).not.toHaveProperty('ROIC (%)');
+    });
+
+    it('ne transmet que les titres d actualite, jamais le contenu des pages', () => {
+        const news = [
+            { title: 'Résultats trimestriels', source: 'lesechos.fr', date: '2026-08-20', content: 'texte scrappé' },
+            { title: '', source: 'x.fr' }
+        ];
+        const p = S.buildAiPayload(richAnalysis(), news);
+        expect(p.actualitesRecentes).toEqual([
+            { titre: 'Résultats trimestriels', source: 'lesechos.fr', date: '2026-08-20' }
+        ]);
+        expect(JSON.stringify(p)).not.toContain('texte scrappé');
+    });
+
+    it('valeur pauvre en donnees : payload exploitable, aucun NaN, limites listees', () => {
+        const p = S.buildAiPayload({
+            symbol: 'XYZ.PA', asOf: '2026-08-31',
+            identity: { name: 'Petite Valeur' },
+            price: { current: 12 },
+            valuation: {}, growth: {}, health: {}, profitability: { roe: 8 },
+            sentiment: {}, technical: {}, dividend: {}, risks: {},
+            score: { global: null, signal: null, subs: [] }
+        }, []);
+
+        expect(p.scoreGlobal).toBeNull();
+        expect(p.nonDisponible.length).toBeGreaterThan(20);
+        expect(p.metriques.rentabilite['ROE (%)']).toBe(8);
+        expect(JSON.stringify(p)).not.toContain('NaN');
+        // borne de taille du payload cote worker (24 000 caracteres)
+        expect(JSON.stringify(p).length).toBeLessThan(24000);
+    });
+
+    it('valeur sans dividende : rien n est presente comme une metrique manquante', () => {
+        const a = richAnalysis();
+        a.dividend = { paysDividend: false, yieldPct: null, avgYield5y: null, payoutRatio: null };
+        const p = S.buildAiPayload(a, []);
+
+        expect(p.verseUnDividende).toBe(false);
+        expect(p.nonDisponible.some(l => /dividende|distribution/i.test(l))).toBe(false);
+        expect(p.metriques.dividende).toEqual({});
+    });
+
+    it('valeur distributrice : un dividende reellement absent reste signale', () => {
+        const a = richAnalysis();
+        a.dividend.avgYield5y = null;
+        const p = S.buildAiPayload(a, []);
+
+        expect(p.verseUnDividende).toBe(true);
+        expect(p.nonDisponible).toContain('Rendement moyen sur 5 ans (%)');
+    });
+
+    it('renvoie null sans analyse', () => {
+        expect(S.buildAiPayload(null)).toBeNull();
+    });
+});

@@ -27,6 +27,7 @@ const CONFIG = {
     SIDE_STORAGE: 'portfolio_side_open',
     AI_PROVIDER_STORAGE: 'portfolio_ai_provider',
     INSIGHTS_CACHE_STORAGE: 'portfolio_insights_cache_v1',
+    RESEARCH_AI_CACHE_STORAGE: 'research_ai_analysis_cache_v1',
     PORTFOLIO_ICONS_STORAGE: 'portfolio_icons_v1',
     PROXY_BASE_URL: 'https://fragrant-band-1476.jrichardeau-cloudflare.workers.dev',
     SUPABASE_URL: 'https://ttphzfvgeufoblkqvdsl.supabase.co',
@@ -485,6 +486,21 @@ const APIService = {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `proxy HTTP ${res.status}`);
         return data.text || '';
+    },
+
+    // Analyse redigee d'une valeur : le prompt systeme et le cache vivent cote
+    // worker, on ne transmet que les donnees deja calculees par l'analyse.
+    async aiStockAnalysis(provider, data, force = false) {
+        const session = await AuthService.getSession();
+        if (!session) throw new Error('Session expirée');
+        const res = await fetch(`${CONFIG.PROXY_BASE_URL}/ai/stock-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ provider, data, force: !!force })
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || `proxy HTTP ${res.status}`);
+        return payload;
     },
 
     async aiKeySave(provider, key) {
@@ -1245,6 +1261,140 @@ const AnalysisService = {
         const signal = global == null ? null : (global >= T.buy ? 'Achat' : (global >= T.hold ? 'Conserver' : 'Vente'));
 
         return { global, signal, subs, subsUsed: avail.length, weightCoverage: wsum };
+    },
+
+    // ---------- Donnees transmises au modele pour l'analyse redigee ----------
+    // Rien n'est recalcule ni scrappe ici : on ne fait que re-exposer, sous une
+    // forme lisible par un LLM, ce que les phases precedentes ont deja normalise
+    // et note. Chaque metrique absente est listee dans `nonDisponible` pour que
+    // le modele en fasse une limite de l'analyse plutot que de la deviner.
+    _aiMetricGroups(a) {
+        const v = a.valuation || {}, h5 = v.hist5y || {}, g = a.growth || {}, h = a.health || {};
+        const p = a.profitability || {}, s = a.sentiment || {}, t = a.technical || {};
+        const d = a.dividend || {}, pr = a.price || {}, r = a.risks || {};
+        const price = pr.current;
+        // Meme garde que _scoreBlock : un objectif nul ou negatif n'en est pas un.
+        const targetMean = (s.targetMean != null && s.targetMean > 0) ? s.targetMean : null;
+        const upside = (price && targetMean) ? (targetMean - price) / price * 100 : null;
+        return {
+            valorisation: {
+                'PER (12 derniers mois)': v.peTTM,
+                'PER prévisionnel': v.peForward,
+                "PER moyen sur l'historique disponible": h5.pe,
+                'PEG': v.peg,
+                'Cours / actif net (P/B)': v.pb,
+                "Cours / chiffre d'affaires (P/S)": v.ps,
+                'VE / EBITDA': v.evEbitda,
+                'Rendement du free cash-flow (%)': v.fcfYield
+            },
+            croissance: {
+                "Croissance du chiffre d'affaires sur 1 an (%)": g.revenueGrowthYoyPct,
+                'Croissance du bénéfice par action sur 1 an (%)': g.epsGrowthYoyPct,
+                "Croissance annualisée du chiffre d'affaires sur l'historique (%)": g.revenueCagrPct,
+                'Croissance annualisée du bénéfice par action (%)': g.epsCagrPct
+            },
+            santeFinanciere: {
+                'Dette nette / EBITDA': h.netDebtToEbitda,
+                'Dette / fonds propres': h.debtToEquity,
+                'Liquidité générale': h.currentRatio,
+                'Liquidité réduite': h.quickRatio,
+                'Couverture des intérêts': h.interestCoverage,
+                'Tendance du free cash-flow': h.fcfTrend
+            },
+            rentabilite: {
+                'ROE (%)': p.roe,
+                'ROA (%)': p.roa,
+                'ROIC (%)': p.roic,
+                'Marge brute (%)': p.grossMargin,
+                'Marge opérationnelle (%)': p.operatingMargin,
+                'Marge nette (%)': p.netMargin
+            },
+            sentimentTechnique: {
+                'Consensus analystes (1 = achat fort, 5 = vente forte)': s.recommendationMean,
+                "Nombre d'analystes suivant la valeur": s.analystCount,
+                'Objectif de cours moyen': targetMean,
+                'Écart entre objectif moyen et cours actuel (%)': upside,
+                'Détention institutionnelle (%)': s.institutionalOwnership,
+                'Vente à découvert (% du flottant)': s.shortPercentOfFloat,
+                'Tendance (moyennes mobiles 50 / 200)': t.trend,
+                'RSI 14 jours': t.rsi14,
+                'Zone RSI': t.rsiZone,
+                'Position dans le range 52 semaines (%)': t.rangePosition52,
+                'Bêta': r.beta
+            },
+            dividende: {
+                'Rendement du dividende (%)': d.yieldPct,
+                'Rendement moyen sur 5 ans (%)': d.avgYield5y,
+                'Taux de distribution (fraction du bénéfice)': d.payoutRatio,
+                'Années consécutives de hausse du dividende': d.paysDividend ? d.growthStreakYears : null
+            }
+        };
+    },
+
+    // Arrondi d'affichage : inutile d'envoyer 12 decimales au modele, et cela
+    // reduit d'autant les tokens d'entree.
+    _aiNum(x) {
+        if (typeof x !== 'number' || !isFinite(x)) return null;
+        return Math.round(x * 100) / 100;
+    },
+
+    buildAiPayload(a, news = []) {
+        if (!a) return null;
+        const groups = this._aiMetricGroups(a);
+        const paysDividend = !!(a.dividend && a.dividend.paysDividend);
+        const metriques = {};
+        const nonDisponible = [];
+
+        Object.keys(groups).forEach(section => {
+            const kept = {};
+            Object.entries(groups[section]).forEach(([label, raw]) => {
+                const value = typeof raw === 'number' ? this._aiNum(raw) : (raw ?? null);
+                if (value === null || value === undefined || value === '') {
+                    // Une valeur qui ne distribue rien n'a pas de metrique de
+                    // dividende "manquante" : la signaler comme une limite de
+                    // l'analyse serait faux.
+                    if (section !== 'dividende' || paysDividend) nonDisponible.push(label);
+                } else kept[label] = value;
+            });
+            metriques[section] = kept;
+        });
+
+        const sc = a.score || {};
+        const id = a.identity || {}, pr = a.price || {};
+        // `poidsDansLeScorePct` est le poids REELLEMENT applique : les poids sont
+        // renormalises sur les seules dimensions notees (cf. _scoreBlock), sans
+        // quoi le modele recomposerait une moyenne differente du score affiche.
+        const cover = sc.weightCoverage;
+        const subs = AnalysisUtils.arr(sc.subs).map(s => ({
+            dimension: s.label,
+            score: s.value == null ? null : Math.round(s.value),
+            poidsDansLeScorePct: (s.value == null || !cover) ? null : Math.round(s.weight / cover * 100),
+            justificationCalculee: s.note,
+            criteresDisponibles: `${s.used} sur ${s.total}`
+        }));
+
+        return {
+            symbol: a.symbol,
+            nom: id.name || a.symbol,
+            secteur: id.sector || null,
+            industrie: id.industry || null,
+            pays: id.country || null,
+            devise: id.currency || null,
+            capitalisation: this._aiNum(pr.marketCap),
+            coursActuel: this._aiNum(pr.current),
+            variationJourPct: this._aiNum(pr.changePct),
+            dateDonnees: a.asOf,
+            scoreGlobal: sc.global == null ? null : Math.round(sc.global),
+            signal: sc.signal,
+            seuilsSignal: `Achat à partir de ${this.SIGNAL_THRESHOLDS.buy}/100, Conserver à partir de ${this.SIGNAL_THRESHOLDS.hold}/100, Vente en dessous`,
+            sousScores: subs,
+            verseUnDividende: paysDividend,
+            metriques,
+            actualitesRecentes: AnalysisUtils.arr(news).slice(0, 5).map(n => ({
+                titre: n.title || null, source: n.source || null, date: n.date || null
+            })).filter(n => n.titre),
+            nonDisponible
+        };
     },
 
     _dividendBlock(divList, base) {
@@ -3135,6 +3285,12 @@ const App = {
                     refreshAiKeyInputForProvider();
                 }
             };
+        }
+
+        // Analyse détaillée d'une valeur (Explorer)
+        const researchAiRefreshBtn = document.getElementById('researchAiRefreshBtn');
+        if (researchAiRefreshBtn) {
+            researchAiRefreshBtn.onclick = () => this.refreshResearchAiAnalysis(true);
         }
 
         // Résumé du portefeuille
@@ -5269,7 +5425,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     },
 
     // Cartes alimentees uniquement par l'analyse approfondie.
-    DEEP_CARD_IDS: ['researchScoreCard', 'researchValuationCard', 'researchGrowthCard',
+    DEEP_CARD_IDS: ['researchScoreCard', 'researchAiCard', 'researchValuationCard', 'researchGrowthCard',
         'researchHealthCard', 'researchProfitCard', 'researchSentimentCard', 'researchTechCard',
         'researchDivCard', 'researchPeersCard', 'researchQualCard'],
 
@@ -5278,6 +5434,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
     clearResearchAnalysis() {
         this.researchAnalysis = null;
         this.renderResearchScore(null);
+        this.renderResearchAi(null);
         this.renderResearchValuation(null);
         this.renderResearchGrowth(null);
         this.renderResearchHealth(null);
@@ -5297,6 +5454,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         if (this.researchSymbol !== symbol || !a) return;
         this.researchAnalysis = a;
         this.renderResearchScore(a);
+        this.renderResearchAi(a);
         this.renderResearchValuation(a);
         this.renderResearchGrowth(a);
         this.renderResearchHealth(a);
@@ -5336,6 +5494,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         try {
             // Etat "Chargement…" des cartes pendant la requete.
             this.renderResearchScore(null);
+            this.renderResearchAi(null);
             this.renderResearchValuation(null);
             this.renderResearchGrowth(null);
             this.renderResearchHealth(null);
@@ -6087,6 +6246,129 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         }
     },
 
+    // ---------- Analyse detaillee redigee par l'IA ----------
+    // Le texte est produit cote worker (POST /ai/stock-analysis), a partir du seul
+    // payload structure renvoye par AnalysisService.buildAiPayload : le modele ne
+    // recoit aucune donnee brute et ne va rien chercher lui-meme.
+    // Trois niveaux de cache evitent de rappeler le fournisseur : le cache local
+    // ci-dessous (une generation par valeur et par jour), puis le cache KV du
+    // worker, puis rien du tout si l'utilisateur force la regeneration.
+    RESEARCH_AI_CACHE_MAX: 20,
+
+    _researchAiCacheRead() {
+        try { return JSON.parse(localStorage.getItem(CONFIG.RESEARCH_AI_CACHE_STORAGE) || '{}') || {}; }
+        catch (e) { return {}; }
+    },
+
+    _researchAiCacheWrite(key, entry) {
+        const all = this._researchAiCacheRead();
+        all[key] = entry;
+        const keys = Object.keys(all);
+        if (keys.length > this.RESEARCH_AI_CACHE_MAX) {
+            keys.sort((a, b) => (all[a].storedAt || 0) - (all[b].storedAt || 0))
+                .slice(0, keys.length - this.RESEARCH_AI_CACHE_MAX)
+                .forEach(k => delete all[k]);
+        }
+        try { localStorage.setItem(CONFIG.RESEARCH_AI_CACHE_STORAGE, JSON.stringify(all)); }
+        catch (e) { /* quota localStorage : le cache worker prend le relais */ }
+    },
+
+    _researchAiCacheKey(symbol, provider) {
+        return `${symbol}:${provider}:${Utils.getDateString()}`;
+    },
+
+    _setResearchAiUpdated(iso) {
+        const el = document.getElementById('researchAiUpdated');
+        if (!el) return;
+        if (!iso) { el.textContent = ''; return; }
+        const d = new Date(iso);
+        el.textContent = isNaN(d.getTime())
+            ? ''
+            : `Analyse générée le ${Utils.formatDateDisplay(Utils.getDateString(d))} à ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    },
+
+    // Paragraphes + « Afficher plus » : meme pattern que le resume du portefeuille
+    // (le gestionnaire de clic .insights-summary-toggle est deja delegue au document).
+    _researchAiTextHtml(text) {
+        const paras = String(text).split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+        const html = paras.map(p => `<p>${Utils.escapeHtml(p)}</p>`).join('');
+        if (paras.length <= 2 && text.length <= 400) return `<div class="research-ai-text">${html}</div>`;
+        return `<div class="research-ai-text is-clamped">${html}</div>` +
+            `<button type="button" class="insights-summary-toggle">Afficher plus</button>`;
+    },
+
+    renderResearchAi(a) {
+        const card = document.getElementById('researchAiCard');
+        const body = document.getElementById('researchAiBody');
+        const btn = document.getElementById('researchAiRefreshBtn');
+        if (!card || !body) return;
+
+        if (!a) {
+            card.hidden = true;
+            body.innerHTML = '';
+            this._setResearchAiUpdated(null);
+            if (btn) btn.hidden = true;
+            return;
+        }
+        card.hidden = false;
+        this.refreshResearchAiAnalysis(false);
+    },
+
+    async refreshResearchAiAnalysis(force = false) {
+        const card = document.getElementById('researchAiCard');
+        const body = document.getElementById('researchAiBody');
+        const btn = document.getElementById('researchAiRefreshBtn');
+        const a = this.researchAnalysis;
+        const symbol = this.researchSymbol;
+        if (!card || !body || !a || !symbol) return;
+
+        const provider = this.service.aiProvider;
+        const hasKey = !!provider && (this.service.aiConfigured || []).includes(provider) && !!AI_PROVIDERS[provider];
+        if (!hasKey) {
+            body.innerHTML = '<div class="insights-plain-note">Analyse rédigée indisponible : ajoutez une clé IA dans les paramètres pour l\'activer.</div>';
+            this._setResearchAiUpdated(null);
+            if (btn) btn.hidden = true;
+            return;
+        }
+        if (btn) btn.hidden = false;
+
+        const cacheKey = this._researchAiCacheKey(symbol, provider);
+        if (!force) {
+            const hit = this._researchAiCacheRead()[cacheKey];
+            if (hit && hit.text) {
+                body.innerHTML = this._researchAiTextHtml(hit.text);
+                this._setResearchAiUpdated(hit.generatedAt);
+                return;
+            }
+        }
+
+        if (this.researchAiRunning) return;
+        this.researchAiRunning = true;
+        if (btn) btn.disabled = true;
+        body.innerHTML = '<div class="research-ai-skeleton"><span></span><span></span><span></span><span></span></div>';
+        this._setResearchAiUpdated(null);
+        try {
+            const payload = AnalysisService.buildAiPayload(a, this.researchNewsItems || []);
+            const out = await APIService.aiStockAnalysis(provider, payload, force);
+            if (this.researchSymbol !== symbol) return;   // l'utilisateur a change de valeur
+            const text = (out && out.text) || '';
+            if (!text.trim()) throw new Error('réponse vide');
+            body.innerHTML = this._researchAiTextHtml(text);
+            this._setResearchAiUpdated(out.generatedAt);
+            this._researchAiCacheWrite(cacheKey, { text, generatedAt: out.generatedAt, storedAt: Date.now() });
+        } catch (e) {
+            // Une analyse indisponible ne doit jamais casser le reste de la page.
+            console.warn('Analyse IA indisponible', e);
+            if (this.researchSymbol === symbol) {
+                body.innerHTML = `<div class="insights-plain-note">Analyse temporairement indisponible (${Utils.escapeHtml(e.message || 'erreur inconnue')}).</div>`;
+                this._setResearchAiUpdated(null);
+            }
+        } finally {
+            this.researchAiRunning = false;
+            if (btn) btn.disabled = false;
+        }
+    },
+
     // ---------- Comparaison sectorielle ----------
     // Sens de lecture explicite par metrique (`dir`), pour pouvoir l'ajuster :
     //   dir = -1 -> plus bas vaut mieux (PER : moins cher a benefices egaux)
@@ -6486,14 +6768,23 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
         const list = document.getElementById('researchNewsList');
         if (!card) return;
         card.hidden = true;
+        this.researchNewsItems = [];
         try {
             const results = await APIService.webSearch(`${symbol} ${name} action bourse`);
             if (this.researchSymbol !== symbol || !results || !results.length) return;
-            list.innerHTML = results.slice(0, 4).map(r => {
-                const d = r.publishedDate ? Utils.formatDateDisplay(r.publishedDate) : '';
+            const shown = results.slice(0, 4).map(r => {
                 let host = '';
                 try { host = new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) {}
-                return `<li><a href="${r.url}" target="_blank" rel="noopener noreferrer">${r.title || host}</a><span class="rn-meta">${[host, d].filter(Boolean).join(' · ')}</span></li>`;
+                return { ...r, host };
+            });
+            // Memorise les seuls titres affiches : c'est ce que recevra l'analyse
+            // IA, jamais le contenu brut de la page.
+            this.researchNewsItems = shown
+                .filter(r => r.title)
+                .map(r => ({ title: r.title, source: r.host || null, date: r.publishedDate || null }));
+            list.innerHTML = shown.map(r => {
+                const d = r.publishedDate ? Utils.formatDateDisplay(r.publishedDate) : '';
+                return `<li><a href="${r.url}" target="_blank" rel="noopener noreferrer">${r.title || r.host}</a><span class="rn-meta">${[r.host, d].filter(Boolean).join(' · ')}</span></li>`;
             }).join('');
             card.hidden = false;
         } catch (e) { /* actualités indisponibles */ }

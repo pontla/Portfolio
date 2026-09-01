@@ -132,6 +132,19 @@ function buildHistory(fromStr, toStr) {
     return out;
 }
 
+// Texte d'analyse IA servi par le mock /ai/stock-analysis : forme realiste
+// (paragraphes separes par une ligne vide), assez long pour declencher la
+// troncature « Afficher plus ».
+const AI_ANALYSIS_TEXT = [
+    "Apple Inc. presente un profil de societe tres rentable dont la valorisation reste exigeante, ce qui justifie un signal Conserver plutot qu'un signal d'achat.",
+    "Sur la valorisation, le PER de 31,2 fois se situe au-dessus de sa moyenne des cinq dernieres annees et le VE/EBITDA de 22,1 fois confirme une prime de marche. Le rendement du free cash-flow de 3,3 % reste le point le plus favorable de cette dimension.",
+    "La croissance est moderee : le chiffre d'affaires progresse de 8 % sur un an et le benefice par action de 11 %, des rythmes soutenus mais inferieurs a la prime payee sur le titre.",
+    "La sante financiere est solide, avec une dette nette representant 0,4 fois l'EBITDA et des interets couverts 30 fois. La liquidite generale, a 0,99 fois, reste le seul point de vigilance de cette dimension.",
+    "La rentabilite est le point fort du dossier : un ROE de 150 %, un ROIC de 55 % et une marge nette de 25 % traduisent une efficacite du capital nettement superieure a la moyenne.",
+    "Du cote du sentiment, le consensus des analystes ressort a 2,0 sur 5 pour 38 suivis, avec un objectif moyen superieur au cours actuel, dans une tendance de moyennes mobiles orientee a la hausse.",
+    "Au total, la qualite economique et la solidite du bilan s'opposent a une valorisation deja genereuse et a une croissance moderee. L'analyse reste par ailleurs limitee par les metriques non disponibles pour cette valeur, qui n'ont pas pu etre prises en compte."
+].join('\n\n');
+
 const SUPABASE_STUB = `
 window.supabase = {
   createClient: function () {
@@ -142,7 +155,7 @@ window.supabase = {
         id: 'e2e-t1', portfolio_id: 'e2e-pf', type: 'BUY', symbol: 'AAPL',
         qty: 10, price: 150, amount: 1500, fees: 0, fx_rate: null, date: '2024-02-01'
       }],
-      user_settings: []
+      user_settings: __USER_SETTINGS__
     };
     function builder(table) {
       var rows = DATA[table] || [];
@@ -184,9 +197,15 @@ export async function bootApp(page, opts = {}) {
     //   'sparse' : valeur hors périmètre fondamental (place européenne)
     //   'nodiv'  : action US qui ne verse aucun dividende
     const profile = opts.profile || 'full';
+    // `ai` : simule un compte ayant enregistre une cle IA (analyse redigee active).
+    const userSettings = opts.ai
+        ? [{ user_id: 'e2e-user', ai_provider: 'anthropic', ai_providers_configured: ['anthropic'] }]
+        : [];
+    const supabaseStub = SUPABASE_STUB.replace('__USER_SETTINGS__', JSON.stringify(userSettings));
+
     // 1. Remplace le SDK Supabase (CDN) par un stub local.
     await page.route(/@supabase\/supabase-js/, (route) =>
-        route.fulfill({ contentType: 'application/javascript', body: SUPABASE_STUB })
+        route.fulfill({ contentType: 'application/javascript', body: supabaseStub })
     );
 
     // 2. Intercepte le worker proxy de données de marché.
@@ -219,6 +238,7 @@ export async function bootApp(page, opts = {}) {
             if (p.endsWith('/sector')) return json({ sector: null });
             if (p.endsWith('/websearch')) return json({ results: [] });
             if (p === '/ai/key') return json({ ok: true, provider: 'anthropic', configured: [] });
+            if (p === '/ai/stock-analysis') return json({ text: AI_ANALYSIS_TEXT, generatedAt: new Date().toISOString(), cached: false });
             return json({});
         }
 
@@ -268,6 +288,7 @@ export async function bootApp(page, opts = {}) {
         if (p.endsWith('/websearch')) return json({ results: [] });
         if (p === '/ai/key') return json({ ok: true, provider: 'anthropic', configured: ['anthropic'] });
         if (p === '/ai/insights') return json({ text: '{"summary":"ok","portfolio":[]}' });
+        if (p === '/ai/stock-analysis') return json({ text: AI_ANALYSIS_TEXT, generatedAt: new Date().toISOString(), cached: false });
         return json({});
     });
 
