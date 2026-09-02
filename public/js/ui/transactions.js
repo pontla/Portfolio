@@ -96,7 +96,11 @@ export const transactions = {
                       let badgeClass = 'badge-buy';
                       let typeLabel = 'Achat';
 
-                      if (t.type === 'SELL') {
+                      if (t.type === 'BUY' && t.cashSource === 'DIRECT') {
+                          // Achat hors cash : distingue visuellement les lignes qui
+                          // ne pesent pas sur le solde de cash du portefeuille.
+                          typeLabel = 'Achat direct';
+                      } else if (t.type === 'SELL') {
                           badgeClass = 'badge-sell';
                           typeLabel = 'Vente';
                       } else if (t.type === 'DEPOSIT') {
@@ -173,7 +177,9 @@ export const transactions = {
                           const isCash = t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL';
                           let badgeClass = 'badge-buy',
                               typeLabel = 'Achat';
-                          if (t.type === 'SELL') {
+                          if (t.type === 'BUY' && t.cashSource === 'DIRECT') {
+                              typeLabel = 'Achat direct';
+                          } else if (t.type === 'SELL') {
                               badgeClass = 'badge-sell';
                               typeLabel = 'Vente';
                           } else if (t.type === 'DEPOSIT') {

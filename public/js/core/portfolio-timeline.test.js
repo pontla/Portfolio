@@ -9,7 +9,7 @@
  * Il compare aussi la serie de plus-values a `computeProfitAsOf`, dont elle est
  * desormais deduite sans l'appeler : les deux chemins doivent rester d'accord.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PortfolioService } from './portfolio.js';
 import { Utils } from './utils.js';
 import { setSupabaseClient } from './supabase.js';
@@ -37,6 +37,17 @@ setSupabaseClient(
         auth: { getSession: async () => ({ data: { session: null } }) },
     })
 );
+
+// Horloge figee : les instantanes contiennent des libelles de dates absolus
+// (« 2 aout ») calcules depuis aujourd'hui. Sans cela ils tombaient en echec a
+// chaque changement de jour, sans aucune modification du code.
+beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-01T12:00:00'));
+});
+afterAll(() => {
+    vi.useRealTimers();
+});
 
 const dayStr = (offset) => {
     const d = new Date();

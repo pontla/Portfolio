@@ -175,6 +175,7 @@ export class PortfolioService {
             amount: Number(r.amount),
             fees: Number(r.fees) || 0,
             fxRate: Number(r.fx_rate) || null,
+            cashSource: r.cash_source || null,
             date: r.date,
         }));
 
@@ -398,7 +399,12 @@ export class PortfolioService {
         return this.marketPrices[symbol] || fallbackPrice;
     }
 
-    normalizeTradeInput(tradeData) {
+    /**
+     * @param {any} tradeData saisie brute
+     * @param {string} [excludeTradeId] ligne en cours d'edition, exclue du solde
+     *   de cash servant a deduire le financement quand il n'est pas precise
+     */
+    normalizeTradeInput(tradeData, excludeTradeId) {
         const type = (tradeData.type || 'BUY').toUpperCase();
         let symbol = (tradeData.symbol || '').toUpperCase().trim();
         let qty = parseFloat(tradeData.qty) || 0;
@@ -447,6 +453,27 @@ export class PortfolioService {
                     : (this.fxRates && this.fxRates[nativeCurrency]) || null;
         }
 
+        // Financement : seul un achat peut etre finance autrement que par le cash.
+        // Ce n'est pas un compte-titres mais un suivi : une action peut avoir ete
+        // acquise en direct, sans depot prealable, et ne doit alors pas creuser le
+        // cash. Les autres types n'ont pas d'origine de financement.
+        let cashSource = null;
+        if (type === 'BUY') {
+            const explicit = String(tradeData.cashSource || '').toUpperCase();
+            if (explicit === 'CASH' || explicit === 'DIRECT') {
+                cashSource = explicit;
+            } else {
+                // Non precise (import, appel programmatique) : deduit du solde
+                // disponible a cette date, plutot que de refuser la saisie.
+                const availableUSD = this.getCashAvailableOnDate(normalizedDate, {
+                    excludeTradeId,
+                    portfolioId,
+                });
+                const costUSD = this.convertCurrency(qty * price + fees, nativeCurrency, 'USD');
+                cashSource = costUSD <= availableUSD + 0.0001 ? 'CASH' : 'DIRECT';
+            }
+        }
+
         return {
             type,
             symbol,
@@ -455,12 +482,110 @@ export class PortfolioService {
             amount,
             fees,
             fxRate,
+            cashSource,
             date: normalizedDate,
             portfolioId,
         };
     }
 
-    validateTrade(n, excludeTradeId) {
+    // --- CASH DU PORTEFEUILLE ---------------------------------------------
+    //
+    // Cash = depots + ventes + dividendes - retraits - achats finances par le
+    // cash. Un achat « direct » (cashSource DIRECT) n'y touche pas. Le solde ne
+    // peut jamais devenir negatif : un prelevement plus gros que le solde est
+    // ecrete, le reste ayant forcement ete finance en direct. Une seule
+    // implementation, partagee par la validation et par calculatePortfolio.
+
+    _newCashState() {
+        return { cashUSD: 0, /** @type {Record<string, number>} */ qty: {} };
+    }
+
+    /**
+     * Applique une transaction a l'etat de cash. `sellQtyOverride` permet a
+     * calculatePortfolio d'imposer la quantite reellement vendue qu'il a deja
+     * calculee, pour que cash et P&L ne puissent pas diverger.
+     * @param {{cashUSD: number, qty: Record<string, number>}} st
+     * @param {any} trade
+     * @param {number} [sellQtyOverride]
+     */
+    _applyTradeToCash(st, trade, sellQtyOverride) {
+        const currency = Utils.getCurrency(trade.symbol);
+        const toUSD = (val) => this.convertCurrency(val, currency, 'USD');
+        // Ecrete a ce qui est disponible : le solde ne descend jamais sous zero.
+        const debit = (amountUSD) => {
+            const taken = Math.min(Math.max(0, amountUSD), Math.max(0, st.cashUSD));
+            st.cashUSD -= taken;
+        };
+
+        switch (trade.type) {
+            case 'DEPOSIT':
+                st.cashUSD += toUSD(trade.amount);
+                break;
+            case 'WITHDRAWAL':
+                debit(toUSD(trade.amount));
+                break;
+            case 'DIVIDEND':
+                st.cashUSD += toUSD(trade.amount);
+                break;
+            case 'BUY':
+                st.qty[trade.symbol] = (st.qty[trade.symbol] || 0) + trade.qty;
+                // Achat direct : les titres entrent dans le portefeuille sans que
+                // le cash ne bouge. Achat sur cash : preleve, ecrete au solde.
+                if (trade.cashSource !== 'DIRECT') {
+                    debit(toUSD(trade.qty * trade.price) + toUSD(trade.fees || 0));
+                }
+                break;
+            case 'SELL': {
+                const held = st.qty[trade.symbol] || 0;
+                const sellQty =
+                    sellQtyOverride != null
+                        ? sellQtyOverride
+                        : Math.min(trade.qty, Math.max(0, held));
+                st.qty[trade.symbol] = held - sellQty;
+                if (sellQty > 0) {
+                    // Le produit d'une vente rejoint toujours le cash, meme si les
+                    // titres vendus avaient ete achetes en direct.
+                    st.cashUSD = Math.max(
+                        0,
+                        st.cashUSD + toUSD(sellQty * trade.price) - toUSD(trade.fees || 0)
+                    );
+                }
+                break;
+            }
+            default:
+                // FEE autonome : frais deja regles ailleurs, ils ne bougent pas le cash.
+                break;
+        }
+    }
+
+    /**
+     * Cash disponible (USD) a une date donnee, dans le perimetre d'un
+     * portefeuille. Sert a proposer un financement par defaut a la saisie et a
+     * refuser un retrait superieur au solde.
+     */
+    getCashAvailableOnDate(dateStr, { excludeTradeId = null, portfolioId = null } = {}) {
+        const limit = Utils.parseDate(dateStr || Utils.getDateString()).getTime();
+        const st = this._newCashState();
+        (portfolioId
+            ? this.trades.filter((t) => t.portfolioId === portfolioId)
+            : this.getFilteredTrades()
+        )
+            .filter((t) => t.id !== excludeTradeId)
+            .filter((t) => Utils.parseDate(t.date).getTime() <= limit)
+            .sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime())
+            .forEach((t) => this._applyTradeToCash(st, t));
+        return st.cashUSD;
+    }
+
+    /**
+     * @param {any} n transaction normalisee
+     * @param {string} [excludeTradeId] ligne en cours d'edition, exclue du solde
+     * @param {{checkCash?: boolean}} [opts] `checkCash: false` pour un import CSV,
+     *   dont les lignes sont validees avant que les precedentes soient enregistrees :
+     *   le solde de cash n'y est pas encore observable. Le moteur ecrete de toute
+     *   facon les prelevements au solde disponible.
+     */
+    validateTrade(n, excludeTradeId, { checkCash = true } = {}) {
         const errors = [];
 
         if (!n.date) {
@@ -473,6 +598,33 @@ export class PortfolioService {
             if (!n.symbol) errors.push('Symbole manquant');
             if (!(n.qty > 0)) errors.push('Quantité invalide (doit être > 0)');
             if (!(n.price > 0)) errors.push('Prix invalide (doit être > 0)');
+
+            // Un achat finance par le cash ne peut pas depasser le solde
+            // disponible a sa date : le cash n'est jamais a decouvert. Reste
+            // l'achat direct, qui n'y touche pas.
+            if (
+                checkCash &&
+                n.type === 'BUY' &&
+                n.cashSource === 'CASH' &&
+                n.qty > 0 &&
+                n.price > 0
+            ) {
+                const availableUSD = this.getCashAvailableOnDate(n.date, {
+                    excludeTradeId,
+                    portfolioId: n.portfolioId,
+                });
+                const currency = Utils.getCurrency(n.symbol);
+                const costUSD = this.convertCurrency(
+                    n.qty * n.price + (n.fees || 0),
+                    currency,
+                    'USD'
+                );
+                if (costUSD > availableUSD + 0.0001) {
+                    errors.push(
+                        `Cash insuffisant à cette date : ${Utils.formatCurrency(this.convertCurrency(availableUSD, 'USD', currency), currency)} disponible pour ${Utils.formatCurrency(n.qty * n.price + (n.fees || 0), currency)}. Choisissez « Achat direct » si l'achat n'a pas été financé par le cash du portefeuille.`
+                    );
+                }
+            }
 
             if (n.type === 'SELL' && n.symbol) {
                 const held = this.trades
@@ -493,6 +645,25 @@ export class PortfolioService {
             }
         } else if (['DEPOSIT', 'WITHDRAWAL', 'DIVIDEND', 'FEE'].includes(n.type)) {
             if (!(n.amount > 0)) errors.push('Montant invalide (doit être > 0)');
+
+            // Le cash ne peut jamais devenir negatif : on ne retire pas plus que
+            // le solde constate a cette date.
+            if (checkCash && n.type === 'WITHDRAWAL' && n.amount > 0) {
+                const availableUSD = this.getCashAvailableOnDate(n.date, {
+                    excludeTradeId,
+                    portfolioId: n.portfolioId,
+                });
+                const amountUSD = this.convertCurrency(
+                    n.amount,
+                    Utils.getCurrency(n.symbol),
+                    'USD'
+                );
+                if (amountUSD > availableUSD + 0.0001) {
+                    errors.push(
+                        `Retrait supérieur au cash disponible à cette date (${Utils.formatCurrency(availableUSD, 'USD')})`
+                    );
+                }
+            }
         } else {
             errors.push('Type de transaction inconnu');
         }
@@ -516,6 +687,7 @@ export class PortfolioService {
                 amount: n.amount,
                 fees: n.fees,
                 fx_rate: n.fxRate,
+                cash_source: n.cashSource,
                 date: n.date,
             })
             .select()
@@ -532,6 +704,7 @@ export class PortfolioService {
             amount: Number(data.amount),
             fees: Number(data.fees) || 0,
             fxRate: Number(data.fx_rate) || null,
+            cashSource: data.cash_source || null,
             date: data.date,
         };
 
@@ -541,7 +714,7 @@ export class PortfolioService {
     }
 
     async updateTrade(id, tradeData) {
-        const n = this.normalizeTradeInput(tradeData);
+        const n = this.normalizeTradeInput(tradeData, id);
         this.validateTrade(n, id);
 
         const { data, error } = await db()
@@ -555,6 +728,7 @@ export class PortfolioService {
                 amount: n.amount,
                 fees: n.fees,
                 fx_rate: n.fxRate,
+                cash_source: n.cashSource,
                 date: n.date,
             })
             .eq('id', id)
@@ -572,6 +746,7 @@ export class PortfolioService {
             amount: Number(data.amount),
             fees: Number(data.fees) || 0,
             fxRate: Number(data.fx_rate) || null,
+            cashSource: data.cash_source || null,
             date: data.date,
         };
 
@@ -603,6 +778,7 @@ export class PortfolioService {
                 amount: n.amount,
                 fees: n.fees,
                 fx_rate: n.fxRate,
+                cash_source: n.cashSource,
                 date: n.date,
             };
         });
@@ -620,6 +796,7 @@ export class PortfolioService {
             amount: Number(d.amount),
             fees: Number(d.fees) || 0,
             fxRate: Number(d.fx_rate) || null,
+            cashSource: d.cash_source || null,
             date: d.date,
         }));
 
@@ -638,6 +815,7 @@ export class PortfolioService {
             'currency',
             'fees',
             'amount',
+            'cashSource',
             'portfolio',
         ];
         const lines = [headers.join(';')];
@@ -658,6 +836,7 @@ export class PortfolioService {
                         currency,
                         Utils.csvNumber(t.fees || 0),
                         Utils.csvNumber(t.amount),
+                        t.type === 'BUY' ? t.cashSource || 'CASH' : '',
                         port.name,
                     ]
                         .map(Utils.csvCell)
@@ -723,11 +902,17 @@ export class PortfolioService {
                     price,
                     amount: Utils.parseCSVNumber(row.amount),
                     fees,
+                    // Colonne absente : traite comme un achat sur le cash, que le
+                    // moteur ecrete au solde disponible — meme lecture que pour
+                    // les lignes anterieures a la colonne. Deduire « direct »
+                    // laisserait au contraire les depots intacts a tort.
+                    // (parseCSV met les en-tetes en minuscules)
+                    cashSource: row.cashsource || row.cash_source || 'CASH',
                     date: row.date,
                 };
 
                 const normalized = this.normalizeTradeInput(rowTrade);
-                this.validateTrade(normalized);
+                this.validateTrade(normalized, undefined, { checkCash: false });
                 tradesData.push(rowTrade);
             } catch (e) {
                 errors.push(`Ligne ${idx + 2} : ${e.message}`);
@@ -824,7 +1009,7 @@ export class PortfolioService {
         const FX = this.fxRate || 1.08;
         const sortedTrades = this.getSortedTrades();
 
-        let displayCashUSD = 0;
+        const cashState = this._newCashState();
         let totalDepositsUSD = 0;
         let totalWithdrawalsUSD = 0;
         let totalBuyCostUSD = 0;
@@ -843,7 +1028,7 @@ export class PortfolioService {
             switch (trade.type) {
                 case 'DEPOSIT': {
                     const amtUSD = toUSD(trade.amount);
-                    displayCashUSD += amtUSD;
+                    this._applyTradeToCash(cashState, trade);
                     totalDepositsUSD += amtUSD;
                     runningNetContribUSD += amtUSD;
                     peakNetContribUSD = Math.max(peakNetContribUSD, runningNetContribUSD);
@@ -851,7 +1036,7 @@ export class PortfolioService {
                 }
                 case 'WITHDRAWAL': {
                     const amtUSD = toUSD(trade.amount);
-                    displayCashUSD -= amtUSD;
+                    this._applyTradeToCash(cashState, trade);
                     totalWithdrawalsUSD += amtUSD;
                     runningNetContribUSD -= amtUSD;
                     break;
@@ -861,7 +1046,7 @@ export class PortfolioService {
                     // Base de cout = prix des parts uniquement ; les frais sont suivis a part
                     // (totalFeesUSD) et deduits une seule fois du P&L total.
                     const sharesCostUSD = toUSD(trade.qty * trade.price);
-                    displayCashUSD -= sharesCostUSD + feeUSD;
+                    this._applyTradeToCash(cashState, trade);
                     totalFeesUSD += feeUSD;
                     totalBuyCostUSD += sharesCostUSD + feeUSD;
 
@@ -892,9 +1077,9 @@ export class PortfolioService {
                     // position correspondante (mauvais portefeuille, anteriorite) ne doit pas
                     // crediter de cash fantome ni de P&L realise.
                     const sellQty = Math.min(trade.qty, h ? Math.max(0, h.qty) : 0);
+                    this._applyTradeToCash(cashState, trade, sellQty);
                     if (sellQty > 0) {
                         const grossRevenueUSD = toUSD(sellQty * trade.price);
-                        displayCashUSD += grossRevenueUSD - feeUSD;
                         totalFeesUSD += feeUSD;
 
                         const costOfSoldUSD = (h.totalCostUSD / h.qty) * sellQty;
@@ -911,7 +1096,7 @@ export class PortfolioService {
                 }
                 case 'DIVIDEND': {
                     const divUSD = toUSD(trade.amount);
-                    displayCashUSD += divUSD;
+                    this._applyTradeToCash(cashState, trade);
                     totalDividendsUSD += divUSD;
                     break;
                 }
@@ -973,6 +1158,10 @@ export class PortfolioService {
                 holdingsTotalValueUSD > 0 ? (h.valueUSD / holdingsTotalValueUSD) * 100 : 0;
         });
 
+        // Cash : depots + ventes + dividendes - retraits - achats finances par le
+        // cash, jamais negatif (cf. _applyTradeToCash). « Valeur du portefeuille »
+        // = valeur de marche des positions + ce cash.
+        const displayCashUSD = cashState.cashUSD;
         const totalPortfolioValueUSD = displayCashUSD + holdingsTotalValueUSD;
         // Base de rendement = pic historique de capital net apporte (jamais 0/negatif meme si
         // les retraits ont depasse les depots), repli sur le cout d'achat cumule.

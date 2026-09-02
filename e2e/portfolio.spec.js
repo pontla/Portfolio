@@ -102,6 +102,87 @@ test.describe('modale de transaction', () => {
         await expect(cashLine).toContainText('Cash');
     });
 
+    test('financement : sans cash le formulaire bascule sur l achat direct', async ({ page }) => {
+        // Le portefeuille de test n'a qu'un achat, aucun depot : le cash vaut 0.
+        await openTransactionModal(page);
+        await expect(page.locator('#cashSourceGroup')).toBeVisible();
+        await expect(page.locator('#cashSourceHint')).toContainText('Aucun cash disponible');
+        await expect(page.locator('#transactionForm input[name="cashSource"]:checked')).toHaveValue(
+            'DIRECT'
+        );
+
+        // La vente n'a pas d'origine de financement a choisir.
+        await page.locator('#transactionForm input[name="type"][value="SELL"]').check();
+        await expect(page.locator('#cashSourceGroup')).toBeHidden();
+    });
+
+    test('un achat sur le cash le decremente, un achat direct le laisse intact', async ({
+        page,
+    }) => {
+        // Affichage en USD : la devise de saisie et celle du tableau de bord
+        // coincident, les montants attendus sont ceux tapes dans le formulaire.
+        await page.locator('#currencyToggle .toggle-btn[data-currency="USD"]').click();
+        const cash = page.locator('#statsGrid [data-stat="cash"]');
+        // Le cash ne peut pas etre negatif : l'achat initial, sans depot, l'a laisse a zero.
+        await expect(cash).toHaveText('$0,00');
+
+        await openTransactionModal(page);
+        await page.locator('#transactionForm input[name="type"][value="DEPOSIT"]').check();
+        await page.locator('#amountInputField').fill('2000');
+        await page.locator('#transactionForm button[type="submit"]').click();
+        await expect(page.locator('#transactionModal')).not.toHaveClass(/open/);
+        await expect(cash).toHaveText('$2 000,00');
+
+        // Achat direct : les titres entrent, le cash ne bouge pas.
+        await openTransactionModal(page);
+        await page.locator('#symbolInputField').fill('MSFT');
+        await page.locator('#qtyInputField').fill('1');
+        await page.locator('#priceInputField').fill('300');
+        await page.locator('#transactionForm input[name="cashSource"][value="DIRECT"]').check();
+        await page.locator('#transactionForm button[type="submit"]').click();
+        await expect(page.locator('#transactionModal')).not.toHaveClass(/open/);
+        await expect(cash).toHaveText('$2 000,00');
+
+        // Achat sur le cash : le solde recule d'autant.
+        await openTransactionModal(page);
+        await page.locator('#symbolInputField').fill('MSFT');
+        await page.locator('#qtyInputField').fill('2');
+        await page.locator('#priceInputField').fill('300');
+        await page.locator('#transactionForm input[name="cashSource"][value="CASH"]').check();
+        await page.locator('#transactionForm button[type="submit"]').click();
+        await expect(page.locator('#transactionModal')).not.toHaveClass(/open/);
+        await expect(cash).toHaveText('$1 400,00');
+
+        await goToTab(page, 'transactions');
+        await expect(page.locator('#transactionsTableBody')).toContainText('Achat direct');
+    });
+
+    test('un achat sur cash superieur au solde est refuse', async ({ page }) => {
+        const messages = [];
+        page.on('dialog', (d) => {
+            messages.push(d.message());
+            d.accept();
+        });
+
+        await page.locator('#currencyToggle .toggle-btn[data-currency="USD"]').click();
+        await openTransactionModal(page);
+        await page.locator('#transactionForm input[name="type"][value="DEPOSIT"]').check();
+        await page.locator('#amountInputField').fill('100');
+        await page.locator('#transactionForm button[type="submit"]').click();
+        await expect(page.locator('#transactionModal')).not.toHaveClass(/open/);
+
+        await openTransactionModal(page);
+        await page.locator('#symbolInputField').fill('MSFT');
+        await page.locator('#qtyInputField').fill('5');
+        await page.locator('#priceInputField').fill('300');
+        await page.locator('#transactionForm input[name="cashSource"][value="CASH"]').check();
+        await expect(page.locator('#cashSourceHint')).toContainText('insuffisant');
+        await page.locator('#transactionForm button[type="submit"]').click();
+
+        await expect.poll(() => messages.join(' ')).toContain('Cash insuffisant');
+        await expect(page.locator('#transactionModal')).toHaveClass(/open/);
+    });
+
     test('la recherche de symbole remplit le champ depuis la liste', async ({ page }) => {
         await openTransactionModal(page);
         await page.locator('#symbolInputField').click();

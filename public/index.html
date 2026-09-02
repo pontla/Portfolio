@@ -855,6 +855,21 @@
                         <input type="number" name="amount" id="amountInputField" step="any" min="0.01" placeholder="Ex: 500">
                     </div>
 
+                    <div class="form-group" id="cashSourceGroup">
+                        <label>Financement de l'achat</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="cashSource" value="CASH" checked>
+                                <span>Cash du portefeuille</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="cashSource" value="DIRECT">
+                                <span>Achat direct</span>
+                            </label>
+                        </div>
+                        <p id="cashSourceHint" class="form-hint"></p>
+                    </div>
+
                     <div class="form-group" id="feesGroup">
                         <label>Frais de courtage (optionnel, dans la devise saisie)</label>
                         <input type="number" name="fees" id="feesInputField" step="any" min="0" placeholder="0">
@@ -899,6 +914,7 @@
                 <p style="font-size:13px; color:#666; margin:20px 0 10px 0;">
                     Transactions (CSV) — colonnes séparées par <b>;</b>, nombres avec virgule (ex: 10,5).
                     <br>Types : BUY, SELL, DEPOSIT, WITHDRAWAL, DIVIDEND, FEE. Devises : USD, EUR.
+                    <br>Colonne <b>cashSource</b> (achats) : CASH (prélevé sur le cash) ou DIRECT (acheté hors cash).
                 </p>
                 <button type="button" id="downloadTemplateBtn" class="btn-primary full-width" style="background:#374151;">Télécharger le modèle</button>
                 <button type="button" id="exportCsvBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Exporter en CSV</button>

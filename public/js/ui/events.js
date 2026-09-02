@@ -266,9 +266,24 @@ export const events = {
                     'currency',
                     'fees',
                     'amount',
+                    'cashSource',
                     'portfolio',
                 ];
+                // cashSource (achats uniquement) : CASH = prelevé sur le cash du
+                // portefeuille, DIRECT = titre acquis hors cash. Vide = CASH.
                 const rows = [
+                    [
+                        '2026-01-01',
+                        'DEPOSIT',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '2000',
+                        '',
+                        'Portefeuille Principal',
+                    ],
                     [
                         '2026-01-15',
                         'BUY',
@@ -278,6 +293,7 @@ export const events = {
                         'USD',
                         '5',
                         '',
+                        'CASH',
                         'Portefeuille Principal',
                     ],
                     [
@@ -289,6 +305,7 @@ export const events = {
                         'EUR',
                         '3,5',
                         '',
+                        'DIRECT',
                         'Portefeuille Principal',
                     ],
                     [
@@ -300,9 +317,9 @@ export const events = {
                         'USD',
                         '5',
                         '',
+                        '',
                         'Portefeuille Principal',
                     ],
-                    ['2026-01-01', 'DEPOSIT', '', '', '', '', '', '2000', 'Portefeuille Principal'],
                     [
                         '2026-04-01',
                         'WITHDRAWAL',
@@ -312,6 +329,7 @@ export const events = {
                         '',
                         '',
                         '500',
+                        '',
                         'Portefeuille Principal',
                     ],
                     [
@@ -323,9 +341,10 @@ export const events = {
                         '',
                         '',
                         '12,34',
+                        '',
                         'Portefeuille Principal',
                     ],
-                    ['2026-01-20', 'FEE', '', '', '', '', '', '9,99', 'Portefeuille Principal'],
+                    ['2026-01-20', 'FEE', '', '', '', '', '', '9,99', '', 'Portefeuille Principal'],
                 ];
                 const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
                 this.downloadCSV('modele_import_transactions.csv', csv);
@@ -472,6 +491,21 @@ export const events = {
                 this.syncTransactionFormFields(/** @type {HTMLInputElement} */ (e.target).value);
             });
         });
+
+        // Le cash disponible depend de la date, du portefeuille et du montant :
+        // le rappel se recalcule a chaque changement de l'un d'eux.
+        ['qtyInputField', 'priceInputField', 'feesInputField', 'priceCurrencyField'].forEach(
+            (id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => this.syncCashSourceHint());
+            }
+        );
+        if (f.form.elements['date']) {
+            f.form.elements['date'].addEventListener('change', () => this.syncCashSourceHint());
+        }
+        if (f.portSelect) {
+            f.portSelect.addEventListener('change', () => this.syncCashSourceHint());
+        }
 
         const open = () => this.openTransactionModal();
         document.getElementById('addTransactionBtn').onclick = open;
@@ -876,6 +910,8 @@ export const events = {
             priceCurrencyField: /** @type {HTMLSelectElement} */ ($('priceCurrencyField')),
             feesGroup: $('feesGroup'),
             feesInput: /** @type {HTMLInputElement} */ ($('feesInputField')),
+            cashSourceGroup: $('cashSourceGroup'),
+            cashSourceHint: $('cashSourceHint'),
             portSelect: /** @type {HTMLSelectElement} */ ($('targetPortfolioSelect')),
         };
     },
@@ -898,6 +934,7 @@ export const events = {
             f.amountInput.setAttribute('required', 'true');
             f.amountLabel.textContent =
                 type === 'DEPOSIT' ? 'Montant du dépôt ($)' : 'Montant du retrait ($)';
+            f.cashSourceGroup.style.display = 'none';
         } else if (type === 'DIVIDEND' || type === 'FEE') {
             f.symbolGroup.style.display = 'block';
             f.symbolInput.removeAttribute('required');
@@ -914,6 +951,7 @@ export const events = {
             f.amountInput.setAttribute('required', 'true');
             f.amountLabel.textContent =
                 type === 'DIVIDEND' ? 'Montant du dividende net ($)' : 'Montant des frais ($)';
+            f.cashSourceGroup.style.display = 'none';
         } else {
             f.symbolGroup.style.display = 'block';
             f.symbolInput.setAttribute('required', 'true');
@@ -927,7 +965,61 @@ export const events = {
 
             f.amountGroup.style.display = 'none';
             f.amountInput.removeAttribute('required');
+
+            // Le financement ne concerne que l'achat : une vente alimente
+            // toujours le cash, elle n'a pas d'origine a choisir.
+            f.cashSourceGroup.style.display = type === 'BUY' ? 'block' : 'none';
         }
+        if (type === 'BUY') this.syncCashSourceHint();
+    },
+
+    // Rappelle le cash disponible a la date saisie et bascule sur « Achat direct »
+    // quand il ne couvre pas l'operation : le cash ne peut jamais etre negatif.
+    syncCashSourceHint() {
+        const f = this._txForm();
+        if (!f.cashSourceHint || !f.form) return;
+        const fd = new FormData(f.form);
+        if (fd.get('type') !== 'BUY') return;
+
+        const portfolioId =
+            /** @type {string} */ (fd.get('portfolioId')) ||
+            (this.service.activePortfolioId !== 'GLOBAL' ? this.service.activePortfolioId : null);
+        const date = /** @type {string} */ (fd.get('date')) || Utils.getDateString();
+        const availableUSD = this.service.getCashAvailableOnDate(date, {
+            excludeTradeId: this.editingTradeId,
+            portfolioId,
+        });
+
+        const symbol = /** @type {string} */ (fd.get('symbol') || '').toUpperCase();
+        const enteredCurrency =
+            /** @type {string} */ (fd.get('priceCurrency')) ||
+            (symbol ? Utils.getCurrency(symbol) : 'USD');
+        const available = this.service.convertCurrency(availableUSD, 'USD', enteredCurrency);
+        const cost =
+            (parseFloat(/** @type {string} */ (fd.get('qty'))) || 0) *
+                (parseFloat(/** @type {string} */ (fd.get('price'))) || 0) +
+            (parseFloat(/** @type {string} */ (fd.get('fees'))) || 0);
+
+        const enough = cost > 0 && cost <= available + 0.0001;
+        const radios = /** @type {NodeListOf<HTMLInputElement>} */ (
+            f.form.querySelectorAll('input[name="cashSource"]')
+        );
+        radios.forEach((r) => {
+            if (r.value === 'CASH') r.disabled = !(available > 0.0001);
+        });
+        // Rien a prelever : on force l'achat direct plutot que de laisser
+        // l'utilisateur buter sur une erreur de validation.
+        if (!(available > 0.0001)) {
+            radios.forEach((r) => {
+                r.checked = r.value === 'DIRECT';
+            });
+        }
+
+        f.cashSourceHint.textContent = !(available > 0.0001)
+            ? `Aucun cash disponible au ${Utils.formatDateDisplay(date)} : l'achat est enregistré en direct, sans impact sur le cash.`
+            : cost > 0 && !enough
+              ? `Cash disponible au ${Utils.formatDateDisplay(date)} : ${Utils.formatCurrency(available, enteredCurrency)} — insuffisant pour ${Utils.formatCurrency(cost, enteredCurrency)}. Choisissez « Achat direct ».`
+              : `Cash disponible au ${Utils.formatDateDisplay(date)} : ${Utils.formatCurrency(available, enteredCurrency)}. « Achat direct » pour un titre acquis hors cash du portefeuille.`;
     },
 
     // Nouvelle transaction : formulaire vierge, date du jour, portefeuille actif.
@@ -938,11 +1030,10 @@ export const events = {
         f.form.reset();
         f.form.elements['date'].value = Utils.getDateString();
         f.form.elements['type'].value = 'BUY';
-        this.syncTransactionFormFields('BUY');
-
         if (f.portSelect && this.service.activePortfolioId !== 'GLOBAL') {
             f.portSelect.value = this.service.activePortfolioId;
         }
+        this.syncTransactionFormFields('BUY');
 
         f.modal.classList.add('open');
     },
@@ -963,8 +1054,13 @@ export const events = {
         f.priceCurrencyField.value = Utils.getCurrency(trade.symbol);
         f.feesInput.value = trade.fees || '';
         f.amountInput.value = trade.amount;
-
         if (f.portSelect) f.portSelect.value = trade.portfolioId;
+        if (trade.type === 'BUY') {
+            // Les lignes anterieures a la colonne n'ont pas d'origine : elles sont
+            // relues comme un achat sur le cash, ecrete au solde disponible.
+            f.form.elements['cashSource'].value = trade.cashSource || 'CASH';
+            this.syncCashSourceHint();
+        }
 
         f.modal.classList.add('open');
     },
@@ -1037,6 +1133,7 @@ export const events = {
             amount: amount || 0,
             fees,
             fxRate: carriedFxRate,
+            cashSource: fd.get('cashSource'),
             date: dateValue ? Utils.getDateString(dateValue) : Utils.getDateString(),
         };
 

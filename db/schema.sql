@@ -22,6 +22,10 @@ create table if not exists trades (
     -- native du titre (EUR/GBP/CAD...). NULL = lignes anterieures -> repli sur le
     -- taux spot courant. Evite de revaloriser l'historique au taux d'aujourd'hui.
     fx_rate numeric,
+    -- Financement d'un achat : 'CASH' (preleve sur le cash du portefeuille) ou
+    -- 'DIRECT' (achat hors cash, sans depot prealable). NULL sur les autres
+    -- types et sur les lignes anterieures a la colonne.
+    cash_source text check (cash_source is null or cash_source in ('CASH', 'DIRECT')),
     date date not null,
     created_at timestamptz not null default now()
 );
@@ -43,6 +47,7 @@ create index if not exists trades_portfolio_id_idx on trades(portfolio_id);
 -- Migration pour une table trades deja existante :
 --   alter table trades add column if not exists fees numeric not null default 0;
 --   alter table trades add column if not exists fx_rate numeric;
+--   alter table trades add column if not exists cash_source text;
 
 alter table portfolios enable row level security;
 alter table trades enable row level security;

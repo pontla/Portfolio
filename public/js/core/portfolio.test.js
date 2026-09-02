@@ -1403,3 +1403,229 @@ describe('PortfolioService.getHistoricalTimeline : ventes et flux du jour', () =
         expect(tl.values[tl.values.length - 1]).toBeCloseTo(1000);
     });
 });
+
+// --- FINANCEMENT DES ACHATS ET SOLDE DE CASH -------------------------------
+//
+// Ce n'est pas un compte-titres : une action peut avoir ete acquise en direct,
+// sans depot prealable. Elle entre alors dans le portefeuille sans creuser le
+// cash, qui ne peut jamais devenir negatif.
+
+describe('PortfolioService : financement des achats et cash', () => {
+    /** @param {any[]} trades */
+    function svcWith(trades) {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = trades;
+        return svc;
+    }
+
+    /** @param {Partial<any>} over */
+    const tr = (over) => ({
+        id: Math.random().toString(36).slice(2),
+        portfolioId: 'p1',
+        symbol: 'AAPL',
+        qty: 0,
+        price: 0,
+        amount: 0,
+        fees: 0,
+        cashSource: null,
+        ...over,
+    });
+
+    const deposit = (amount, date) =>
+        tr({ type: 'DEPOSIT', symbol: '$CASH', qty: amount, price: 1, amount, date });
+
+    it('un achat direct laisse le cash intact et entre quand meme au portefeuille', () => {
+        const svc = svcWith([
+            deposit(1000, '2026-01-01'),
+            tr({
+                type: 'BUY',
+                qty: 10,
+                price: 50,
+                cashSource: 'DIRECT',
+                date: '2026-01-02',
+            }),
+        ]);
+        svc.marketPrices = { AAPL: 60 };
+        const s = svc.calculatePortfolio('USD');
+        expect(s.cash).toBeCloseTo(1000);
+        expect(s.holdingsValue).toBeCloseTo(600);
+        expect(s.totalValue).toBeCloseTo(1600);
+    });
+
+    it('un achat sur le cash preleve le solde, frais compris', () => {
+        const svc = svcWith([
+            deposit(1000, '2026-01-01'),
+            tr({
+                type: 'BUY',
+                qty: 10,
+                price: 50,
+                fees: 5,
+                cashSource: 'CASH',
+                date: '2026-01-02',
+            }),
+        ]);
+        svc.marketPrices = { AAPL: 60 };
+        const s = svc.calculatePortfolio('USD');
+        expect(s.cash).toBeCloseTo(495); // 1000 - 500 - 5
+        expect(s.totalValue).toBeCloseTo(1095); // 495 + 600
+    });
+
+    it('le cash ne devient jamais negatif : le surplus est finance en direct', () => {
+        const svc = svcWith([
+            deposit(300, '2026-01-01'),
+            // Ligne anterieure a la colonne (cashSource null) : relue comme un
+            // achat sur le cash, ecrete au solde reellement disponible.
+            tr({ type: 'BUY', qty: 10, price: 50, date: '2026-01-02' }),
+        ]);
+        svc.marketPrices = { AAPL: 50 };
+        const s = svc.calculatePortfolio('USD');
+        expect(s.cash).toBe(0);
+        expect(s.holdingsValue).toBeCloseTo(500);
+        expect(s.totalValue).toBeCloseTo(500);
+    });
+
+    it('la vente alimente le cash meme si le titre avait ete achete en direct', () => {
+        const svc = svcWith([
+            tr({ type: 'BUY', qty: 10, price: 50, cashSource: 'DIRECT', date: '2026-01-02' }),
+            tr({ type: 'SELL', qty: 4, price: 60, fees: 2, date: '2026-02-01' }),
+        ]);
+        svc.marketPrices = { AAPL: 60 };
+        const s = svc.calculatePortfolio('USD');
+        expect(s.cash).toBeCloseTo(238); // 4 x 60 - 2
+        expect(s.holdingsValue).toBeCloseTo(360); // 6 titres restants
+        expect(s.totalValue).toBeCloseTo(598);
+    });
+
+    it('une vente sans position ne credite aucun cash', () => {
+        const svc = svcWith([tr({ type: 'SELL', qty: 5, price: 100, date: '2026-01-02' })]);
+        expect(svc.calculatePortfolio('USD').cash).toBe(0);
+    });
+
+    it('getCashAvailableOnDate suit le solde dans le temps', () => {
+        const svc = svcWith([
+            deposit(1000, '2026-01-01'),
+            tr({ type: 'BUY', qty: 5, price: 100, cashSource: 'CASH', date: '2026-01-10' }),
+            deposit(200, '2026-02-01'),
+        ]);
+        expect(svc.getCashAvailableOnDate('2026-01-05')).toBeCloseTo(1000);
+        expect(svc.getCashAvailableOnDate('2026-01-15')).toBeCloseTo(500);
+        expect(svc.getCashAvailableOnDate('2026-02-05')).toBeCloseTo(700);
+    });
+
+    it('financement non precise : deduit du cash disponible a la date', () => {
+        const svc = svcWith([deposit(1000, '2026-01-01')]);
+        const surCash = svc.normalizeTradeInput({
+            type: 'BUY',
+            symbol: 'AAPL',
+            qty: 5,
+            price: 100,
+            date: '2026-01-02',
+            portfolioId: 'p1',
+        });
+        expect(surCash.cashSource).toBe('CASH');
+
+        const horsCash = svc.normalizeTradeInput({
+            type: 'BUY',
+            symbol: 'AAPL',
+            qty: 50,
+            price: 100,
+            date: '2026-01-02',
+            portfolioId: 'p1',
+        });
+        expect(horsCash.cashSource).toBe('DIRECT');
+    });
+
+    it('seul un achat porte une origine de financement', () => {
+        const svc = svcWith([]);
+        const sell = svc.normalizeTradeInput({
+            type: 'SELL',
+            symbol: 'AAPL',
+            qty: 1,
+            price: 10,
+            cashSource: 'CASH',
+            portfolioId: 'p1',
+        });
+        expect(sell.cashSource).toBeNull();
+    });
+
+    it('refuse un achat sur cash superieur au solde disponible', () => {
+        const svc = svcWith([deposit(300, '2026-01-01')]);
+        svc.activePortfolioId = 'p1';
+        expect(() =>
+            svc.validateTrade(
+                svc.normalizeTradeInput({
+                    type: 'BUY',
+                    symbol: 'AAPL',
+                    qty: 10,
+                    price: 50,
+                    cashSource: 'CASH',
+                    date: '2026-01-02',
+                    portfolioId: 'p1',
+                })
+            )
+        ).toThrow(/Cash insuffisant/);
+    });
+
+    it('accepte le meme achat en direct', () => {
+        const svc = svcWith([deposit(300, '2026-01-01')]);
+        svc.activePortfolioId = 'p1';
+        expect(() =>
+            svc.validateTrade(
+                svc.normalizeTradeInput({
+                    type: 'BUY',
+                    symbol: 'AAPL',
+                    qty: 10,
+                    price: 50,
+                    cashSource: 'DIRECT',
+                    date: '2026-01-02',
+                    portfolioId: 'p1',
+                })
+            )
+        ).not.toThrow();
+    });
+
+    it('refuse un retrait superieur au cash disponible', () => {
+        const svc = svcWith([deposit(300, '2026-01-01')]);
+        svc.activePortfolioId = 'p1';
+        expect(() =>
+            svc.validateTrade(
+                svc.normalizeTradeInput({
+                    type: 'WITHDRAWAL',
+                    amount: 500,
+                    date: '2026-01-02',
+                    portfolioId: 'p1',
+                })
+            )
+        ).toThrow(/Retrait supérieur/);
+    });
+
+    it('« Valeur du portefeuille » vaut toujours positions + cash', () => {
+        const svc = svcWith([
+            deposit(2000, '2026-01-01'),
+            tr({ type: 'BUY', qty: 10, price: 50, cashSource: 'CASH', date: '2026-01-02' }),
+            tr({
+                symbol: 'MSFT',
+                type: 'BUY',
+                qty: 4,
+                price: 300,
+                cashSource: 'DIRECT',
+                date: '2026-01-03',
+            }),
+            tr({
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 25,
+                amount: 25,
+                date: '2026-02-01',
+            }),
+        ]);
+        svc.marketPrices = { AAPL: 55, MSFT: 320 };
+        const s = svc.calculatePortfolio('USD');
+        expect(s.cash).toBeCloseTo(1525); // 2000 - 500 + 25
+        expect(s.holdingsValue).toBeCloseTo(550 + 1280);
+        expect(s.totalValue).toBeCloseTo(s.holdingsValue + s.cash);
+    });
+});

@@ -287,6 +287,7 @@ describe('PortfolioService.load', () => {
             amount: 1505,
             fees: 1.2,
             fxRate: 1,
+            cashSource: null,
             date: '2026-02-01',
         });
     });
@@ -992,7 +993,9 @@ describe('PortfolioService.exportToCSV', () => {
 
     it('en-tete attendu, separateur point-virgule', () => {
         svc.trades = [];
-        expect(svc.exportToCSV()).toBe('date;type;symbol;qty;price;currency;fees;amount;portfolio');
+        expect(svc.exportToCSV()).toBe(
+            'date;type;symbol;qty;price;currency;fees;amount;cashSource;portfolio'
+        );
     });
 
     it('trie par date croissante et nomme le portefeuille', () => {
@@ -1021,8 +1024,8 @@ describe('PortfolioService.exportToCSV', () => {
             },
         ];
         const lines = svc.exportToCSV().split('\n');
-        expect(lines[1]).toBe('2026-01-15;BUY;AAPL;10;150;USD;1;1500;Principal');
-        expect(lines[2]).toBe('2026-03-01;BUY;BTC-USD;0,5;40000;USD;0;20000;Crypto');
+        expect(lines[1]).toBe('2026-01-15;BUY;AAPL;10;150;USD;1;1500;CASH;Principal');
+        expect(lines[2]).toBe('2026-03-01;BUY;BTC-USD;0,5;40000;USD;0;20000;CASH;Crypto');
     });
 
     it('nombres au format FR (virgule decimale)', () => {
@@ -1118,6 +1121,27 @@ describe('PortfolioService.importFromCSV', () => {
             added: 0,
             errors: ['Fichier CSV vide'],
         });
+    });
+
+    it('sans colonne cashSource : les achats sont traites comme prelevés sur le cash', async () => {
+        const csv = [
+            HEADER,
+            `${dayOffset(-10)};BUY;AAPL;10;150;USD;1;1500;Principal`,
+            `${dayOffset(-5)};DEPOSIT;;;;;;500;Principal`,
+        ].join('\n');
+        await svc.importFromCSV(csv);
+        const rows = fake.of('trades', 'insert')[0].payload;
+        expect(rows.find((r) => r.type === 'BUY').cash_source).toBe('CASH');
+        expect(rows.find((r) => r.type === 'DEPOSIT').cash_source).toBeNull();
+    });
+
+    it('colonne cashSource : DIRECT est conserve tel quel', async () => {
+        const csv = [
+            'date;type;symbol;qty;price;currency;fees;amount;cashSource;portfolio',
+            `${dayOffset(-10)};BUY;AAPL;10;150;USD;1;1500;DIRECT;Principal`,
+        ].join('\n');
+        await svc.importFromCSV(csv);
+        expect(fake.of('trades', 'insert')[0].payload[0].cash_source).toBe('DIRECT');
     });
 
     it('importe les lignes valides et compte les ajouts', async () => {

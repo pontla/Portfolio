@@ -768,6 +768,14 @@ input:focus {
     box-shadow: 0 1px 2px var(--shadow);
 }
 
+/* Indication sous un champ de formulaire (solde de cash disponible...) */
+.form-hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
 /* Badges */
 .badge {
     display: inline-block;

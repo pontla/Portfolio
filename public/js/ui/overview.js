@@ -192,11 +192,11 @@ export const overview = {
                     <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px; padding-top:6px; border-top:1px solid var(--l1); font-size:12px; color:var(--text-secondary);">
                         <div style="display:flex; justify-content:space-between;">
                             <span>Portefeuille :</span>
-                            <strong style="color:var(--text-primary);">${Utils.formatCurrency(stats.holdingsValue, curr)}</strong>
+                            <strong data-stat="holdingsValue" style="color:var(--text-primary);">${Utils.formatCurrency(stats.holdingsValue, curr)}</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between;">
                             <span>Cash :</span>
-                            <strong style="color:var(--text-primary);">${Utils.formatCurrency(stats.cash, curr)}</strong>
+                            <strong data-stat="cash" style="color:var(--text-primary);">${Utils.formatCurrency(stats.cash, curr)}</strong>
                         </div>
                     </div>
                 </div>
