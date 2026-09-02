@@ -7,3 +7,7 @@ alter table trades add column if not exists cash_source text;
 alter table trades drop constraint if exists trades_cash_source_check;
 alter table trades add constraint trades_cash_source_check
     check (cash_source is null or cash_source in ('CASH', 'DIRECT'));
+
+-- Rattrapage : fx_rate etait documentee dans schema.sql mais absente de la base
+-- de production, ce qui faisait echouer toute ecriture de transaction.
+alter table trades add column if not exists fx_rate numeric;
