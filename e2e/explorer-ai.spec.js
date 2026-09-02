@@ -109,3 +109,42 @@ test('valeur pauvre en données : les métriques absentes sont transmises au mod
     expect(sent.nonDisponible.length).toBeGreaterThan(10);
     expect(sent.nonDisponible).toContain('ROIC (%)');
 });
+
+test('résumé du portefeuille : un événement récent daté au format FR est conservé', async ({
+    page,
+}) => {
+    // Les dates des événements viennent du modèle : le format demandé est
+    // AAAA-MM-JJ, rien ne garantit qu'il soit respecté. La fenêtre des six
+    // derniers mois se comparait en texte, où « 01/08/2026 » est inférieur à
+    // toute date ISO : un événement bel et bien récent était écarté.
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    const dateFr = `01/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+
+    await bootApp(page, {
+        ai: true,
+        insights: {
+            summary: 'Résumé du mois.',
+            portfolio: [
+                {
+                    symbol: 'AAPL',
+                    items: [
+                        {
+                            date: dateFr,
+                            title: 'Résultats trimestriels au-dessus des attentes',
+                            detail: "Le chiffre d'affaires progresse de 8 % sur un an.",
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+
+    await page.locator('#refreshInsightsBtn').click();
+    await expect(page.locator('#portfolioInsightsBody')).toContainText(
+        'Résultats trimestriels au-dessus des attentes'
+    );
+    // Rendu des événements du modèle, et non le repli sans actualités.
+    await expect(page.locator('#portfolioInsightsBody .insights-plain-note')).toHaveCount(0);
+});

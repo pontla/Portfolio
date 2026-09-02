@@ -176,7 +176,12 @@ export class PortfolioService {
             fees: Number(r.fees) || 0,
             fxRate: Number(r.fx_rate) || null,
             cashSource: r.cash_source || null,
-            date: r.date,
+            // Invariant : toute date en memoire est canonique (AAAA-MM-JJ).
+            // Les ecritures passent par normalizeTradeInput, qui normalise deja ;
+            // la lecture est l'autre porte d'entree (lignes anciennes, colonne
+            // horodatee, restauration d'export). Sans cela une date non
+            // canonique faussait chaque comparaison de dates du moteur.
+            date: r.date ? Utils.getDateString(r.date) : r.date,
         }));
 
         const storedActiveId = storage.get(CONFIG.ACTIVE_PORTFOLIO_STORAGE);
@@ -590,7 +595,7 @@ export class PortfolioService {
 
         if (!n.date) {
             errors.push('Date manquante');
-        } else if (n.date > Utils.getDateString()) {
+        } else if (Utils.compareDates(n.date, Utils.getDateString()) > 0) {
             errors.push('La date ne peut pas être dans le futur');
         }
 
@@ -634,7 +639,7 @@ export class PortfolioService {
                             t.symbol === n.symbol &&
                             (t.type === 'BUY' || t.type === 'SELL') &&
                             t.portfolioId === n.portfolioId &&
-                            t.date <= n.date
+                            Utils.compareDates(t.date, n.date) <= 0
                     )
                     .reduce((q, t) => q + (t.type === 'BUY' ? t.qty : -t.qty), 0);
                 if (n.qty > held + 0.0001) {
@@ -925,13 +930,20 @@ export class PortfolioService {
         return { added, errors };
     }
 
+    /**
+     * Quantite detenue a une date donnee. `dateStr` peut venir de l'exterieur
+     * (evenement de dividende renvoye par le proxy) : la comparaison porte donc
+     * sur les dates analysees et non sur le texte.
+     * @param {string} symbol
+     * @param {string} dateStr
+     */
     getQtyHeldOnDate(symbol, dateStr) {
         let qty = 0;
         this.trades
             .filter(
                 (t) =>
                     t.symbol === symbol &&
-                    t.date <= dateStr &&
+                    Utils.compareDates(t.date, dateStr) <= 0 &&
                     (t.type === 'BUY' || t.type === 'SELL')
             )
             .forEach((t) => {
@@ -962,8 +974,12 @@ export class PortfolioService {
             const events = await APIService.getDividends(symbol, from, to);
 
             for (const ev of events) {
-                if (existingKeys.has(`${symbol}_${ev.date}`)) continue;
-                const qty = this.getQtyHeldOnDate(symbol, ev.date);
+                // La date vient du proxy : normalisee avant de servir de cle,
+                // sinon un autre format cree un doublon de dividende deja connu.
+                const evDate = ev.date ? Utils.getDateString(ev.date) : null;
+                if (!evDate) continue;
+                if (existingKeys.has(`${symbol}_${evDate}`)) continue;
+                const qty = this.getQtyHeldOnDate(symbol, evDate);
                 if (qty <= 0) continue;
 
                 await this.addTrade({
@@ -971,9 +987,9 @@ export class PortfolioService {
                     type: 'DIVIDEND',
                     symbol,
                     amount: qty * ev.amountPerShare,
-                    date: ev.date,
+                    date: evDate,
                 });
-                existingKeys.add(`${symbol}_${ev.date}`);
+                existingKeys.add(`${symbol}_${evDate}`);
                 added++;
             }
         }
@@ -1524,7 +1540,11 @@ export class PortfolioService {
             const totalDays = Math.max(1, Utils.daysBetween(startStr, toStr));
             let basis = startingCapital;
             this.getSortedTrades().forEach((t) => {
-                if (t.date <= startStr || t.date > toStr) return;
+                if (
+                    Utils.compareDates(t.date, startStr) <= 0 ||
+                    Utils.compareDates(t.date, toStr) > 0
+                )
+                    return;
                 if (t.type !== 'DEPOSIT' && t.type !== 'WITHDRAWAL') return;
                 const amount = this.convertCurrency(
                     t.amount,

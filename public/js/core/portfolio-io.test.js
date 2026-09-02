@@ -979,6 +979,127 @@ describe('PortfolioService.syncDividends', () => {
     });
 });
 
+describe('PortfolioService : dates non canoniques', () => {
+    /**
+     * Invariant du moteur : toute date en memoire est canonique (AAAA-MM-JJ).
+     * L'ecriture passe par normalizeTradeInput, la lecture par load() : c'est la
+     * seconde porte d'entree, et la seule pour des lignes anciennes ou une
+     * colonne horodatee. Sans normalisation, chaque comparaison de dates du
+     * moteur devenait fausse — en texte, '2026-2-1' est superieur a '2026-02-01'.
+     */
+    const row = (over) => ({
+        id: 't1',
+        portfolio_id: 'p1',
+        type: 'BUY',
+        symbol: 'AAPL',
+        qty: 10,
+        price: 100,
+        amount: 1000,
+        fees: 0,
+        fx_rate: 1,
+        ...over,
+    });
+
+    it('load normalise toutes les ecritures d un meme jour', async () => {
+        for (const ecrite of ['2026-02-01', '2026-2-1', '2026-02-01T10:00:00Z', '01/02/2026']) {
+            harness({
+                portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }],
+                tradeRows: [row({ date: ecrite })],
+            });
+            const svc = new PortfolioService();
+            await svc.load();
+            expect(svc.trades[0].date, ecrite).toBe('2026-02-01');
+        }
+    });
+
+    it('load n invente pas de date quand la colonne est vide', async () => {
+        harness({
+            portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }],
+            tradeRows: [row({ date: null })],
+        });
+        const svc = new PortfolioService();
+        await svc.load();
+        // Aujourd'hui serait pire que rien : validateTrade sait refuser une date
+        // manquante, pas une date inventee.
+        expect(svc.trades[0].date).toBeNull();
+    });
+
+    describe('syncDividends', () => {
+        /** @type {PortfolioService} */
+        let svc;
+        let fake;
+
+        beforeEach(() => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date('2026-09-01T12:00:00'));
+            fake = harness();
+            svc = new PortfolioService();
+            svc.userId = 'user-1';
+            svc.portfolios = [{ id: 'p1', name: 'P', color: '#111' }];
+            svc.activePortfolioId = 'p1';
+        });
+
+        const buy = (date) => ({
+            id: 'b1',
+            portfolioId: 'p1',
+            type: 'BUY',
+            symbol: 'AAPL',
+            qty: 10,
+            price: 100,
+            amount: 1000,
+            fees: 0,
+            date,
+        });
+
+        it('un evenement anterieur a l achat ne cree rien, meme ecrit sans zero', async () => {
+            // Achat le 10 avril, dividende le 5 mars : rien n'etait detenu. En
+            // texte '2026-04-10' <= '2026-3-5' est vrai, et un dividende fantome
+            // etait enregistre — une vraie transaction, creee a tort.
+            svc.trades = [buy('2026-04-10')];
+            APIService.getDividends = async () => [{ date: '2026-3-5', amountPerShare: 1 }];
+            expect(await svc.syncDividends()).toBe(0);
+            expect(fake.of('trades', 'insert')).toHaveLength(0);
+        });
+
+        it('un evenement au format FR reste rattache aux titres detenus', async () => {
+            // Miroir du precedent : '05/03/2026' se compare plus bas que toute
+            // date ISO, la quantite detenue tombait a 0 et le dividende dû
+            // n'etait jamais cree.
+            svc.trades = [buy('2026-01-10')];
+            APIService.getDividends = async () => [{ date: '05/03/2026', amountPerShare: 0.25 }];
+            expect(await svc.syncDividends()).toBe(1);
+            expect(fake.of('trades', 'insert')[0].payload).toMatchObject({
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                amount: 2.5,
+                date: '2026-03-05',
+            });
+        });
+
+        it('un dividende deja enregistre n est pas duplique par une autre ecriture', async () => {
+            svc.trades = [
+                buy('2026-01-10'),
+                {
+                    id: 'd1',
+                    portfolioId: 'p1',
+                    type: 'DIVIDEND',
+                    symbol: 'AAPL',
+                    qty: 1,
+                    price: 2.5,
+                    amount: 2.5,
+                    fees: 0,
+                    date: '2026-03-05',
+                },
+            ];
+            for (const ecrite of ['2026-03-05', '2026-3-5', '05/03/2026']) {
+                APIService.getDividends = async () => [{ date: ecrite, amountPerShare: 0.25 }];
+                expect(await svc.syncDividends(), ecrite).toBe(0);
+            }
+            expect(fake.of('trades', 'insert')).toHaveLength(0);
+        });
+    });
+});
+
 describe('PortfolioService.exportToCSV', () => {
     /** @type {PortfolioService} */
     let svc;

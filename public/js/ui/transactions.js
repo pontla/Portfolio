@@ -85,8 +85,12 @@ export const transactions = {
             );
         if (f.types && f.types.length)
             sortedHistory = sortedHistory.filter((t) => f.types.includes(t.type));
-        if (f.from) sortedHistory = sortedHistory.filter((t) => t.date >= f.from);
-        if (f.to) sortedHistory = sortedHistory.filter((t) => t.date <= f.to);
+        // Bornes saisies par l'utilisateur : comparees comme dates, pas comme
+        // texte, pour rester justes si une borne n'est pas au format canonique.
+        if (f.from)
+            sortedHistory = sortedHistory.filter((t) => Utils.compareDates(t.date, f.from) >= 0);
+        if (f.to)
+            sortedHistory = sortedHistory.filter((t) => Utils.compareDates(t.date, f.to) <= 0);
 
         this.updateTxFilterCounts(sortedHistory.length);
 

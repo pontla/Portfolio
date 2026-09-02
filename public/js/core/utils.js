@@ -148,6 +148,21 @@ export const Utils = {
         return d.toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' });
     },
 
+    /**
+     * Compare deux dates sur le jour seul, quel que soit leur ecriture
+     * ('2026-01-05', '2026-1-5', '05/01/2026', horodatage ISO). Renvoie une
+     * valeur < 0, 0 ou > 0, utilisable directement comme comparateur de tri.
+     *
+     * A utiliser des qu'une des deux dates vient de l'exterieur (formulaire,
+     * API, import) : en texte, '2026-1-5' passe pour posterieur au '2026-01-15'
+     * et '05/01/2026' pour posterieur a toute date ISO. Les deux operandes
+     * doivent etre non vides : parseDate ramene une valeur vide a aujourd'hui.
+     *
+     * @param {Date|string} a
+     * @param {Date|string} b
+     */
+    compareDates: (a, b) => Utils.parseDate(a).getTime() - Utils.parseDate(b).getTime(),
+
     daysBetween: (d1, d2) => {
         const date1 = Utils.parseDate(d1);
         const date2 = Utils.parseDate(d2);

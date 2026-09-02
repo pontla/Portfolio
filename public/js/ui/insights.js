@@ -243,7 +243,10 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                     symbol: g.symbol,
                     name: this.assetNameCache[g.symbol],
                     items: (g.items || [])
-                        .filter((it) => !it.date || it.date >= sixMonthsAgoStr)
+                        // Dates produites par le modele : format non garanti.
+                        .filter(
+                            (it) => !it.date || Utils.compareDates(it.date, sixMonthsAgoStr) >= 0
+                        )
                         .slice()
                         .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
                 }))

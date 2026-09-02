@@ -318,7 +318,7 @@ window.supabase = {
       portfolios: [{ id: 'e2e-pf', name: 'Portefeuille E2E', color: '#3b82f6', created_at: '2024-01-01T00:00:00Z' }],
       trades: [{
         id: 'e2e-t1', portfolio_id: 'e2e-pf', type: 'BUY', symbol: 'AAPL',
-        qty: 10, price: 150, amount: 1500, fees: 0, fx_rate: null, date: '2024-02-01'
+        qty: 10, price: 150, amount: 1500, fees: 0, fx_rate: null, date: '__TRADE_DATE__'
       }],
       user_settings: __USER_SETTINGS__
     };
@@ -378,6 +378,7 @@ window.supabase = {
 /**
  * Installe tous les mocks réseau puis ouvre l'app déjà "connectée".
  * @param {import('@playwright/test').Page} page
+ * @param {{ profile?: string, ai?: boolean, tradeDate?: string, insights?: any }} [opts]
  */
 export async function bootApp(page, opts = {}) {
     // Profils de données utilisés par les vérifications finales (phase 12) :
@@ -395,7 +396,13 @@ export async function bootApp(page, opts = {}) {
               },
           ]
         : [];
-    const supabaseStub = SUPABASE_STUB.replace('__USER_SETTINGS__', JSON.stringify(userSettings));
+    // `tradeDate` : ecriture de la date de la transaction seedee. Le defaut est
+    // canonique ; un test peut passer une autre ecriture du meme jour
+    // ('2024-2-1') pour verifier que le chargement la normalise.
+    const supabaseStub = SUPABASE_STUB.replace(
+        '__USER_SETTINGS__',
+        JSON.stringify(userSettings)
+    ).replace('__TRADE_DATE__', opts.tradeDate || '2024-02-01');
 
     // 1. Remplace le SDK Supabase (CDN) par un stub local.
     await page.route(/@supabase\/supabase-js/, (route) =>
@@ -541,7 +548,12 @@ export async function bootApp(page, opts = {}) {
         if (p.endsWith('/websearch')) return json({ results: [] });
         if (p === '/ai/key')
             return json({ ok: true, provider: 'anthropic', configured: ['anthropic'] });
-        if (p === '/ai/insights') return json({ text: '{"summary":"ok","portfolio":[]}' });
+        // `insights` : charge utile du resume de portefeuille. Par defaut aucun
+        // evenement, ce qui laisse l'app basculer sur son rendu de repli.
+        if (p === '/ai/insights')
+            return json({
+                text: JSON.stringify(opts.insights || { summary: 'ok', portfolio: [] }),
+            });
         if (p === '/ai/stock-analysis')
             return json({
                 text: AI_ANALYSIS_TEXT,

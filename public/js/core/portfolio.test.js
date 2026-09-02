@@ -6,7 +6,7 @@
  * sont injectees : le client Supabase via setSupabaseClient(), le stockage local
  * et fetch via globalThis (cf. core/platform.js).
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PortfolioService } from './portfolio.js';
 import { Utils } from './utils.js';
 import { AI_PROVIDERS } from './config.js';
@@ -405,6 +405,108 @@ describe('PortfolioService.validateTrade', () => {
                 norm({ type: 'sell', symbol: 'AAPL', qty: 2, price: 12, date: '2021-01-01' })
             )
         ).not.toThrow();
+    });
+
+    it('date passee non canonique : pas de refus « date dans le futur »', () => {
+        // normalizeTradeInput normalise la date, mais validateTrade est aussi
+        // appele directement (import CSV, re-validation d'une ligne existante).
+        // En texte, '2026-1-5' est superieur a toute date du mois 09 ou 10.
+        expect(() =>
+            svc.validateTrade({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 10,
+                amount: 10,
+                date: '2026-1-5',
+            })
+        ).not.toThrow();
+    });
+
+    it('date future non canonique : refus quand meme', () => {
+        const d = new Date(Date.now() + 3 * 864e5);
+        const nonPadded = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+        expect(() =>
+            svc.validateTrade({
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 10,
+                amount: 10,
+                date: nonPadded,
+            })
+        ).toThrow(/futur/);
+    });
+
+    it('vente : la quantite detenue tient compte des dates non canoniques', () => {
+        // L'achat du 5 janvier precede la vente du 15. Compare en texte,
+        // '2026-1-5' passait pour posterieur : la quantite detenue tombait a 0
+        // et une vente parfaitement couverte etait refusee.
+        for (const achat of ['2026-1-5', '05/01/2026']) {
+            svc.trades = [
+                {
+                    id: 'b1',
+                    portfolioId: 'p1',
+                    type: 'BUY',
+                    symbol: 'AAPL',
+                    qty: 3,
+                    price: 10,
+                    amount: 30,
+                    fees: 0,
+                    date: achat,
+                },
+            ];
+            expect(
+                () =>
+                    svc.validateTrade(
+                        norm({
+                            type: 'sell',
+                            symbol: 'AAPL',
+                            qty: 2,
+                            price: 12,
+                            date: '2026-01-15',
+                        })
+                    ),
+                achat
+            ).not.toThrow();
+            // Et la borne haute reste gardee : 4 titres pour 3 detenus.
+            expect(
+                () =>
+                    svc.validateTrade(
+                        norm({
+                            type: 'sell',
+                            symbol: 'AAPL',
+                            qty: 4,
+                            price: 12,
+                            date: '2026-01-15',
+                        })
+                    ),
+                achat
+            ).toThrow(/sup|detenue|détenue/i);
+        }
+    });
+
+    it('vente anterieure a un achat non canonique : refus', () => {
+        // Miroir du precedent : l'achat du 15 janvier ne couvre pas une vente
+        // du 5, quelle que soit l'ecriture des dates.
+        svc.trades = [
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'AAPL',
+                qty: 3,
+                price: 10,
+                amount: 30,
+                fees: 0,
+                date: '2026-01-15',
+            },
+        ];
+        expect(() =>
+            svc.validateTrade(
+                norm({ type: 'sell', symbol: 'AAPL', qty: 2, price: 12, date: '2026-1-5' })
+            )
+        ).toThrow(/sup|detenue|détenue/i);
     });
 
     it('refuse un montant <= 0 pour un mouvement de cash', () => {
@@ -950,6 +1052,78 @@ describe('PortfolioService : badge de periode et rendement annuel', () => {
         // Le capital moyen mobilise est bien superieur a 10 000.
         expect(perf.ytd.percent).toBeLessThan(50);
         expect(perf.ytd.percent).toBeGreaterThan(0);
+    });
+});
+
+describe('PortfolioService : rendement annuel et dates non canoniques', () => {
+    // Horloge figee : la fenetre annuelle depend du jour courant, et le piege
+    // teste ('2026-3-1' > '2026-09-01' en texte) suppose mars deja passe.
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-01T12:00:00'));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /** @param {string} apport date du gros apport de milieu d'annee */
+    const service = (apport) => {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'A' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.trades = [
+            {
+                id: 'd1',
+                portfolioId: 'p1',
+                type: 'DEPOSIT',
+                symbol: '$CASH',
+                qty: 1,
+                price: 1,
+                amount: 10000,
+                fees: 0,
+                date: '2026-01-02',
+            },
+            {
+                id: 'd2',
+                portfolioId: 'p1',
+                type: 'DEPOSIT',
+                symbol: '$CASH',
+                qty: 1,
+                price: 1,
+                amount: 90000,
+                fees: 0,
+                date: apport,
+            },
+            {
+                id: 'v1',
+                portfolioId: 'p1',
+                type: 'DIVIDEND',
+                symbol: 'AAPL',
+                qty: 1,
+                price: 5000,
+                amount: 5000,
+                fees: 0,
+                date: '2026-08-01',
+            },
+        ];
+        svc.marketPrices = {};
+        svc.dailyPriceCache = {};
+        return svc;
+    };
+
+    it('un apport ecrit sans zero de tete pese autant qu ecrit en canonique', () => {
+        // Le denominateur du rendement (Dietz modifie) pondere chaque apport par
+        // sa duree de presence. Compare en texte, '2026-3-1' passe pour
+        // posterieur a aujourd'hui : l'apport de 90 000 etait purement ignore et
+        // le rendement affiche gonfle d'autant.
+        const canonique = service('2026-03-01').getYearlyPerformance('USD');
+        const nonPadde = service('2026-3-1').getYearlyPerformance('USD');
+
+        expect(nonPadde.ytd.percent).toBeCloseTo(canonique.ytd.percent, 9);
+        expect(nonPadde.years[0].percent).toBeCloseTo(canonique.years[0].percent, 9);
+        // Garde-fou : l'apport pese reellement, sinon le test ne prouverait rien.
+        const sansApport = service('2026-12-31').getYearlyPerformance('USD');
+        expect(sansApport.ytd.percent).toBeGreaterThan(canonique.ytd.percent + 1);
     });
 });
 

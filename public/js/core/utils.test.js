@@ -98,6 +98,31 @@ describe('Utils - helpers de date', () => {
         expect(Utils.formatDateDisplay('')).toBe('');
     });
 
+    it('compareDates ordonne les dates quel que soit leur format', () => {
+        // Les quatre ecritures d'un meme jour.
+        const memeJour = ['2026-01-05', '2026-1-5', '2026-01-05T10:00:00Z', '05/01/2026'];
+        for (const d of memeJour) {
+            expect(Utils.compareDates(d, '2026-01-05'), d).toBe(0);
+            // Les deux pieges de la comparaison de chaines : '2026-1-5' passait
+            // pour posterieur au 15, et '05/01/2026' pour posterieur a tout.
+            expect(Utils.compareDates(d, '2026-01-15'), d).toBeLessThan(0);
+            expect(Utils.compareDates(d, '2025-12-31'), d).toBeGreaterThan(0);
+        }
+    });
+
+    it('compareDates ignore l heure', () => {
+        expect(Utils.compareDates('2026-01-05T23:59:59Z', '2026-01-05T00:00:00Z')).toBe(0);
+    });
+
+    it('compareDates sert de comparateur de tri', () => {
+        const dates = ['2026-01-15', '2026-1-5', '10/01/2026'];
+        expect(dates.slice().sort(Utils.compareDates)).toEqual([
+            '2026-1-5',
+            '10/01/2026',
+            '2026-01-15',
+        ]);
+    });
+
     it('daysBetween compte les jours entiers dans les deux sens', () => {
         expect(Utils.daysBetween('2026-01-01', '2026-01-11')).toBe(10);
         expect(Utils.daysBetween('2026-01-11', '2026-01-01')).toBe(10);

@@ -135,6 +135,29 @@ describe('PortfolioService.getQtyHeldOnDate', () => {
         expect(svc.getQtyHeldOnDate('AAPL', '2026-12-31')).toBe(10);
     });
 
+    it('compare des dates et non des chaines', () => {
+        // Les trois ecritures du 5 janvier. En texte, '2026-1-5' et '05/01/2026'
+        // passent pour posterieurs a toute date ISO du meme mois : la position
+        // etait soit ignoree pour toujours, soit comptee des le premier jour.
+        for (const achat of ['2026-01-05', '2026-1-5', '05/01/2026']) {
+            const svc = serviceWith({ trades: [buy('AAPL', 10, 100, achat)] });
+            expect(svc.getQtyHeldOnDate('AAPL', '2026-01-04'), achat).toBe(0);
+            expect(svc.getQtyHeldOnDate('AAPL', '2026-01-05'), achat).toBe(10);
+            expect(svc.getQtyHeldOnDate('AAPL', '2026-01-15'), achat).toBe(10);
+        }
+    });
+
+    it('la date de reference peut ne pas etre canonique', () => {
+        // `dateStr` vient parfois d'un evenement de dividende renvoye par le proxy.
+        const svc = serviceWith({ trades: [buy('AAPL', 10, 100, '2026-01-15')] });
+        for (const ref of ['2026-1-5', '05/01/2026', '2026-01-05T23:00:00Z']) {
+            expect(svc.getQtyHeldOnDate('AAPL', ref), ref).toBe(0);
+        }
+        for (const ref of ['2026-2-5', '05/02/2026']) {
+            expect(svc.getQtyHeldOnDate('AAPL', ref), ref).toBe(10);
+        }
+    });
+
     it('symbole inconnu : 0', () => {
         const svc = serviceWith({ trades: [buy('AAPL', 10, 100, '2026-01-10')] });
         expect(svc.getQtyHeldOnDate('MSFT', '2026-12-31')).toBe(0);
