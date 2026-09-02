@@ -27,6 +27,13 @@
    - N'essaie pas de fusionner (*merge*) sur `main` toi-même[cite: 3].
    - Indique-moi simplement en 1 ligne : *"Commit effectué sur la branche <nom-de-branche>. Tu peux lancer `/compact` ou `/clear`."*
 
+# DIRECTIVES DESIGN SYSTEM & UI
+1. **Style visuel :** Respecter strictement la charte near-black / glassmorphism (`backdrop-filter: blur()`).
+2. **Layout :** Privilégier les structures "Bento Grid" (cartes asymétriques à coins arrondis et bordures à faible opacité)[cite: 6].
+3. **Typographie :** Utiliser `Archivo` pour les titres/UI et `Roboto Mono` pour toutes les données numériques tabulaires.
+4. **Données manquantes :** Remplacer systématiquement les mentions "Donnée indisponible" ou les cartes vides par un tiret discret (`—`)[cite: 6].
+5. **Composants :** Toujours créer des éléments atomiques réutilisables dans `src/components/`.
+
 # Compte test
 
 Email : claude-test-portfolio@mailinator.com

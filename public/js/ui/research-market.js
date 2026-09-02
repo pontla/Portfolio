@@ -515,6 +515,40 @@ export const researchMarket = {
     // ---------- Synthese / score global ----------
     // L'affichage ne recalcule rien : toute la logique de notation (bornes,
     // ponderations, seuils du signal) vit dans AnalysisService._scoreBlock.
+    // Jauge en arc de cercle (demi-donut SVG, 180deg d'ouest en est).
+    // Le squelette n'est construit qu'une fois : lors d'un changement de valeur
+    // seuls le chiffre, la couleur et le stroke-dashoffset sont mis a jour, ce
+    // qui laisse la transition CSS animer l'arc sans clignotement.
+    SCORE_ARC_LEN: Math.PI * 84,
+
+    _renderScoreDial(top, value, signal, signalCls) {
+        let arc = top.querySelector('.score-arc-val');
+        if (!arc) {
+            const L = this.SCORE_ARC_LEN.toFixed(2);
+            top.innerHTML =
+                `<div class="score-dial">` +
+                `<svg class="score-arc" viewBox="0 0 200 118" role="img" aria-hidden="true">` +
+                `<path class="score-arc-track" d="M16 100 A84 84 0 0 1 184 100"></path>` +
+                `<path class="score-arc-val" d="M16 100 A84 84 0 0 1 184 100" ` +
+                `style="stroke-dasharray:${L};stroke-dashoffset:${L}"></path>` +
+                `</svg>` +
+                `<div class="score-dial-center"><span class="score-val"></span><span class="score-max">/ 100</span></div>` +
+                `</div>` +
+                `<div class="score-side"><span class="score-signal"></span><span class="score-caption"></span></div>`;
+            arc = top.querySelector('.score-arc-val');
+        }
+        const pct = Math.max(0, Math.min(100, Number(value) || 0)) / 100;
+        const dash = this.SCORE_ARC_LEN * (1 - pct);
+        top.querySelector('.score-val').textContent = String(value);
+        const sig = top.querySelector('.score-signal');
+        sig.className = `score-signal ${signalCls}`;
+        sig.textContent = signal;
+        arc.setAttribute('data-signal', signalCls);
+        requestAnimationFrame(() => {
+            arc.style.strokeDashoffset = dash.toFixed(2);
+        });
+    },
+
     renderResearchScore(a) {
         const card = document.getElementById('researchScoreCard');
         const top = document.getElementById('researchScoreTop');
@@ -549,14 +583,14 @@ export const researchMarket = {
             subsEl.innerHTML = '';
             if (src) src.textContent = '';
         } else {
-            top.innerHTML =
-                `<div class="score-dial"><span class="score-val">${r0(sc.global)}</span><span class="score-max">/ 100</span></div>` +
-                `<div class="score-side"><span class="score-signal ${signalCls}">${sc.signal}</span>` +
-                `<span class="score-caption">Synthèse de ${sc.subsUsed} dimension${sc.subsUsed > 1 ? 's' : ''} sur ${subs.length}. ` +
+            const val = r0(sc.global);
+            this._renderScoreDial(top, val, sc.signal, signalCls);
+            top.querySelector('.score-caption').innerHTML =
+                `Synthèse de ${sc.subsUsed} dimension${sc.subsUsed > 1 ? 's' : ''} sur ${subs.length}. ` +
                 (a.partial
                     ? "Score provisoire, calculé sur les seules données Yahoo : lancez l'analyse approfondie pour l'affiner. "
                     : '') +
-                `${this._kvHelp(tipGlobal)}</span></div>`;
+                this._kvHelp(tipGlobal);
 
             subsEl.innerHTML = subs
                 .map((s) => {
