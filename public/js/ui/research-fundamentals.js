@@ -25,7 +25,7 @@ export const researchFundamentals = {
 
         const v = a.valuation || {};
         const h = v.hist5y || {};
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const mult = (x) =>
             x == null || !isFinite(x)
                 ? null
@@ -97,21 +97,23 @@ export const researchFundamentals = {
 
         if (src) {
             const hasHist = [h.pe, h.pb, h.ps, h.evEbitda].some((x) => x != null);
-            src.textContent = hasHist
-                ? 'Yahoo Finance · moyennes 5 ans FMP'
-                : a.isUS
-                  ? 'Yahoo Finance · historique 5 ans indisponible'
-                  : 'Historique complet : actions US uniquement';
+            src.textContent = a.partial
+                ? this.RESEARCH_PARTIAL_SRC
+                : hasHist
+                  ? 'Yahoo Finance · moyennes 5 ans FMP'
+                  : a.isUS
+                    ? 'Yahoo Finance · historique 5 ans indisponible'
+                    : 'Historique complet : actions US uniquement';
         }
     },
 
     // Historique annuel en barres (CA, BPA) : echelle sur la plus grande valeur absolue,
     // variation d'une annee sur l'autre affichee a droite.
-    _growthSeries(title, points, fmt, tip) {
+    _growthSeries(title, points, fmt, tip, empty = 'Non disponible') {
         const vals = (points || []).map((p) => p.value).filter((v) => v != null && isFinite(v));
         const head = `<div class="gs-title">${title} ${this._kvHelp(tip)}</div>`;
         if (!vals.length)
-            return `<div class="gs-block">${head}<div class="gs-empty">Non disponible</div></div>`;
+            return `<div class="gs-block">${head}<div class="gs-empty">${empty}</div></div>`;
 
         const max = Math.max(...vals.map(Math.abs)) || 1;
         const rows = points
@@ -151,7 +153,7 @@ export const researchFundamentals = {
 
         const g = a.growth || {};
         const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const pct = (x) => (x == null || !isFinite(x) ? null : Utils.formatPercent(x));
         const money = (x) => Utils.formatCompact(x, cur);
         const eps = (x) => Utils.formatCurrency(x, cur);
@@ -237,22 +239,26 @@ export const researchFundamentals = {
                 "Chiffre d'affaires",
                 AnalysisUtils.arr(g.revenueAnnual),
                 money,
-                "Chiffre d'affaires annuel publié sur les 5 derniers exercices. La barre est proportionnelle au plus haut de la période."
+                "Chiffre d'affaires annuel publié sur les 5 derniers exercices. La barre est proportionnelle au plus haut de la période.",
+                ND
             ) +
             this._growthSeries(
                 'Bénéfice par action',
                 AnalysisUtils.arr(g.epsAnnual),
                 eps,
-                'Bénéfice par action annuel publié sur les 5 derniers exercices. Une barre rouge signale un exercice en perte.'
+                'Bénéfice par action annuel publié sur les 5 derniers exercices. Une barre rouge signale un exercice en perte.',
+                ND
             );
 
         if (src) {
             const hasHist = AnalysisUtils.arr(g.revenueAnnual).some((p) => p.value != null);
-            src.textContent = hasHist
-                ? 'FMP · consensus analystes Yahoo Finance'
-                : a.isUS
-                  ? 'Historique annuel indisponible'
-                  : 'Historique complet : actions US uniquement';
+            src.textContent = a.partial
+                ? this.RESEARCH_PARTIAL_SRC
+                : hasHist
+                  ? 'FMP · consensus analystes Yahoo Finance'
+                  : a.isUS
+                    ? 'Historique annuel indisponible'
+                    : 'Historique complet : actions US uniquement';
         }
     },
 
@@ -286,7 +292,7 @@ export const researchFundamentals = {
 
         const h = a.health || {};
         const cur = (a.price && a.price.currency) || (a.identity && a.identity.currency) || 'USD';
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const money = (x) => Utils.formatCompact(x, cur);
         const ratio = (x) =>
             x == null || !isFinite(x)
@@ -367,16 +373,19 @@ export const researchFundamentals = {
             `Flux de trésorerie disponible${trendLabel ? ' — ' + trendLabel : ''}`,
             AnalysisUtils.arr(h.fcfHistory),
             money,
-            "Cash restant après investissements sur les 5 derniers exercices. C'est lui qui finance dividendes, rachats d'actions et remboursement de dette."
+            "Cash restant après investissements sur les 5 derniers exercices. C'est lui qui finance dividendes, rachats d'actions et remboursement de dette.",
+            ND
         );
 
         if (src) {
             const hasFcf = AnalysisUtils.arr(h.fcfHistory).some((p) => p.value != null);
-            src.textContent = hasFcf
-                ? 'FMP · Yahoo Finance'
-                : a.isUS
-                  ? 'Historique de trésorerie indisponible'
-                  : 'Historique complet : actions US uniquement';
+            src.textContent = a.partial
+                ? this.RESEARCH_PARTIAL_SRC
+                : hasFcf
+                  ? 'FMP · Yahoo Finance'
+                  : a.isUS
+                    ? 'Historique de trésorerie indisponible'
+                    : 'Historique complet : actions US uniquement';
         }
     },
 
@@ -401,11 +410,11 @@ export const researchFundamentals = {
     },
 
     // Ligne "marge X : courbe 5 ans + niveau actuel + variation en points de %".
-    _sparkRow(label, points, tip) {
+    _sparkRow(label, points, tip, empty = 'Non disponible') {
         const pts = AnalysisUtils.arr(points).filter((p) => p.value != null && isFinite(p.value));
         const head = `<span class="spark-lab">${label} ${this._kvHelp(tip)}</span>`;
         if (pts.length < 2) {
-            return `<div class="spark-row">${head}<span class="spark-empty">Non disponible</span></div>`;
+            return `<div class="spark-row">${head}<span class="spark-empty">${empty}</span></div>`;
         }
         const first = pts[0].value;
         const last = pts[pts.length - 1].value;
@@ -436,7 +445,7 @@ export const researchFundamentals = {
 
         const p = a.profitability || {};
         const mh = p.marginHistory || {};
-        const ND = 'Non disponible';
+        const ND = this._researchND(a);
         const pct = (x) => (x == null || !isFinite(x) ? null : Utils.formatPercent(x, false));
 
         const kv = (label, valueStr, tip, tag = '') =>
@@ -494,26 +503,31 @@ export const researchFundamentals = {
             this._sparkRow(
                 'Marge brute (5 ans)',
                 mh.gross,
-                "Évolution de la marge brute sur les 5 derniers exercices. En hausse : les prix ou le mix produit s'améliorent."
+                "Évolution de la marge brute sur les 5 derniers exercices. En hausse : les prix ou le mix produit s'améliorent.",
+                ND
             ) +
             this._sparkRow(
                 'Marge opérationnelle (5 ans)',
                 mh.operating,
-                'Évolution de la marge opérationnelle sur 5 ans. Une érosion continue signale une pression concurrentielle ou des coûts qui dérapent.'
+                'Évolution de la marge opérationnelle sur 5 ans. Une érosion continue signale une pression concurrentielle ou des coûts qui dérapent.',
+                ND
             ) +
             this._sparkRow(
                 'Marge nette (5 ans)',
                 mh.net,
-                'Évolution de la marge nette sur 5 ans. Variation exprimée en points de pourcentage entre le premier et le dernier exercice.'
+                'Évolution de la marge nette sur 5 ans. Variation exprimée en points de pourcentage entre le premier et le dernier exercice.',
+                ND
             );
 
         if (src) {
             const hasHist = AnalysisUtils.arr(mh.net).some((x) => x.value != null);
-            src.textContent = hasHist
-                ? 'Yahoo Finance · historique de marges FMP'
-                : a.isUS
-                  ? 'Yahoo Finance · historique de marges indisponible'
-                  : 'Historique complet : actions US uniquement';
+            src.textContent = a.partial
+                ? this.RESEARCH_PARTIAL_SRC
+                : hasHist
+                  ? 'Yahoo Finance · historique de marges FMP'
+                  : a.isUS
+                    ? 'Yahoo Finance · historique de marges indisponible'
+                    : 'Historique complet : actions US uniquement';
         }
     },
 };

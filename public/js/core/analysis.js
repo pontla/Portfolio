@@ -64,14 +64,9 @@ export const AnalysisService = {
         const hit = this._cache[symbol];
         if (hit && now - hit.ts < 900000) return hit.data;
 
-        const nonUS = symbol.includes('.') || symbol.startsWith('$') || symbol.endsWith('-USD');
+        const nonUS = this._isNonUS(symbol);
         const errors = [];
-        const guard = (p, label) =>
-            Promise.resolve(p).catch((e) => {
-                console.warn(`AnalysisService: ${label} KO`, e);
-                errors.push(label);
-                return null;
-            });
+        const guard = this._guard(errors);
 
         const histStart = new Date();
         histStart.setMonth(histStart.getMonth() - 15);
@@ -135,6 +130,72 @@ export const AnalysisService = {
             errors,
         });
         this._cache[symbol] = { ts: now, data };
+        return data;
+    },
+
+    _isNonUS(symbol) {
+        return symbol.includes('.') || symbol.startsWith('$') || symbol.endsWith('-USD');
+    },
+
+    // Enrobe une source : une panne isolee ne doit jamais faire echouer l'agregat,
+    // elle laisse juste un champ vide et une trace dans `errors`.
+    _guard(errors) {
+        return (p, label) =>
+            Promise.resolve(p).catch((e) => {
+                console.warn(`AnalysisService: ${label} KO`, e);
+                errors.push(label);
+                return null;
+            });
+    },
+
+    // Apercu gratuit : uniquement les sources Yahoo (quoteSummary, historique de
+    // cours, dividendes) plus les fondamentaux deja charges par l'Explorer.
+    // Aucun appel FMP ni Finnhub, donc aucun quota consomme : l'analyse marquee
+    // `partial` alimente les cartes des l'ouverture d'une valeur, et
+    // `build()` viendra completer ce qui manque a la demande.
+    _lightCache: {},
+    cachedLight(symbol) {
+        symbol = (symbol || '').trim().toUpperCase();
+        const full = this._cache[symbol];
+        if (full && Date.now() - full.ts < 900000) return full.data;
+        const hit = this._lightCache[symbol];
+        return hit && Date.now() - hit.ts < 900000 ? hit.data : null;
+    },
+
+    async buildLight(symbol) {
+        symbol = (symbol || '').trim().toUpperCase();
+        if (!symbol) return null;
+        const cached = this.cachedLight(symbol);
+        if (cached) return cached;
+
+        const now = Date.now();
+        const errors = [];
+        const guard = this._guard(errors);
+        const histStart = new Date();
+        histStart.setMonth(histStart.getMonth() - 15);
+        const histEnd = new Date();
+
+        const [fund, qs, history, dividends] = await Promise.all([
+            guard(APIService.getFundamentals(symbol), 'fundamentals'),
+            guard(APIService.getQuoteSummary(symbol), 'quoteSummary'),
+            guard(APIService.getDailyHistory(symbol, histStart, histEnd), 'history'),
+            guard(
+                APIService.getDividends(symbol, '2000-01-01', Utils.getDateString(histEnd)),
+                'dividends'
+            ),
+        ]);
+
+        const data = this._normalize({
+            symbol,
+            nonUS: this._isNonUS(symbol),
+            partial: true,
+            fund,
+            qs,
+            history,
+            dividends,
+            errors,
+        });
+        this._lightCache[symbol] = { ts: now, data };
         return data;
     },
 
@@ -296,9 +357,15 @@ export const AnalysisService = {
                 n(kmTtm.enterpriseValueOverEBITDATTM) ??
                 n(rTtm.enterpriseValueMultipleTTM),
             evRevenue: n(qs.enterpriseToRevenue) ?? n(kmTtm.evToSalesTTM),
+            // Dernier repli entierement Yahoo : le FCF du module financialData
+            // rapporte a la capitalisation, pour que l'apercu gratuit ne laisse
+            // pas la ligne vide quand FMP n'a pas ete interroge.
             fcfYield:
                 pctU(n(kmTtm.freeCashFlowYieldTTM)) ??
-                (fcfLatest != null && marketCap ? (fcfLatest / marketCap) * 100 : null),
+                (fcfLatest != null && marketCap ? (fcfLatest / marketCap) * 100 : null) ??
+                (n(qs.freeCashflow) != null && marketCap
+                    ? (n(qs.freeCashflow) / marketCap) * 100
+                    : null),
             // Moyennes sur les seuls exercices ou le multiple a un sens. Un exercice
             // deficitaire donne un PER negatif qui, moyenne avec des PER positifs,
             // ecrase la reference : [-50, 25, 28, 30, 26, 27] donne 14,3 au lieu de
@@ -351,8 +418,18 @@ export const AnalysisService = {
         // ---------- Sante financiere ----------
         const fcfHist = cashAsc.map((r) => ({ year: U.year(r), value: n(r.freeCashFlow) }));
         const yahooDE = n(qs.debtToEquity); // Yahoo exprime en % -> /100
+        // Dette nette / EBITDA recalculee depuis Yahoo quand FMP n'a pas ete
+        // interroge : les trois termes viennent du meme module financialData.
+        const qsEbitda = n(qs.ebitda);
+        const qsNetDebt =
+            n(qs.totalDebt) != null && n(qs.totalCash) != null
+                ? n(qs.totalDebt) - n(qs.totalCash)
+                : null;
         const health = {
-            netDebtToEbitda: n(latestRatio.netDebtToEBITDA) ?? n(kmTtm.netDebtToEBITDATTM),
+            netDebtToEbitda:
+                n(latestRatio.netDebtToEBITDA) ??
+                n(kmTtm.netDebtToEBITDATTM) ??
+                (qsNetDebt != null && qsEbitda > 0 ? qsNetDebt / qsEbitda : null),
             debtToEquity:
                 n(latestRatio.debtEquityRatio) ??
                 n(rTtm.debtEquityRatioTTM) ??
@@ -486,6 +563,10 @@ export const AnalysisService = {
             symbol: x.symbol,
             asOf: Utils.getDateString(new Date()),
             isUS: !x.nonUS,
+            // Apercu gratuit : seules les sources Yahoo ont ete interrogees.
+            // L'UI s'en sert pour distinguer « pas encore demande » de
+            // « definitivement indisponible ».
+            partial: !!x.partial,
             identity,
             price: priceBlock,
             valuation,

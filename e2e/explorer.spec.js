@@ -519,28 +519,48 @@ test('mobile : la carte d’en-tête reste lisible et sans scroll horizontal', a
     expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test('analyse approfondie : aucun appel FMP avant le clic sur le bouton', async ({ page }) => {
-    const fmpCalls = [];
-    await page.route('**/fmp?**', (route) => {
-        fmpCalls.push(route.request().url());
-        return route.continue();
-    });
+test('aperçu Yahoo : les cartes sont remplies sans aucun appel payant', async ({ page }) => {
+    const paidCalls = [];
+    for (const p of ['**/fmp?**', '**/peers?**', '**/recommendation?**', '**/insider?**']) {
+        await page.route(p, (route) => {
+            paidCalls.push(route.request().url());
+            return route.continue();
+        });
+    }
 
     await openResearch(page, 'AAPL', { deep: false });
 
-    // Sections rapides servies, analyse approfondie en attente d'une action.
+    // Analyse approfondie toujours en attente d'une action, mais les cartes
+    // alimentees par Yahoo sont deja servies.
     await expect(page.locator('#researchKeyGrid .research-kv').first()).toBeVisible();
     await expect(page.locator('#researchDeepCard')).toBeVisible();
-    await expect(page.locator('#researchScoreCard')).toBeHidden();
-    await expect(page.locator('#researchValuationCard')).toBeHidden();
-    expect(fmpCalls).toHaveLength(0);
+    await expect(page.locator('#researchValuationCard')).toBeVisible();
+    await expect(page.locator('#researchValuationGrid')).toContainText('31,2 ×'); // PER Yahoo
+    await expect(page.locator('#researchSentimentGrid')).toContainText('Achat (38 analystes)');
+    await expect(page.locator('#researchTechCard')).toBeVisible();
+    await expect(page.locator('#researchDivCard')).toBeVisible();
+    await expect(page.locator('#researchScoreTop .score-val')).toHaveText(/^\d{1,3}$/);
+    await expect(page.locator('#researchScoreCard')).toContainText('Score provisoire');
+    // Ratios recalcules depuis le seul quoteSummary : (108 - 61) / 130 Md.
+    await expect(page.locator('#researchHealthGrid')).toContainText('0,4 ×');
+    await expect(page.locator('#researchProfitGrid')).toContainText('25,30 %');
+    // Le ROIC, lui, n'existe que dans FMP : il invite explicitement a l'analyse.
+    await expect(
+        page.locator('#researchProfitGrid .research-kv').filter({ hasText: 'ROIC' })
+    ).toContainText('Demander une analyse');
+
+    // Ce que seule l'analyse approfondie apporte est annonce comme tel.
+    await expect(page.locator('#researchGrowthSeries')).toContainText('Demander une analyse');
+    await expect(page.locator('#researchPeersCard')).toContainText('Demander une analyse');
+    await expect(page.locator('#researchAiCard')).toContainText('analyse approfondie');
+    expect(paidCalls).toHaveLength(0);
 
     await runDeepAnalysis(page);
 
-    await expect(page.locator('#researchScoreCard')).toBeVisible();
-    await expect(page.locator('#researchValuationCard')).toBeVisible();
     await expect(page.locator('#researchDeepCard')).toBeHidden();
-    expect(fmpCalls.length).toBeGreaterThan(0);
+    await expect(page.locator('#researchGrowthSeries')).not.toContainText('Demander une analyse');
+    await expect(page.locator('#researchPeersTable')).not.toBeEmpty();
+    expect(paidCalls.length).toBeGreaterThan(0);
 });
 
 test('analyse IA : sans clé IA, la carte invite à en configurer une', async ({ page }) => {
