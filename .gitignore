@@ -9,7 +9,12 @@ playwright/.cache/
 Thumbs.db
 *.log
 .env
-.claude/settings.local.json
+.claude/
+.mcp.json
+.wrangler/
+wrangler.proxy.toml
+CLAUDE.md
+
 
 # Ruflo local secrets and runtime data
 .env.local
