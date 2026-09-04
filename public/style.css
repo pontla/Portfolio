@@ -1,9 +1,9 @@
 :root {
     /* fonds et surfaces */
-    --bg: #0a0b0e;
+    --bg: #0b0e14;
     --surf: #14161b;
     --surfA: rgba(20, 22, 27, 0.9);
-    --tile: #1b1e25;
+    --tile: #161b26;
     --side: #0c0e12;
     --aiTop: #16202a;
     --sheet: rgba(24, 27, 33, 0.98);
@@ -15,17 +15,25 @@
     --sk1: #1d2129;
     --sk2: #1a1e25;
 
+    /* cartes en verre dépoli (thème sombre) */
+    --bg-card: rgba(20, 25, 35, 0.7);
+    --bg-card-hover: rgba(28, 35, 49, 0.85);
+    --glass-blur: blur(12px);
+    --shadow-card: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --border-subtle: var(--l1);
+    --border-strong: var(--l2);
+
     /* texte */
     --strong: #ffffff;
-    --txt: #eceff4;
+    --txt: #f0f4f8;
     --soft: #c7ccd6;
     --soft2: #a8b0bd;
-    --dim: #8b93a1;
-    --dim2: #6c7684;
+    --dim: #8a99ad;
+    --dim2: #536075;
 
     /* traits (--l*) et fonds (--f*) */
     --l1: rgba(255, 255, 255, 0.07);
-    --l2: rgba(255, 255, 255, 0.1);
+    --l2: rgba(255, 255, 255, 0.15);
     --l3: rgba(255, 255, 255, 0.09);
     --l4: rgba(255, 255, 255, 0.06);
     --l5: rgba(255, 255, 255, 0.05);
@@ -41,10 +49,15 @@
     --grid: rgba(255, 255, 255, 0.045);
 
     /* sémantique */
-    --up: #2ebd85;
-    --dn: #f6465c;
+    --up: #00e676;
+    --up-bg: rgba(0, 230, 118, 0.12);
+    --dn: #ff5252;
+    --dn-bg: rgba(255, 82, 82, 0.12);
     --warn: #e8b23a;
     --accTxt: #00d3f2;
+    --color-neutral: #29b6f6;
+    --color-neutral-bg: rgba(41, 182, 246, 0.12);
+    --color-accent: #7c4dff;
 
     /* accent d'action — constant dans les deux thèmes */
     --acc: #00d3f2;
@@ -81,30 +94,30 @@
 }
 
 [data-theme='light'] {
-    --bg: #f4f5f7;
+    --bg: #f4f6f9;
     --surf: #ffffff;
     --surfA: rgba(248, 250, 252, 0.92);
-    --tile: #eff1f5;
+    --tile: #eef2f6;
     --side: #ffffff;
     --aiTop: #e9f8fc;
     --sheet: rgba(255, 255, 255, 0.98);
     --nav: rgba(255, 255, 255, 0.9);
-    --hdrA: rgba(244, 245, 247, 0.95);
-    --hdrB: rgba(244, 245, 247, 0.72);
+    --hdrA: rgba(244, 246, 249, 0.95);
+    --hdrB: rgba(244, 246, 249, 0.72);
     --scrim: rgba(15, 23, 42, 0.32);
     --shadow: rgba(15, 23, 42, 0.16);
     --sk1: #e8ebf0;
     --sk2: #eceff4;
 
     --strong: #05070b;
-    --txt: #10131a;
+    --txt: #111827;
     --soft: #414a58;
     --soft2: #55606e;
-    --dim: #6a7382;
-    --dim2: #626d7c;
+    --dim: #4b5563;
+    --dim2: #9ca3af;
 
-    --l1: rgba(15, 23, 42, 0.11);
-    --l2: rgba(15, 23, 42, 0.15);
+    --l1: rgba(0, 0, 0, 0.08);
+    --l2: rgba(0, 0, 0, 0.18);
     --l3: rgba(15, 23, 42, 0.13);
     --l4: rgba(15, 23, 42, 0.1);
     --l5: rgba(15, 23, 42, 0.08);
@@ -119,10 +132,23 @@
     --f8: rgba(15, 23, 42, 0.18);
     --grid: rgba(15, 23, 42, 0.08);
 
-    --up: #0b9c66;
-    --dn: #d92c43;
+    --up: #00a854;
+    --up-bg: rgba(0, 168, 84, 0.1);
+    --dn: #e53935;
+    --dn-bg: rgba(229, 57, 53, 0.1);
     --warn: #9a6b00;
     --accTxt: #0b8ba4;
+    --color-neutral: #0288d1;
+    --color-neutral-bg: rgba(2, 136, 209, 0.1);
+    --color-accent: #6200ea;
+
+    /* thème clair : verre dépoli sur fond clair */
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --bg-card-hover: #ffffff;
+    --glass-blur: blur(10px);
+    --shadow-card: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
+    --border-subtle: var(--l1);
+    --border-strong: var(--l2);
 }
 
 * {
@@ -801,13 +827,13 @@ input:focus {
 }
 
 .badge-buy {
-    background-color: rgba(46, 189, 133, 0.14);
-    color: #2ebd85;
+    background-color: var(--up-bg);
+    color: var(--up);
 }
 
 .badge-sell {
-    background-color: rgba(246, 70, 92, 0.14);
-    color: #f6465c;
+    background-color: var(--dn-bg);
+    color: var(--dn);
 }
 
 .badge-deposit {
@@ -3906,9 +3932,18 @@ select option {
 .card,
 .stat-card,
 .analysis-card {
-    background: var(--surf);
-    border: 1px solid var(--l1);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
     border-radius: 18px;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-card);
+}
+
+.card:hover,
+.stat-card:hover,
+.analysis-card:hover {
+    background: var(--bg-card-hover);
 }
 
 .modal {
@@ -3984,7 +4019,7 @@ select option {
     color: var(--dim);
 }
 .radio-label input:checked + span {
-    background: rgba(46, 189, 133, 0.16);
+    background: var(--up-bg);
     color: var(--up);
     box-shadow: none;
 }
@@ -4060,10 +4095,10 @@ select option {
     background: var(--l4);
 }
 .perf-bar-fill.positive {
-    background: linear-gradient(90deg, rgba(46, 189, 133, 0.35), var(--up));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--up) 35%, transparent), var(--up));
 }
 .perf-bar-fill.negative {
-    background: linear-gradient(90deg, rgba(246, 70, 92, 0.35), var(--dn));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--dn) 35%, transparent), var(--dn));
 }
 .perf-tooltip {
     background: var(--sheet);
@@ -4285,9 +4320,18 @@ select option {
 .card,
 .stat-card,
 .analysis-card {
-    background: var(--surf);
-    border: 1px solid var(--l1);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
     border-radius: 18px;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-card);
+}
+
+.card:hover,
+.stat-card:hover,
+.analysis-card:hover {
+    background: var(--bg-card-hover);
 }
 
 .modal {
@@ -4363,7 +4407,7 @@ select option {
     color: var(--dim);
 }
 .radio-label input:checked + span {
-    background: rgba(46, 189, 133, 0.16);
+    background: var(--up-bg);
     color: var(--up);
     box-shadow: none;
 }
@@ -4439,10 +4483,10 @@ select option {
     background: var(--l4);
 }
 .perf-bar-fill.positive {
-    background: linear-gradient(90deg, rgba(46, 189, 133, 0.35), var(--up));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--up) 35%, transparent), var(--up));
 }
 .perf-bar-fill.negative {
-    background: linear-gradient(90deg, rgba(246, 70, 92, 0.35), var(--dn));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--dn) 35%, transparent), var(--dn));
 }
 .perf-tooltip {
     background: var(--sheet);
@@ -5613,10 +5657,10 @@ select option {
     @keyframes glowD {
         0%,
         100% {
-            box-shadow: 0 0 0 0 rgba(46, 189, 133, 0.5);
+            box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 50%, transparent);
         }
         50% {
-            box-shadow: 0 0 0 6px rgba(46, 189, 133, 0);
+            box-shadow: 0 0 0 6px transparent;
         }
     }
     .side-foot-text {
