@@ -108,6 +108,96 @@
           "#c7ccd6",
           "#eceff4"
         ]
+      },
+      "portfolio-azure": {
+        "role": "portfolio-accent",
+        "displayName": "Azur",
+        "canonical": "#3b82f6",
+        "tonalRamp": [
+          "#1e3a8a",
+          "#1d4ed8",
+          "#2563eb",
+          "#3b82f6",
+          "#60a5fa",
+          "#93c5fd",
+          "#bfdbfe",
+          "#dbeafe"
+        ]
+      },
+      "portfolio-emerald": {
+        "role": "portfolio-accent",
+        "displayName": "Émeraude",
+        "canonical": "#10b981",
+        "tonalRamp": [
+          "#064e3b",
+          "#047857",
+          "#059669",
+          "#10b981",
+          "#34d399",
+          "#6ee7b7",
+          "#a7f3d0",
+          "#d1fae5"
+        ]
+      },
+      "portfolio-amber": {
+        "role": "portfolio-accent",
+        "displayName": "Ambre",
+        "canonical": "#f59e0b",
+        "tonalRamp": [
+          "#78350f",
+          "#b45309",
+          "#d97706",
+          "#f59e0b",
+          "#fbbf24",
+          "#fcd34d",
+          "#fde68a",
+          "#fef3c7"
+        ]
+      },
+      "portfolio-violet": {
+        "role": "portfolio-accent",
+        "displayName": "Violet",
+        "canonical": "#8b5cf6",
+        "tonalRamp": [
+          "#4c1d95",
+          "#6d28d9",
+          "#7c3aed",
+          "#8b5cf6",
+          "#a78bfa",
+          "#c4b5fd",
+          "#ddd6fe",
+          "#ede9fe"
+        ]
+      },
+      "portfolio-fuchsia": {
+        "role": "portfolio-accent",
+        "displayName": "Fuchsia",
+        "canonical": "#ec4899",
+        "tonalRamp": [
+          "#831843",
+          "#be185d",
+          "#db2777",
+          "#ec4899",
+          "#f472b6",
+          "#f9a8d4",
+          "#fbcfe8",
+          "#fce7f3"
+        ]
+      },
+      "portfolio-slate": {
+        "role": "portfolio-accent",
+        "displayName": "Ardoise",
+        "canonical": "#64748b",
+        "tonalRamp": [
+          "#0f172a",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#cbd5e1",
+          "#e2e8f0",
+          "#f1f5f9"
+        ]
       }
     },
     "typographyMeta": {
@@ -285,6 +375,11 @@
         "name": "The Sheet Corner Rule",
         "body": "Une modale desktop a quatre coins arrondis (12px) posée au centre de l'écran ; la même modale sur mobile n'arrondit que ses deux coins hauts (16px 16px 0 0) car elle colle au bord bas de l'écran, en cohérence avec sa physique de bottom sheet.",
         "section": "elevation"
+      },
+      {
+        "name": "The Portfolio Accent Boundary Rule",
+        "body": "La palette Portfolio Accent (six teintes : Azur, Émeraude, Ambre, Violet, Fuchsia, Ardoise) n'existe que pour distinguer des portefeuilles entre eux ; elle ne doit jamais migrer vers un contrôle d'UI système (bouton, état actif, focus) ni vers une série de graphique. Un nouveau besoin de couleur d'identité personnelle pioche dans ces six teintes plutôt que d'en inventer une septième.",
+        "section": "colors"
       }
     ],
     "dos": [
@@ -292,9 +387,11 @@
       "Do écrire toute donnée chiffrée comparable en Roboto Mono — The Tabular Numbers Rule.",
       "Do détacher une carte au repos par la seule bordure fil, jamais par une ombre — The Flat-At-Rest Rule.",
       "Do remplacer toute donnée manquante par un tiret discret « — », jamais une carte vide ni « Donnée indisponible ».",
-      "Do arrondir une bottom sheet mobile uniquement en haut (16px 16px 0 0) — The Sheet Corner Rule."
+      "Do arrondir une bottom sheet mobile uniquement en haut (16px 16px 0 0) — The Sheet Corner Rule.",
+      "Do piocher dans les six teintes Portfolio Accent pour toute nouvelle identité de portefeuille plutôt que d'en créer une septième — The Portfolio Accent Boundary Rule."
     ],
     "donts": [
+      "Don't utiliser une couleur Portfolio Accent pour un contrôle d'UI système ou une série de graphique — The Portfolio Accent Boundary Rule.",
       "Don't utiliser vert/rouge pour un état d'UI générique (succès/erreur de formulaire) — réservés à la performance financière, The Financial Color Rule.",
       "Don't appliquer backdrop-filter: blur() à une carte de contenu statique ; le flou signale une couche temporaire (modale, en-tête, menu), pas une carte au repos.",
       "Don't introduire une étape de build ou un framework JS : le projet est vanilla JS/CSS zero-build par contrainte technique assumée.",

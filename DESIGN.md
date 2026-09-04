@@ -28,6 +28,12 @@ colors:
   series-6: '#4c8dff'
   series-7: '#3ddad7'
   series-8: '#6b7280'
+  portfolio-azure: '#3b82f6'
+  portfolio-emerald: '#10b981'
+  portfolio-amber: '#f59e0b'
+  portfolio-violet: '#8b5cf6'
+  portfolio-fuchsia: '#ec4899'
+  portfolio-slate: '#64748b'
 typography:
   display:
     fontFamily: "Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
@@ -162,7 +168,20 @@ Palette near-black à un seul accent fonctionnel, avec un vocabulaire de gris à
 
 - Huit teintes de répartition (`--s1`…`--s8`, dont `cyan-signal`, `up`, `#a99cff`, `#ffb020`, `#ff7a8a`, `#4c8dff`, `#3ddad7`, `#6b7280`) réservées aux donuts et graphiques multi-séries — jamais à l'UI de contrôle.
 
+### Portfolio Accent
+
+Six couleurs que l'utilisateur choisit pour identifier _son_ portefeuille — un rôle d'identité personnelle, distinct du Cyan Signal (action système) et des Series (visualisation de données). Utilisées à deux endroits seulement : la puce ronde du sélecteur de portefeuille actif (`#activePortfolioBullet`) et le sélecteur de couleur de la modale de création/édition de portefeuille (`#portfolioColorPicker`).
+
+- **Azur** (`#3b82f6`) : option par défaut d'un nouveau portefeuille.
+- **Émeraude** (`#10b981`)
+- **Ambre** (`#f59e0b`)
+- **Violet** (`#8b5cf6`)
+- **Fuchsia** (`#ec4899`)
+- **Ardoise** (`#64748b`) : l'option neutre pour un portefeuille qui ne veut pas de teinte marquée.
+
 ### Named Rules
+
+**The Portfolio Accent Boundary Rule.** La palette Portfolio Accent n'existe que pour distinguer des portefeuilles entre eux ; elle ne doit jamais migrer vers un contrôle d'UI système (bouton, état actif, focus) ni vers une série de graphique. Un nouveau besoin de couleur d'identité personnelle pioche dans ces six teintes plutôt que d'en inventer une septième.
 
 **The One Signal Rule.** Le Cyan Signal n'apparaît que sur une action ou un état — CTA principal, actif, focus — jamais en décor ou en fond de section. S'il n'y a ni action ni état à signaler, il n'y a pas de cyan sur l'écran.
 
@@ -267,9 +286,11 @@ Demi-donut SVG (`score-arc`) qui synthétise un score d'analyse fondamentale en 
 - **Do** détacher une carte au repos par la seule bordure fil, jamais par une ombre — _The Flat-At-Rest Rule_.
 - **Do** remplacer toute donnée manquante par un tiret discret « — », jamais une carte vide ni « Donnée indisponible » (règle produit, voir [PRODUCT.md](PRODUCT.md)).
 - **Do** arrondir une bottom sheet mobile uniquement en haut (`16px 16px 0 0`) — _The Sheet Corner Rule_.
+- **Do** piocher dans les six teintes Portfolio Accent pour toute nouvelle identité de portefeuille plutôt que d'en créer une septième — _The Portfolio Accent Boundary Rule_.
 
 ### Don't:
 
+- **Don't** utiliser une couleur Portfolio Accent pour un contrôle d'UI système ou une série de graphique — _The Portfolio Accent Boundary Rule_.
 - **Don't** utiliser vert/rouge pour un état d'UI générique (succès/erreur de formulaire) — réservés à la performance financière, _The Financial Color Rule_.
 - **Don't** appliquer `backdrop-filter: blur()` à une carte de contenu statique ; le flou signale une couche temporaire (modale, en-tête, menu), pas une carte au repos.
 - **Don't** introduire une étape de build ou un framework JS : le projet est vanilla JS/CSS zero-build par contrainte technique assumée (voir [PRODUCT.md](PRODUCT.md)).
