@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T00:00:00Z",
+  "title": "Design System: Your Portfolio",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Fond",
+        "canonical": "#0a0b0e",
+        "tonalRamp": [
+          "#05060a",
+          "#0a0b0e",
+          "#0c0e12",
+          "#14161b",
+          "#1b1e25",
+          "#2a2d36",
+          "#454955",
+          "#6c7684"
+        ]
+      },
+      "surf": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#14161b",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#14161b",
+          "#1b1e25",
+          "#262a33",
+          "#343943",
+          "#4a5058",
+          "#6c7684",
+          "#a8b0bd"
+        ]
+      },
+      "cyan-signal": {
+        "role": "primary",
+        "displayName": "Cyan Signal",
+        "canonical": "#00d3f2",
+        "tonalRamp": [
+          "#022c33",
+          "#04525f",
+          "#067188",
+          "#0895ac",
+          "#00b8d4",
+          "#00d3f2",
+          "#5ce6ff",
+          "#b3f2ff"
+        ]
+      },
+      "up": {
+        "role": "semantic-financial",
+        "displayName": "Hausse",
+        "canonical": "#2ebd85",
+        "tonalRamp": [
+          "#0b3b28",
+          "#0f5c3d",
+          "#158257",
+          "#1ba36d",
+          "#2ebd85",
+          "#5cd3a2",
+          "#8fe3c0",
+          "#c7f3e0"
+        ]
+      },
+      "down": {
+        "role": "semantic-financial",
+        "displayName": "Baisse",
+        "canonical": "#f6465c",
+        "tonalRamp": [
+          "#450a12",
+          "#6e131f",
+          "#9c1c2c",
+          "#c7283b",
+          "#f6465c",
+          "#f97b8a",
+          "#fbaab3",
+          "#fdd6da"
+        ]
+      },
+      "warn": {
+        "role": "semantic-financial",
+        "displayName": "Avertissement",
+        "canonical": "#e8b23a",
+        "tonalRamp": [
+          "#4a3506",
+          "#725209",
+          "#996f0c",
+          "#c2900f",
+          "#e8b23a",
+          "#f0c56a",
+          "#f6da9c",
+          "#fbedcf"
+        ]
+      },
+      "ink-primary": {
+        "role": "neutral",
+        "displayName": "Encre primaire",
+        "canonical": "#eceff4",
+        "tonalRamp": [
+          "#10131a",
+          "#2a2f3a",
+          "#454c5a",
+          "#6c7684",
+          "#8b93a1",
+          "#a8b0bd",
+          "#c7ccd6",
+          "#eceff4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Titre hero de la landing publique uniquement."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Titres de section, valeur d'en-tête de graphique."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Titres de carte et de modale."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texte courant, libellés de formulaire."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Badges de transaction, libellés de navigation basse, souvent uppercase."
+      },
+      "numeric": {
+        "displayName": "Numeric",
+        "purpose": "Cours, P&L, pourcentages, score — toute donnée comparée en colonne. The Tabular Numbers Rule."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-hover",
+        "value": "0 4px 6px -1px var(--shadow)",
+        "purpose": "Retour d'interactivité au survol d'une carte au repos, jamais présent à l'état statique."
+      },
+      {
+        "name": "fab-mobile",
+        "value": "0 6px 16px rgba(0, 0, 0, 0.25)",
+        "purpose": "Ombre neutre du FAB mobile pour l'affirmer au-dessus de la nav basse."
+      },
+      {
+        "name": "fab-accent",
+        "value": "0 12px 32px rgba(0, 211, 242, 0.34)",
+        "purpose": "Ombre teintée Cyan Signal du FAB dans le thème redesign, plus expressive."
+      },
+      {
+        "name": "sheet-elevated",
+        "value": "0 24px 60px var(--shadow)",
+        "purpose": "Couche la plus haute du système : modales, sheets, menus déroulants."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px rgba(0, 211, 242, 0.18)",
+        "purpose": "Anneau de focus teinté accent sur les champs de formulaire."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "0.2s ease",
+        "purpose": "Transitions génériques (background, opacity, box-shadow) sur boutons et cartes."
+      },
+      {
+        "name": "ease-emphasis",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Animations expressives : arc du score-dial (stroke-dashoffset 0.7s), largeur de sidebar."
+      },
+      {
+        "name": "sheet-up",
+        "value": "0.25s ease-out",
+        "purpose": "Entrée d'une bottom sheet mobile depuis le bas de l'écran (@keyframes sheetUp)."
+      },
+      {
+        "name": "modal-in",
+        "value": "0.2s ease-out",
+        "purpose": "Entrée d'une modale desktop centrée (@keyframes modalIn, scale + opacity)."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile-max", "value": "768px" },
+      { "name": "tablet-max", "value": "1023px" },
+      { "name": "desktop-min", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "CTA principal : créer un compte, ajouter une transaction sur desktop.",
+      "html": "<button class=\"ds-btn-primary\">Créer un compte gratuit</button>",
+      "css": ".ds-btn-primary { background-color: #00d3f2; color: #05161c; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 500; font-size: 14px; font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; cursor: pointer; transition: background 0.18s, opacity 0.2s; } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 211, 242, 0.18); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Conteneur de contenu au repos : synthèse, position, section d'analyse.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-label\">Valeur du portefeuille</div><div class=\"ds-card-value\">24 812,40&nbsp;€</div></div>",
+      "css": ".ds-card { background: #14161b; border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 18px; padding: 20px; transition: box-shadow 0.2s; } .ds-card:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); } .ds-card-label { font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 500; color: #8b93a1; margin-bottom: 8px; } .ds-card-value { font-family: 'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace; font-size: 22px; font-weight: 700; color: #eceff4; }"
+    },
+    {
+      "name": "FAB",
+      "kind": "button",
+      "refersTo": "fab",
+      "description": "Bouton d'action flottant mobile, ancré au-dessus de la navigation basse.",
+      "html": "<button class=\"ds-fab\" aria-label=\"Ajouter une transaction\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg></button>",
+      "css": ".ds-fab { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%; background: #00d3f2; color: #05161c; border: none; box-shadow: 0 12px 32px rgba(0, 211, 242, 0.34); cursor: pointer; } .ds-fab:hover { filter: brightness(1.05); } .ds-fab:focus-visible { outline: none; box-shadow: 0 12px 32px rgba(0, 211, 242, 0.34), 0 0 0 3px rgba(0, 211, 242, 0.18); }"
+    },
+    {
+      "name": "Transaction Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Étiquette de type de transaction (achat, vente, dividende, dépôt, frais).",
+      "html": "<span class=\"ds-badge ds-badge-buy\">Achat</span>",
+      "css": ".ds-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-family: 'Archivo', sans-serif; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; } .ds-badge-buy { background-color: rgba(46, 189, 133, 0.14); color: #2ebd85; } .ds-badge-sell { background-color: rgba(246, 70, 92, 0.14); color: #f6465c; } .ds-badge-dividend { background-color: rgba(255, 176, 32, 0.14); color: #ffb020; }"
+    },
+    {
+      "name": "Toggle Group",
+      "kind": "input",
+      "refersTo": "chip-toggle-active",
+      "description": "Sélecteur segmenté (devise, mode valeur/performance).",
+      "html": "<div class=\"ds-toggle-group\"><button class=\"ds-toggle-btn\">USD</button><button class=\"ds-toggle-btn ds-toggle-btn--active\">EUR</button></div>",
+      "css": ".ds-toggle-group { display: flex; background: rgba(255, 255, 255, 0.035); padding: 4px; border-radius: 8px; gap: 2px; } .ds-toggle-btn { padding: 6px 12px; border: none; background: none; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 500; border-radius: 6px; cursor: pointer; color: #8b93a1; } .ds-toggle-btn--active { background-color: #1b1e25; color: #eceff4; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }"
+    },
+    {
+      "name": "Bottom Nav",
+      "kind": "nav",
+      "refersTo": "bottom-nav",
+      "description": "Navigation basse fixe mobile, 5 onglets, zone de sécurité respectée.",
+      "html": "<nav class=\"ds-bottom-nav\"><button class=\"ds-bottom-nav-btn ds-bottom-nav-btn--active\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12l9-9 9 9M5 10v10h14V10\"/></svg><span>Accueil</span></button><button class=\"ds-bottom-nav-btn\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M4 4h16v16H4z\"/></svg><span>Positions</span></button></nav>",
+      "css": ".ds-bottom-nav { display: flex; position: relative; background: #14161b; border-top: 1px solid rgba(255, 255, 255, 0.07); padding: 4px 4px 6px; } .ds-bottom-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0 6px; border: none; background: none; font-family: 'Archivo', sans-serif; font-size: 11px; font-weight: 500; color: #8b93a1; } .ds-bottom-nav-btn--active { color: #00d3f2; }"
+    },
+    {
+      "name": "Score Dial",
+      "kind": "custom",
+      "refersTo": "score-dial",
+      "description": "Demi-donut SVG signature synthétisant le score fondamental d'un titre.",
+      "html": "<div class=\"ds-score-dial\"><svg class=\"ds-score-arc\" viewBox=\"0 0 200 110\"><path class=\"ds-score-arc-track\" d=\"M10,100 A90,90 0 0 1 190,100\" stroke-width=\"9\" fill=\"none\"/><path class=\"ds-score-arc-val\" data-signal=\"buy\" d=\"M10,100 A90,90 0 0 1 190,100\" stroke-width=\"9\" fill=\"none\" stroke-dasharray=\"283\" stroke-dashoffset=\"70\" stroke-linecap=\"round\"/></svg><div class=\"ds-score-dial-center\"><span class=\"ds-score-val\">78</span></div></div>",
+      "css": ".ds-score-dial { position: relative; width: 100%; max-width: 220px; } .ds-score-arc { display: block; width: 100%; height: auto; overflow: visible; } .ds-score-arc-track { stroke: #1b1e25; } .ds-score-arc-val { stroke: #8b93a1; transition: stroke-dashoffset 0.7s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.3s ease; } .ds-score-arc-val[data-signal='buy'] { stroke: #2ebd85; } .ds-score-arc-val[data-signal='sell'] { stroke: #f6465c; } .ds-score-dial-center { position: absolute; inset: auto 0 15.3%; display: flex; justify-content: center; pointer-events: none; } .ds-score-val { font-family: 'Roboto Mono', monospace; font-size: 36px; font-weight: 700; color: #eceff4; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le Terminal de Nuit",
+    "overview": "Your Portfolio revendique sa filiation avec les écrans de trading professionnels — l'ergonomie TradingView portée à un public particulier — mais refuse leur bruit visuel. La surface est near-black par défaut (#0a0b0e), les panneaux se détachent par de très fines bordures translucides plutôt que par des ombres, et le verre dépoli (backdrop-filter: blur()) marque les couches temporaires (modales, en-têtes, menus) sans jamais devenir un effet décoratif permanent. Tout chiffre — cours, P&L, pourcentage — s'aligne en Roboto Mono pour que l'œil compare des colonnes sans effort ; tout le reste parle en Archivo.\n\nL'écran refuse deux choses par construction : le bruit chromatique (le cyan de marque est un signal, pas un décor) et le chiffre inventé (une valeur absente s'écrit « — », jamais un zéro silencieux ni une carte vide). Le système assume une densité d'information élevée — c'est un terminal, pas une brochure — et la maîtrise par la hiérarchie typographique et l'espacement plutôt que par la simplification du contenu.",
+    "keyCharacteristics": [
+      "Near-black par défaut, thème clair symétrique et commutable, jamais un simple filtre d'inversion.",
+      "Glassmorphism réservé aux couches temporaires (modales, en-têtes sticky, menus déroulants) — jamais sur une carte au repos.",
+      "Cyan Signal (#00d3f2) rare et fonctionnel : CTA principal, état actif, focus. Vert/rouge exclusivement financiers.",
+      "Chiffres toujours en Roboto Mono tabulaire ; le reste de l'UI en Archivo.",
+      "Bento grid : cartes asymétriques à coins généreusement arrondis (18px), bordures à faible opacité plutôt que des ombres.",
+      "Mobile-first natif : navigation basse fixe, FAB circulaire, modales qui deviennent des bottom sheets sous 1024px."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Le Cyan Signal n'apparaît que sur une action ou un état — CTA principal, actif, focus — jamais en décor ou en fond de section. S'il n'y a ni action ni état à signaler, il n'y a pas de cyan sur l'écran.",
+        "section": "colors"
+      },
+      {
+        "name": "The Financial Color Rule",
+        "body": "Vert et rouge ne désignent que la performance financière (gain/perte, achat/vente). Un état d'interface générique (succès de formulaire, erreur de validation) utilise l'encre et le Cyan Signal, jamais vert/rouge — pour qu'aucune couleur ne puisse se lire comme une variation de marché qu'elle n'est pas.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Numbers Rule",
+        "body": "Toute donnée chiffrée destinée à être comparée en colonne ou suivie dans le temps (cours, PRU, P&L, pourcentages, valeur de score) s'écrit en Roboto Mono. Un chiffre en Archivo est un signal que ce n'est pas une donnée à comparer.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-At-Rest Rule",
+        "body": "Aucune carte, tuile ou conteneur de contenu ne porte d'ombre à l'état de repos. La profondeur au repos vient uniquement de la bordure fil et du contraste de surface ; l'ombre est réservée à la réponse (hover) ou au flottement réel (FAB, modale, menu).",
+        "section": "elevation"
+      },
+      {
+        "name": "The Sheet Corner Rule",
+        "body": "Une modale desktop a quatre coins arrondis (12px) posée au centre de l'écran ; la même modale sur mobile n'arrondit que ses deux coins hauts (16px 16px 0 0) car elle colle au bord bas de l'écran, en cohérence avec sa physique de bottom sheet.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do garder le Cyan Signal réservé à l'action et à l'état actif — The One Signal Rule.",
+      "Do écrire toute donnée chiffrée comparable en Roboto Mono — The Tabular Numbers Rule.",
+      "Do détacher une carte au repos par la seule bordure fil, jamais par une ombre — The Flat-At-Rest Rule.",
+      "Do remplacer toute donnée manquante par un tiret discret « — », jamais une carte vide ni « Donnée indisponible ».",
+      "Do arrondir une bottom sheet mobile uniquement en haut (16px 16px 0 0) — The Sheet Corner Rule."
+    ],
+    "donts": [
+      "Don't utiliser vert/rouge pour un état d'UI générique (succès/erreur de formulaire) — réservés à la performance financière, The Financial Color Rule.",
+      "Don't appliquer backdrop-filter: blur() à une carte de contenu statique ; le flou signale une couche temporaire (modale, en-tête, menu), pas une carte au repos.",
+      "Don't introduire une étape de build ou un framework JS : le projet est vanilla JS/CSS zero-build par contrainte technique assumée.",
+      "Don't reformater public/index.html avec un outil générique — son script inline est verrouillé par un hash CSP (npm run check:csp)."
+    ]
+  }
+}
