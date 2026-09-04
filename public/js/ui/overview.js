@@ -206,7 +206,7 @@ export const overview = {
                         ${stats.unrealizedPnL >= 0 ? '+' : ''}${Utils.formatCurrency(stats.unrealizedPnL, curr)}
                         <span class="percent">(${Utils.formatPercent(stats.unrealizedPercent)})</span>
                     </div>
-                    <div class="stat-sub">Coût d'achat actions : ${Utils.formatCurrency(stats.holdingsCost, curr)}</div>
+                    <div class="stat-sub">Coût d'achat actions : <strong>${Utils.formatCurrency(stats.holdingsCost, curr)}</strong></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Gain réalisé</div>

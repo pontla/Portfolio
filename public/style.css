@@ -334,6 +334,8 @@ header {
 }
 
 .stat-card {
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 20px;
@@ -343,6 +345,10 @@ header {
 
 .stat-card:hover {
     box-shadow: 0 4px 6px -1px var(--shadow);
+}
+
+.stat-card > *:last-child {
+    margin-top: auto;
 }
 
 .stat-label {
@@ -364,6 +370,13 @@ header {
 .stat-sub {
     font-size: 13px;
     color: var(--text-secondary);
+}
+
+.stat-sub strong,
+.stat-card [data-stat] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
 }
 
 .currency {
