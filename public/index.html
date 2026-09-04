@@ -799,7 +799,7 @@
                 <form id="transactionForm">
                     <div class="form-group" id="portfolioSelectGroup">
                         <label for="targetPortfolioSelect">Portefeuille concerné</label>
-                        <select name="portfolioId" id="targetPortfolioSelect" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
+                        <select name="portfolioId" id="targetPortfolioSelect" required style="width:100%; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px;">
                             <!-- Injected dynamically by JS -->
                         </select>
                     </div>
@@ -852,7 +852,7 @@
                         </div>
                         <div class="form-group" id="priceCurrencyGroup">
                             <label for="priceCurrencyField">Devise saisie</label>
-                            <select name="priceCurrency" id="priceCurrencyField" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
+                            <select name="priceCurrency" id="priceCurrencyField" style="width:100%; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px;">
                                 <option value="USD">USD ($)</option>
                                 <option value="EUR">EUR (€)</option>
                             </select>
@@ -913,30 +913,30 @@
                     </button>
                 </div>
 
-                <p style="font-size:13px; color:var(--text-secondary); margin:20px 0 15px;">
+                <p class="settings-hint settings-hint--lead">
                     Prix et historiques en temps réel via Yahoo Finance (proxy). Aucune clé API requise.
                     <br><i>En cas d'indisponibilité du proxy, l'app repasse automatiquement en mode simulation.</i>
                 </p>
                 <button type="button" id="reloadPricesBtn" class="btn-primary full-width">Recharger les prix</button>
-                <button type="button" id="syncDividendsBtn" class="btn-primary full-width" style="margin-top:10px;">Synchroniser les dividendes</button>
+                <button type="button" id="syncDividendsBtn" class="btn-primary full-width">Synchroniser les dividendes</button>
 
-                <p style="font-size:13px; color:#666; margin:20px 0 10px 0;">
+                <p class="settings-hint">
                     Transactions (CSV) — colonnes séparées par <b>;</b>, nombres avec virgule (ex: 10,5).
                     <br>Types : BUY, SELL, DEPOSIT, WITHDRAWAL, DIVIDEND, FEE. Devises : USD, EUR.
                     <br>Colonne <b>cashSource</b> (achats) : CASH (prélevé sur le cash) ou DIRECT (acheté hors cash).
                 </p>
-                <button type="button" id="downloadTemplateBtn" class="btn-primary full-width" style="background:#374151;">Télécharger le modèle</button>
-                <button type="button" id="exportCsvBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Exporter en CSV</button>
-                <button type="button" id="importCsvBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Importer un CSV</button>
+                <button type="button" id="downloadTemplateBtn" class="btn-primary full-width">Télécharger le modèle</button>
+                <button type="button" id="exportCsvBtn" class="btn-primary full-width">Exporter en CSV</button>
+                <button type="button" id="importCsvBtn" class="btn-primary full-width">Importer un CSV</button>
                 <input type="file" id="importCsvInput" accept=".csv,text/csv" style="display:none;">
 
-                <p style="font-size:13px; color:#666; margin:20px 0 10px 0;">
+                <p class="settings-hint">
                     Résumé IA (optionnel) — choisis ton fournisseur et saisis ta clé une fois.
                     Elle est chiffrée côté serveur, liée à ton compte (donc dispo sur tous tes
                     appareils) et n'est jamais réaffichée. Aucun fournisseur = résumé factuel sans IA.
                 </p>
-                <div class="form-group" style="margin-bottom:10px;">
-                    <select id="aiProviderSelect" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
+                <div class="form-group form-group--tight">
+                    <select id="aiProviderSelect" style="width:100%; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px;">
                         <option value="">Aucun (résumé factuel)</option>
                         <option value="anthropic">Anthropic (Claude)</option>
                         <option value="openai">OpenAI (ChatGPT)</option>
@@ -945,13 +945,13 @@
                         <option value="groq">Groq (Llama 3.3 70B)</option>
                     </select>
                 </div>
-                <div class="form-group" style="margin-bottom:10px;">
+                <div class="form-group form-group--tight">
                     <input type="password" id="aiKeyInput" placeholder="Clé API" autocomplete="off">
                 </div>
-                <button type="button" id="saveAiKeyBtn" class="btn-primary full-width" style="background:#374151;">Enregistrer la clé</button>
-                <button type="button" id="clearAiKeyBtn" class="btn-primary full-width" style="background:#374151; margin-top:10px;">Supprimer la clé de ce fournisseur</button>
+                <button type="button" id="saveAiKeyBtn" class="btn-primary full-width">Enregistrer la clé</button>
+                <button type="button" id="clearAiKeyBtn" class="btn-primary full-width">Supprimer la clé de ce fournisseur</button>
 
-                <button type="button" id="logoutBtn" class="btn-primary full-width" style="background:#ef4444; margin-top:20px;">Se déconnecter</button>
+                <button type="button" id="logoutBtn" class="btn-primary full-width">Se déconnecter</button>
             </div>
         </div>
     </div>

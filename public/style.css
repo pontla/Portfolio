@@ -101,7 +101,7 @@
     --soft: #414a58;
     --soft2: #55606e;
     --dim: #6a7382;
-    --dim2: #98a1ae;
+    --dim2: #626d7c;
 
     --l1: rgba(15, 23, 42, 0.11);
     --l2: rgba(15, 23, 42, 0.15);
@@ -3869,6 +3869,7 @@ textarea:focus {
     background: var(--f3) !important;
     color: var(--txt);
     border: 1px solid var(--l3) !important;
+    padding: 10px;
 }
 select option {
     background: var(--surf);
@@ -4247,6 +4248,7 @@ textarea:focus {
     background: var(--f3) !important;
     color: var(--txt);
     border: 1px solid var(--l3) !important;
+    padding: 10px;
 }
 select option {
     background: var(--surf);
@@ -7085,4 +7087,24 @@ select option {
 .price-stale::after {
     content: ' ·';
     opacity: 0.6;
+}
+
+/* Modale Réglages : rythme et boutons partagés (remplace les styles inline) */
+.settings-hint {
+    margin: 20px 0 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.settings-hint--lead {
+    margin-bottom: 15px;
+}
+.form-group--tight {
+    margin-bottom: 10px;
+}
+.modal-body .btn-primary + .btn-primary {
+    margin-top: 10px;
+}
+#logoutBtn {
+    margin-top: 20px;
+    background: var(--dn);
 }
