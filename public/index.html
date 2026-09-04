@@ -125,12 +125,19 @@
             <h2 id="authTitle">Connexion</h2>
             <form id="authForm">
                 <div class="form-group" id="authEmailGroup">
-                    <label>Email</label>
-                    <input type="email" name="email" required autocomplete="email">
+                    <label for="authEmailInput">Email</label>
+                    <input type="email" name="email" id="authEmailInput" required autocomplete="email">
                 </div>
                 <div class="form-group" id="authPasswordGroup">
-                    <label>Mot de passe</label>
-                    <input type="password" name="password" required autocomplete="current-password" minlength="6">
+                    <label for="authPasswordInput">Mot de passe</label>
+                    <input
+                        type="password"
+                        name="password"
+                        id="authPasswordInput"
+                        required
+                        autocomplete="current-password"
+                        minlength="6"
+                    />
                 </div>
                 <p id="authError" class="auth-error" style="display:none;"></p>
                 <p id="authInfo" class="auth-error" style="display:none; color:var(--accent-green);"></p>
@@ -786,20 +793,20 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 id="transactionModalTitle">Nouvelle Transaction</h3>
-                <button class="close-btn" id="closeModalBtn"><i data-lucide="x"></i></button>
+                <button class="close-btn" id="closeModalBtn" aria-label="Fermer"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
                 <form id="transactionForm">
                     <div class="form-group" id="portfolioSelectGroup">
-                        <label>Portefeuille concerné</label>
+                        <label for="targetPortfolioSelect">Portefeuille concerné</label>
                         <select name="portfolioId" id="targetPortfolioSelect" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
                             <!-- Injected dynamically by JS -->
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label>Type d'opération</label>
-                        <div class="radio-group">
+                        <label id="txTypeLabel">Type d'opération</label>
+                        <div class="radio-group" role="group" aria-labelledby="txTypeLabel">
                             <label class="radio-label">
                                 <input type="radio" name="type" value="BUY" checked>
                                 <span>Achat</span>
@@ -840,11 +847,11 @@
                             <input type="number" name="qty" id="qtyInputField" step="any" min="0.000001" required>
                         </div>
                         <div class="form-group" id="priceGroup">
-                            <label id="priceLabel">Prix unitaire</label>
+                            <label id="priceLabel" for="priceInputField">Prix unitaire</label>
                             <input type="number" name="price" id="priceInputField" step="any" min="0" required>
                         </div>
                         <div class="form-group" id="priceCurrencyGroup">
-                            <label>Devise saisie</label>
+                            <label for="priceCurrencyField">Devise saisie</label>
                             <select name="priceCurrency" id="priceCurrencyField" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; font-size:14px; background:white;">
                                 <option value="USD">USD ($)</option>
                                 <option value="EUR">EUR (€)</option>
@@ -853,13 +860,13 @@
                     </div>
 
                     <div class="form-group" id="amountGroup" style="display: none;">
-                        <label id="amountLabel">Montant total ($)</label>
+                        <label id="amountLabel" for="amountInputField">Montant total ($)</label>
                         <input type="number" name="amount" id="amountInputField" step="any" min="0.01" placeholder="Ex: 500">
                     </div>
 
                     <div class="form-group" id="cashSourceGroup">
-                        <label>Financement de l'achat</label>
-                        <div class="radio-group">
+                        <label id="cashSourceLabel">Financement de l'achat</label>
+                        <div class="radio-group" role="group" aria-labelledby="cashSourceLabel">
                             <label class="radio-label">
                                 <input type="radio" name="cashSource" value="CASH" checked>
                                 <span>Cash du portefeuille</span>
@@ -873,13 +880,13 @@
                     </div>
 
                     <div class="form-group" id="feesGroup">
-                        <label>Frais de courtage (optionnel, dans la devise saisie)</label>
+                        <label for="feesInputField">Frais de courtage (optionnel, dans la devise saisie)</label>
                         <input type="number" name="fees" id="feesInputField" step="any" min="0" placeholder="0">
                     </div>
 
                     <div class="form-group">
-                        <label>Date</label>
-                        <input type="date" name="date" required>
+                        <label for="txDateInput">Date</label>
+                        <input type="date" name="date" id="txDateInput" required>
                     </div>
 
                     <button type="submit" class="btn-primary full-width">Enregistrer</button>
@@ -893,7 +900,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3>Données de marché</h3>
-                <button class="close-btn" id="closeSettingsBtn"><i data-lucide="x"></i></button>
+                <button class="close-btn" id="closeSettingsBtn" aria-label="Fermer"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
                 <p class="settings-section-label">Apparence</p>
@@ -981,7 +988,7 @@
         <div class="modal search-modal-content">
             <div class="search-header">
                 <h3>Recherche de symbole</h3>
-                <button class="close-btn" id="closeSearchBtn"><i data-lucide="x"></i></button>
+                <button class="close-btn" id="closeSearchBtn" aria-label="Fermer"><i data-lucide="x"></i></button>
             </div>
             <div class="search-input-wrapper">
                 <i data-lucide="search" class="search-icon"></i>
@@ -1006,18 +1013,18 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 id="portfolioModalTitle">Nouveau Portefeuille</h3>
-                <button class="close-btn" id="closePortfolioModalBtn"><i data-lucide="x"></i></button>
+                <button class="close-btn" id="closePortfolioModalBtn" aria-label="Fermer"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
                 <form id="portfolioForm">
                     <input type="hidden" name="portfolioEditId" id="portfolioEditId" value="">
                     <div class="form-group">
-                        <label>Nom du portefeuille</label>
+                        <label for="portfolioNameInput">Nom du portefeuille</label>
                         <input type="text" name="portfolioName" id="portfolioNameInput" placeholder="Ex: PEA, Crypto, CTO, Assurance Vie..." required>
                     </div>
                     <div class="form-group">
-                        <label>Couleur du thème</label>
-                        <div class="color-picker-group" id="portfolioColorPicker">
+                        <label id="portfolioColorLabel">Couleur du thème</label>
+                        <div class="color-picker-group" id="portfolioColorPicker" role="group" aria-labelledby="portfolioColorLabel">
                             <label class="color-option"><input type="radio" name="portfolioColor" value="#3b82f6" checked><span style="background:#3b82f6;"></span></label>
                             <label class="color-option"><input type="radio" name="portfolioColor" value="#10b981"><span style="background:#10b981;"></span></label>
                             <label class="color-option"><input type="radio" name="portfolioColor" value="#f59e0b"><span style="background:#f59e0b;"></span></label>
@@ -1027,8 +1034,8 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Icône</label>
-                        <div class="icon-picker-group" id="portfolioIconPicker">
+                        <label id="portfolioIconLabel">Icône</label>
+                        <div class="icon-picker-group" id="portfolioIconPicker" role="group" aria-labelledby="portfolioIconLabel">
                             <label class="icon-option"><input type="radio" name="portfolioIcon" value="" checked><span title="Automatique (selon le nom)"><i data-lucide="sparkles"></i></span></label>
                             <label class="icon-option"><input type="radio" name="portfolioIcon" value="wallet"><span><i data-lucide="wallet"></i></span></label>
                             <label class="icon-option"><input type="radio" name="portfolioIcon" value="banknote"><span><i data-lucide="banknote"></i></span></label>
