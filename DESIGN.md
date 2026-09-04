@@ -59,6 +59,12 @@ typography:
     fontWeight: 400
     lineHeight: 1.4
     letterSpacing: 'normal'
+  caption:
+    fontFamily: "Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontSize: '12px'
+    fontWeight: 400
+    lineHeight: 1.3
+    letterSpacing: 'normal'
   label:
     fontFamily: "Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     fontSize: '11px'
@@ -200,6 +206,7 @@ Six couleurs que l'utilisateur choisit pour identifier _son_ portefeuille — un
 - **Headline** (700, 18–26px, 1.3) : titres de section, valeur d'en-tête de graphique.
 - **Title** (600, 14–15px, 1.3) : titres de carte, de modale.
 - **Body** (400, 13px, 1.4) : texte courant, libellés de formulaire.
+- **Caption** (400, 12px, 1.3) : annotations secondaires (« estimation, 45 jours »), en-têtes de colonne des tableaux compacts (dividendes/résultats à venir). Non gras, non uppercase — se distingue du Label par son registre plus discret.
 - **Label** (600, 11px, 1.2, 0.3px, souvent uppercase) : badges de transaction, libellés de navigation basse.
 - **Numeric** (500–700, 12–36px selon contexte, `Roboto Mono`, letter-spacing légèrement négatif sur les grandes valeurs) : cours, P&L, pourcentages, valeur de synthèse du score.
 

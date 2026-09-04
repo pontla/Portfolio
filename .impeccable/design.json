@@ -217,6 +217,10 @@
         "displayName": "Body",
         "purpose": "Texte courant, libellés de formulaire."
       },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Annotations secondaires et en-têtes de colonne des tableaux compacts (dividendes/résultats à venir). Non gras, se distingue du Label plus insistant."
+      },
       "label": {
         "displayName": "Label",
         "purpose": "Badges de transaction, libellés de navigation basse, souvent uppercase."
