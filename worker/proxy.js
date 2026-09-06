@@ -7,7 +7,7 @@
  * CONFIG.PROXY_BASE_URL (js/app.js).
  *
  * Routes exposees :
- *   GET /quote?symbol=SYM                      -> { symbol, price, currency }
+ *   GET /quote?symbol=SYM                      -> { symbol, price, currency, quoteType }
  *   GET /history?symbol=SYM&from=YYYY-MM-DD&to=YYYY-MM-DD -> { "YYYY-MM-DD": close, ... }
  *   GET /search?q=QUERY                        -> [{ displaySymbol, description, type }]
  *   GET /dividends?symbol=SYM&from=YYYY-MM-DD&to=YYYY-MM-DD -> [{ date, amountPerShare }]
@@ -148,6 +148,10 @@ async function handleQuote(symbol) {
             symbol: meta.symbol || symbol,
             price,
             currency: meta.currency || 'USD',
+            // EQUITY | MUTUALFUND | ETF | CRYPTOCURRENCY... Sert a classer un
+            // OPCVM autrement qu'en action des le rafraichissement des cours,
+            // sans attendre une visite de la fiche valeur.
+            quoteType: meta.instrumentType || null,
         },
         200,
         60
@@ -243,6 +247,8 @@ async function handleFundamentals(symbol, apiKey) {
         ipo: null,
         weburl: null,
         logo: null,
+        quoteType: null,
+        /** @type {any} */ fund: null,
         fundamentalsSource: null,
     };
 
@@ -343,6 +349,9 @@ async function handleFundamentals(symbol, apiKey) {
             out.name = out.name || qs.name;
             out.exchange = out.exchange || qs.exchange;
             out.industry = out.industry || qs.sector || qs.industry || null;
+            // Bloc OPCVM / ETF : null pour une action, ce qui masque la carte.
+            out.quoteType = qs.quoteType;
+            out.fund = qs.fund;
             out.country = out.country || qs.country || null;
             out.weburl = out.weburl || qs.website || null;
             // La source ne se declare que si un ratio a reellement ete servi :
@@ -498,8 +507,11 @@ const rawNum = (v) => {
 };
 
 async function fetchQuoteSummary(symbol) {
+    // Les modules `fund*` et `topHoldings` ne repondent que pour les OPCVM et
+    // ETF ; Yahoo omet simplement ceux qui ne s'appliquent pas plutot que de
+    // rejeter la requete, une action ne coute donc rien de plus.
     const modules =
-        'defaultKeyStatistics,financialData,summaryDetail,recommendationTrend,earningsTrend,price,assetProfile';
+        'defaultKeyStatistics,financialData,summaryDetail,recommendationTrend,earningsTrend,price,assetProfile,fundProfile,fundPerformance,topHoldings';
     const base = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
     const run = async (withAuth) => {
         const headers = /** @type {Record<string, string>} */ ({ ...YAHOO_HEADERS });
@@ -521,6 +533,77 @@ async function fetchQuoteSummary(symbol) {
     const r = data && data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0];
     if (!r) throw new Error('quoteSummary vide');
     return r;
+}
+
+/**
+ * Bloc OPCVM / ETF de quoteSummary, ou `null` pour une action.
+ *
+ * Champs volontairement absents, verifies vides sur tous les fonds europeens
+ * testes : frais courants (`annualReportExpenseRatio`, `netExpRatio`... a 0),
+ * `categoryName`, `totalAssets` et `ytdReturn`. Les servir donnerait des « 0,00 %
+ * de frais » qui se lisent comme une information alors que c'est une absence ;
+ * l'UI affiche un tiret. Idem pour `equityHoldings`, dont les ratios sortent a
+ * une echelle incoherente (P/E de 0,03).
+ * @param {any} r resultat quoteSummary brut
+ */
+function normalizeFund(r) {
+    const pr = r.price || {};
+    const quoteType = pr.quoteType || null;
+    const fp = r.fundProfile;
+    const fpf = r.fundPerformance;
+    const th = r.topHoldings;
+    if (!fp && !fpf && !th) return null;
+
+    const dks = r.defaultKeyStatistics || {};
+    const inceptionTs = rawNum(dks.fundInceptionDate);
+    const risk = (fpf && fpf.riskOverviewStatistics) || {};
+
+    // Yahoo sert les ponderations sectorielles comme une liste d'objets a une
+    // seule cle ({ consumer_cyclical: { raw } }) : on l'aplatit en paires.
+    const sectorWeights = (
+        ((th && th.sectorWeightings) || []).flatMap((entry) =>
+            Object.entries(entry || {}).map(([sector, v]) => ({ sector, weight: rawNum(v) }))
+        ) || []
+    ).filter((s) => s.weight != null);
+
+    return {
+        quoteType,
+        family: (fp && fp.family) || null,
+        legalType: (fp && fp.legalType) || null,
+        inceptionDate: inceptionTs ? new Date(inceptionTs * 1000).toISOString().slice(0, 10) : null,
+        morningstarRating: rawNum(dks.morningStarOverallRating),
+        beta3Year: rawNum(dks.beta3Year),
+        riskRating: rawNum(risk.riskRating),
+        // Statistiques de risque par horizon (5y, 3y, 10y selon l'anciennete).
+        riskStatistics: (
+            (risk.riskStatistics || []).map((s) => ({
+                period: s.year || null,
+                alpha: rawNum(s.alpha),
+                beta: rawNum(s.beta),
+                stdDev: rawNum(s.stdDev),
+                sharpeRatio: rawNum(s.sharpeRatio),
+            })) || []
+        ).filter((s) => s.period),
+        // Performances calendaires, en fraction. L'annee en cours revient vide
+        // tant qu'elle n'est pas close : elle est ecartee plutot que servie a 0.
+        annualReturns: ((fpf && fpf.annualTotalReturns && fpf.annualTotalReturns.returns) || [])
+            .map((x) => ({ year: x.year || null, ret: rawNum(x.annualValue) }))
+            .filter((x) => x.year && x.ret != null),
+        allocation: {
+            stock: rawNum(th && th.stockPosition),
+            bond: rawNum(th && th.bondPosition),
+            cash: rawNum(th && th.cashPosition),
+            other: rawNum(th && th.otherPosition),
+        },
+        holdings: (
+            ((th && th.holdings) || []).map((h) => ({
+                symbol: h.symbol || null,
+                name: h.holdingName || null,
+                weight: rawNum(h.holdingPercent),
+            })) || []
+        ).filter((h) => h.name),
+        sectorWeights,
+    };
 }
 
 function normalizeQuoteSummary(symbol, r) {
@@ -611,6 +694,8 @@ function normalizeQuoteSummary(symbol, r) {
             strongSell: t0.strongSell ?? null,
         },
         estimates,
+        quoteType: pr.quoteType || null,
+        fund: normalizeFund(r),
         sector: ap.sector || null,
         industry: ap.industry || null,
         country: ap.country || null,

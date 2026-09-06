@@ -17,6 +17,8 @@ export const APIService = {
     quoteCache: {},
     /** Devise de cotation par symbole, telle que renvoyee par l'API (pas de TTL). */
     currencyCache: /** @type {Record<string, string>} */ ({}),
+    /** Nature du titre (EQUITY, MUTUALFUND, ETF...) par symbole. Pas de TTL. */
+    quoteTypeCache: /** @type {Record<string, string>} */ ({}),
     candleCache: {},
     cachedFxRate: null,
 
@@ -144,6 +146,8 @@ export const APIService = {
                 // cache de cours, qui expire en 5 minutes alors que la devise
                 // d'un titre ne change pas.
                 if (data.currency) this.currencyCache[symbol] = String(data.currency).toUpperCase();
+                if (data.quoteType)
+                    this.quoteTypeCache[symbol] = String(data.quoteType).toUpperCase();
                 return data.price;
             }
             throw new Error('prix invalide');
@@ -161,6 +165,12 @@ export const APIService = {
         if (!symbol) return null;
         if (symbol.startsWith('$')) return 'USD';
         return this.currencyCache[symbol] || null;
+    },
+
+    /** Nature du titre deja resolue par l'API, sinon `null`. Synchrone. */
+    cachedQuoteType(symbol) {
+        if (!symbol || symbol.startsWith('$')) return null;
+        return this.quoteTypeCache[symbol] || null;
     },
 
     /**
@@ -361,6 +371,8 @@ export const APIService = {
             this._fundCache[symbol] = { timestamp: now, data };
             if (data && data.currency)
                 this.currencyCache[symbol] = String(data.currency).toUpperCase();
+            if (data && data.quoteType)
+                this.quoteTypeCache[symbol] = String(data.quoteType).toUpperCase();
             return data;
         } catch (e) {
             console.warn(`Fundamentals proxy error pour ${symbol}`, e);

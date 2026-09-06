@@ -44,6 +44,9 @@ export class PortfolioService {
         // transactions (valeur figee a la saisie) puis corrigee par l'API au
         // rafraichissement. Consultee via symbolCurrency(), jamais en direct.
         this.symbolCurrencies = /** @type {Record<string, string>} */ ({});
+        // Nature du titre (EQUITY, MUTUALFUND, ETF...) servie par l'API, pour
+        // classer un OPCVM autrement que sur la forme de son symbole.
+        this.symbolTypes = /** @type {Record<string, string>} */ ({});
         this.fxRate = 1.08;
         this.fxRates = /** @type {Record<string, number|null>} */ ({
             USD: 1,
@@ -343,6 +346,20 @@ export class PortfolioService {
         return this.symbolCurrencies[symbol] || Utils.getCurrency(symbol);
     }
 
+    /**
+     * Classe d'actif d'un symbole. La nature servie par l'API prime sur la
+     * forme du symbole : un OPCVM n'a pas de ticker de place reconnaissable.
+     * @param {string} symbol
+     */
+    symbolAssetClass(symbol) {
+        const type = this.symbolTypes[symbol];
+        if (type === 'MUTUALFUND') return 'Fonds & OPCVM';
+        if (type === 'CRYPTOCURRENCY') return 'Crypto';
+        // ETF : Yahoo classe ainsi aussi bien un tracker actions qu'un OPCVM
+        // cote. On garde le repli sur la forme du symbole pour les distinguer.
+        return Utils.getAssetClass(symbol);
+    }
+
     async refreshPrices() {
         const uniqueSymbols = [
             ...new Set(
@@ -364,6 +381,8 @@ export class PortfolioService {
                 // colonne `currency`, ou deduites d'un suffixe inconnu.
                 const apiCurrency = APIService.cachedCurrency(sym);
                 if (apiCurrency) this.symbolCurrencies[sym] = apiCurrency;
+                const apiType = APIService.cachedQuoteType(sym);
+                if (apiType) this.symbolTypes[sym] = apiType;
             })
         );
         this.unavailablePrices.sort();
