@@ -249,6 +249,15 @@ export const Utils = {
             BR: 'Euronext Bruxelles',
             LS: 'Euronext Lisbonne',
             MC: 'Bolsa de Madrid',
+            F: 'Francfort',
+            SG: 'Stuttgart',
+            MU: 'Munich',
+            HM: 'Hambourg',
+            DU: 'Düsseldorf',
+            BE: 'Berlin',
+            VI: 'Vienne',
+            HE: 'Helsinki',
+            IR: 'Euronext Dublin',
             HK: 'Hong Kong HKSE',
             KS: 'Korea KOSPI',
             SI: 'Singapore SGX',
@@ -258,13 +267,44 @@ export const Utils = {
         return map[suffix] || suffix;
     },
 
+    // Heuristique de DERNIER RECOURS : deduit la devise du suffixe de place.
+    // La devise fait autorite quand elle vient de l'API (champ `currency` de
+    // /quote, stocke sur la transaction) ; passer plutot par
+    // PortfolioManager.symbolCurrency(), qui consulte l'API avant de retomber
+    // ici. Un symbole sans suffixe connu tombe en USD : c'est faux pour un
+    // OPCVM (0P0001OOS9.F) tant que l'API n'a pas repondu.
+    // Seules EUR / GBP / CAD sont rendues : ce sont les devises couvertes par
+    // APIService.FX_FALLBACK. En renvoyer une autre produirait une conversion
+    // silencieusement absente dans convertCurrency().
     getCurrency: (symbol) => {
         if (!symbol) return 'USD';
         if (symbol.startsWith('$')) return 'USD';
         const parts = symbol.split('.');
         if (parts.length === 1) return 'USD';
         const suffix = parts[1];
-        const eurSuffixes = ['PA', 'DE', 'MI', 'AS', 'BR', 'LS', 'MC', 'NL'];
+        // Zone euro : Paris, XETRA, Milan, Amsterdam, Bruxelles, Lisbonne,
+        // Madrid, + les places allemandes qui cotent les OPCVM europeens
+        // (Francfort, Stuttgart, Munich, Hambourg, Dusseldorf, Berlin) et
+        // Vienne / Helsinki / Irlande.
+        const eurSuffixes = [
+            'PA',
+            'DE',
+            'MI',
+            'AS',
+            'BR',
+            'LS',
+            'MC',
+            'NL',
+            'F',
+            'SG',
+            'MU',
+            'HM',
+            'DU',
+            'BE',
+            'VI',
+            'HE',
+            'IR',
+        ];
         if (eurSuffixes.includes(suffix)) return 'EUR';
         if (suffix === 'L') return 'GBP';
         if (suffix === 'TO' || suffix === 'V') return 'CAD';

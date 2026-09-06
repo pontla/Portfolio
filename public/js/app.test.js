@@ -163,7 +163,11 @@ describe('App.renderResearchChart - fenetre de dates & options du graphe', () =>
         App.chartState = { researchRange: range, currency: 'EUR' };
         App.researchSymbol = researchSymbol;
         App.researchChart = null;
-        App.service = { calculatePortfolio: () => ({ holdings }) };
+        App.service = {
+            calculatePortfolio: () => ({ holdings }),
+            // Les cas testes ne portent que sur AAPL, cote en USD.
+            symbolCurrency: () => 'USD',
+        };
         App.chartInk = () => ({ tick: '#111', grid: '#222' });
         APIService.getDailyHistory = (sym, start, end, avg, cur) => {
             captured = { sym, start, end, avg, cur };

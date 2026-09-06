@@ -535,7 +535,7 @@ export const events = {
 
         f.symbolInput.addEventListener('blur', () => {
             if (f.symbolInput.value.trim()) {
-                f.priceCurrencyField.value = Utils.getCurrency(f.symbolInput.value.trim());
+                this._applySymbolCurrency(f.symbolInput.value.trim());
             }
         });
 
@@ -892,6 +892,27 @@ export const events = {
     // Poignees DOM de la modale de transaction. Relues a chaque appel : les
     // elements sont statiques dans index.html, et cela evite que les methodes
     // qui manipulent le formulaire dependent d'une closure de cablage.
+    /**
+     * Renseigne le champ devise pour un symbole. Affiche d'abord l'heuristique
+     * de suffixe pour ne pas laisser le champ vide, puis la remplace par la
+     * devise servie par l'API : c'est elle qui sera figee sur la transaction.
+     * Sans cela un OPCVM (0P0001OOS9.F, LU...SG) serait enregistre en USD.
+     * @param {string} symbol
+     */
+    async _applySymbolCurrency(symbol) {
+        const sym = (symbol || '').trim();
+        if (!sym) return;
+        const f = this._txForm();
+        f.priceCurrencyField.value = Utils.getCurrency(sym);
+
+        const resolved = await APIService.resolveCurrency(sym);
+        if (!resolved) return;
+        this.service.symbolCurrencies[sym] = resolved;
+        // L'utilisateur a pu changer de symbole pendant la requete.
+        if (f.symbolInput.value.trim().toUpperCase() === sym.toUpperCase())
+            f.priceCurrencyField.value = resolved;
+    },
+
     _txForm() {
         const $ = (id) => document.getElementById(id);
         return {
@@ -993,7 +1014,7 @@ export const events = {
         const symbol = /** @type {string} */ (fd.get('symbol') || '').toUpperCase();
         const enteredCurrency =
             /** @type {string} */ (fd.get('priceCurrency')) ||
-            (symbol ? Utils.getCurrency(symbol) : 'USD');
+            (symbol ? this.service.symbolCurrency(symbol) : 'USD');
         const available = this.service.convertCurrency(availableUSD, 'USD', enteredCurrency);
         const cost =
             (parseFloat(/** @type {string} */ (fd.get('qty'))) || 0) *
@@ -1051,7 +1072,9 @@ export const events = {
         f.symbolInput.value = trade.symbol;
         f.qtyInput.value = trade.qty;
         f.priceInput.value = trade.price;
-        f.priceCurrencyField.value = Utils.getCurrency(trade.symbol);
+        // Une ligne deja enregistree porte sa devise : on la reaffiche telle
+        // quelle plutot que de la rededuire, pour ne pas la reecrire a l'edition.
+        f.priceCurrencyField.value = trade.currency || this.service.symbolCurrency(trade.symbol);
         f.feesInput.value = trade.fees || '';
         f.amountInput.value = trade.amount;
         if (f.portSelect) f.portSelect.value = trade.portfolioId;
@@ -1077,7 +1100,7 @@ export const events = {
         f.symbolInput.value = symbol;
         f.qtyInput.value = qty;
         f.priceInput.value = price;
-        f.priceCurrencyField.value = Utils.getCurrency(symbol);
+        this._applySymbolCurrency(symbol);
 
         f.modal.classList.add('open');
     },
@@ -1095,8 +1118,9 @@ export const events = {
         let amount = parseFloat(/** @type {string} */ (fd.get('amount'))) || 0;
         if (type === 'BUY' || type === 'SELL') {
             const enteredCurrency =
-                /** @type {string} */ (fd.get('priceCurrency')) || Utils.getCurrency(symbol);
-            const nativeCurrency = Utils.getCurrency(symbol);
+                /** @type {string} */ (fd.get('priceCurrency')) ||
+                this.service.symbolCurrency(symbol);
+            const nativeCurrency = this.service.symbolCurrency(symbol);
             if (enteredCurrency !== nativeCurrency) {
                 price = this.service.convertCurrency(price, enteredCurrency, nativeCurrency);
                 fees = this.service.convertCurrency(fees, enteredCurrency, nativeCurrency);
@@ -1104,7 +1128,7 @@ export const events = {
         } else if (type === 'DIVIDEND' && symbol && !symbol.startsWith('$')) {
             // Le montant est saisi en USD (libelle du champ) : on le stocke dans la devise
             // native du titre, comme la synchro auto, pour que le moteur (toUSD) soit coherent.
-            const nativeCurrency = Utils.getCurrency(symbol);
+            const nativeCurrency = this.service.symbolCurrency(symbol);
             if (nativeCurrency !== 'USD') {
                 amount = this.service.convertCurrency(amount, 'USD', nativeCurrency);
             }
@@ -1118,7 +1142,8 @@ export const events = {
             if (
                 prev &&
                 prev.fxRate > 0 &&
-                Utils.getCurrency(prev.symbol) === Utils.getCurrency(symbol)
+                (prev.currency || this.service.symbolCurrency(prev.symbol)) ===
+                    this.service.symbolCurrency(symbol)
             ) {
                 carriedFxRate = prev.fxRate;
             }
@@ -1215,7 +1240,7 @@ export const events = {
                 const f = this._txForm();
                 f.symbolInput.value = sym;
                 searchModal.classList.remove('open');
-                f.priceCurrencyField.value = Utils.getCurrency(sym);
+                this._applySymbolCurrency(sym);
 
                 const livePrice = await APIService.getCurrentPrice(sym);
                 f.priceInput.value = livePrice.toFixed(2);

@@ -313,6 +313,47 @@ async function handleFundamentals(symbol, apiKey) {
         }
     }
 
+    // Repli international : quoteSummary sert les memes ratios pour Euronext,
+    // Xetra et les OPCVM, la ou Finnhub s'arrete aux actions US. Declenche aussi
+    // quand Finnhub a repondu a vide, pour ne pas laisser la carte "Donnees
+    // cles" a "—" alors que la donnee existe cote Yahoo.
+    if (out.fundamentalsSource !== 'finnhub') {
+        try {
+            const qs = normalizeQuoteSummary(symbol, await fetchQuoteSummary(symbol));
+            // Yahoo exprime marges, ROE, croissance et rendement en fraction ;
+            // Finnhub en pourcentage, et c'est cette convention qu'attend l'UI
+            // (Utils.formatPercent ne multiplie pas). D'ou le x100.
+            const toPct = (v) => (v == null ? null : v * 100);
+            out.marketCap = out.marketCap ?? qs.marketCap;
+            out.peTTM = out.peTTM ?? qs.peTrailing;
+            out.pbAnnual = out.pbAnnual ?? qs.priceToBook;
+            out.psTTM = out.psTTM ?? qs.priceToSales;
+            out.epsTTM = out.epsTTM ?? qs.trailingEps;
+            out.beta = out.beta ?? qs.beta;
+            out.roeTTM = out.roeTTM ?? toPct(qs.returnOnEquity);
+            out.netMarginTTM = out.netMarginTTM ?? toPct(qs.profitMargins);
+            out.revenueGrowthTTM = out.revenueGrowthTTM ?? toPct(qs.revenueGrowth);
+            out.dividendYield = out.dividendYield ?? toPct(qs.dividendYield);
+            out.fiftyTwoWeekHigh = out.fiftyTwoWeekHigh ?? qs.fiftyTwoWeekHigh;
+            out.fiftyTwoWeekLow = out.fiftyTwoWeekLow ?? qs.fiftyTwoWeekLow;
+            out.previousClose = out.previousClose ?? qs.previousClose;
+            out.price = out.price ?? qs.price;
+            out.volume = out.volume ?? qs.regularMarketVolume;
+            out.currency = qs.currency || out.currency;
+            out.name = out.name || qs.name;
+            out.exchange = out.exchange || qs.exchange;
+            out.industry = out.industry || qs.sector || qs.industry || null;
+            out.country = out.country || qs.country || null;
+            out.weburl = out.weburl || qs.website || null;
+            // La source ne se declare que si un ratio a reellement ete servi :
+            // sinon l'UI annoncerait Yahoo devant une carte vide.
+            if (out.peTTM != null || out.pbAnnual != null || out.roeTTM != null)
+                out.fundamentalsSource = 'yahoo';
+        } catch (e) {
+            /* quoteSummary indisponible -> champs laisses a null */
+        }
+    }
+
     return jsonResponse(out, 200, 3600); // cache 1h
 }
 

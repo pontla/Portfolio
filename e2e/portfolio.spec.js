@@ -102,6 +102,22 @@ test.describe('modale de transaction', () => {
         await expect(cashLine).toContainText('Cash');
     });
 
+    test('devise : un OPCVM europeen est saisi en EUR, pas en USD', async ({ page }) => {
+        await openTransactionModal(page);
+        const devise = page.locator('#priceCurrencyField');
+
+        // Symbole US : rien ne change.
+        await page.locator('#symbolInputField').fill('MSFT');
+        await page.locator('#symbolInputField').blur();
+        await expect(devise).toHaveValue('USD');
+
+        // OPCVM : le suffixe ne dit rien, c'est la devise servie par l'API qui
+        // doit s'imposer. Sans cela la ligne serait enregistree en dollars.
+        await page.locator('#symbolInputField').fill('0P0001OOS9.X');
+        await page.locator('#symbolInputField').blur();
+        await expect(devise).toHaveValue('EUR');
+    });
+
     test('financement : sans cash le formulaire bascule sur l achat direct', async ({ page }) => {
         // Le portefeuille de test n'a qu'un achat, aucun depot : le cash vaut 0.
         await openTransactionModal(page);

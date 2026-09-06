@@ -216,7 +216,9 @@ export const research = {
         );
         if (input) input.value = '';
 
-        const cur = Utils.getCurrency(symbol);
+        // Devise provisoire : elle est remplacee par celle de l'API des que
+        // /fundamentals a repondu, avant tout affichage de montant.
+        let cur = this.service.symbolCurrency(symbol);
         document.getElementById('researchSymbol').textContent = symbol;
         document.getElementById('researchName').textContent =
             this.assetNameCache[symbol] || 'Chargement…';
@@ -235,6 +237,13 @@ export const research = {
         ]);
         this.assetNameCache[symbol] = name;
         if (this.researchSymbol !== symbol) return; // course annulee entre-temps
+
+        // La devise de cotation fait autorite sur l'heuristique de suffixe :
+        // sans cela un OPCVM europeen s'afficherait en dollars.
+        if (fund && fund.currency) {
+            cur = String(fund.currency).toUpperCase();
+            this.service.symbolCurrencies[symbol] = cur;
+        }
 
         const price =
             fund && fund.price != null ? fund.price : await APIService.getCurrentPrice(symbol);
@@ -589,13 +598,18 @@ export const research = {
             return;
         }
 
+        // La source est annoncee telle qu'elle est : Finnhub sur les actions US,
+        // Yahoo ailleurs (Euronext, Xetra, OPCVM). Aucune des deux n'a repondu
+        // -> on le dit, plutot que de laisser croire a une limite US.
         src.textContent =
             fund.fundamentalsSource === 'finnhub'
                 ? 'Ratios : Finnhub'
-                : 'Ratios fondamentaux : actions US uniquement';
+                : fund.fundamentalsSource === 'yahoo'
+                  ? 'Ratios : Yahoo Finance'
+                  : 'Ratios fondamentaux indisponibles pour ce titre';
 
         grid.innerHTML =
-            kv('Capitalisation', Utils.formatCompact(fund.marketCap, 'USD')) +
+            kv('Capitalisation', Utils.formatCompact(fund.marketCap, cur)) +
             kv('PER (P/E TTM)', n1(fund.peTTM, 1)) +
             kv('BPA (TTM)', fund.epsTTM == null ? '—' : Utils.formatCurrency(fund.epsTTM, cur)) +
             kv('Bêta', n1(fund.beta)) +
@@ -673,7 +687,7 @@ export const research = {
         if (range === 'MAX') start.setFullYear(start.getFullYear() - 50);
         else start.setMonth(start.getMonth() - months);
 
-        const cur = Utils.getCurrency(symbol);
+        const cur = this.service.symbolCurrency(symbol);
         const stats = this.service.calculatePortfolio(this.chartState.currency);
         const h = (stats.holdings || []).find((x) => x.symbol === symbol);
 
