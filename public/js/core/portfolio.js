@@ -61,6 +61,10 @@ export class PortfolioService {
             CAD: 0.73,
         });
         this.userId = null;
+        // Identite du compte : pseudo libre (user_metadata.display_name de
+        // Supabase Auth, synchronise entre appareils) et email de connexion.
+        this.displayName = '';
+        this.userEmail = '';
         // Config IA liee au compte (table user_settings). aiProvider = fournisseur
         // choisi (non secret) ; aiConfigured = fournisseurs pour lesquels une cle
         // est stockee cote worker. Les cles elles-memes ne transitent jamais ici.
@@ -154,6 +158,9 @@ export class PortfolioService {
             session = await AuthService.refreshSession().catch(() => session);
         }
         this.userId = session.user.id;
+        this.userEmail = session.user.email || '';
+        this.displayName =
+            (session.user.user_metadata && session.user.user_metadata.display_name) || '';
 
         let portfolioRows, tradeRows;
         try {
@@ -220,6 +227,14 @@ export class PortfolioService {
         }
 
         await this._loadAiConfig();
+    }
+
+    // Met a jour le pseudo du compte (Supabase Auth user_metadata).
+    async setDisplayName(name) {
+        const user = await AuthService.updateDisplayName(name);
+        this.displayName =
+            (user && user.user_metadata && user.user_metadata.display_name) || '';
+        return this.displayName;
     }
 
     async createPortfolio(name, color = '#3b82f6') {

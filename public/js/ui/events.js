@@ -202,11 +202,40 @@ export const events = {
         const logoutBtn = document.getElementById('logoutBtn');
 
         if (settingsBtn && settingsModal) {
-            settingsBtn.onclick = () => settingsModal.classList.add('open');
+            settingsBtn.onclick = () => {
+                const pseudo = /** @type {HTMLInputElement} */ (
+                    document.getElementById('settingsPseudoInput')
+                );
+                if (pseudo) pseudo.value = this.service.displayName || '';
+                settingsModal.classList.add('open');
+            };
             closeSettings.onclick = () => settingsModal.classList.remove('open');
             settingsModal.addEventListener('click', (e) => {
                 if (e.target === settingsModal) settingsModal.classList.remove('open');
             });
+        }
+
+        const pseudoInput = /** @type {HTMLInputElement} */ (
+            document.getElementById('settingsPseudoInput')
+        );
+        const savePseudoBtn = /** @type {HTMLButtonElement} */ (
+            document.getElementById('savePseudoBtn')
+        );
+        if (pseudoInput && savePseudoBtn) {
+            savePseudoBtn.onclick = async () => {
+                if (savePseudoBtn.classList.contains('is-loading')) return;
+                savePseudoBtn.classList.add('is-loading');
+                savePseudoBtn.disabled = true;
+                try {
+                    await this.service.setDisplayName(pseudoInput.value);
+                    this.applyIdentity();
+                } catch (err) {
+                    alert('Impossible d’enregistrer le pseudo : ' + err.message);
+                } finally {
+                    savePseudoBtn.classList.remove('is-loading');
+                    savePseudoBtn.disabled = false;
+                }
+            };
         }
         if (reloadPricesBtn) {
             reloadPricesBtn.onclick = () => {

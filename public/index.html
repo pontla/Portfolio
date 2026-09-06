@@ -124,6 +124,10 @@
             <button type="button" class="auth-back-btn" id="authBackBtn" aria-label="Retour"><i data-lucide="arrow-left"></i></button>
             <h2 id="authTitle">Connexion</h2>
             <form id="authForm">
+                <div class="form-group" id="authPseudoGroup" style="display:none;">
+                    <label for="authPseudoInput">Pseudo</label>
+                    <input type="text" name="pseudo" id="authPseudoInput" maxlength="40" autocomplete="nickname" placeholder="Ex : Alex, Famille Martin…">
+                </div>
                 <div class="form-group" id="authEmailGroup">
                     <label for="authEmailInput">Email</label>
                     <input type="email" name="email" id="authEmailInput" required autocomplete="email">
@@ -915,6 +919,13 @@
                 <button class="close-btn" id="closeSettingsBtn" aria-label="Fermer"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
+                <p class="settings-section-label">Compte</p>
+                <div class="form-group form-group--tight">
+                    <label for="settingsPseudoInput">Pseudo affiché dans l'en-tête</label>
+                    <input type="text" id="settingsPseudoInput" maxlength="40" autocomplete="nickname" placeholder="Ex : Alex, Famille Martin…">
+                </div>
+                <button type="button" id="savePseudoBtn" class="btn-primary full-width">Enregistrer le pseudo</button>
+
                 <p class="settings-section-label">Apparence</p>
                 <div class="theme-segmented" id="themeSegmented" role="radiogroup" aria-label="Thème">
                     <button type="button" class="theme-seg-btn" data-theme-choice="dark" aria-checked="true" role="radio">

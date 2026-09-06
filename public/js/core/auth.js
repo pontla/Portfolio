@@ -7,10 +7,20 @@ import { currentPageUrl } from './platform.js';
 
 // --- AUTH SERVICE (Supabase Auth) ---
 export const AuthService = {
-    async signUp(email, password) {
-        const { data, error } = await db().auth.signUp({ email, password });
+    async signUp(email, password, displayName) {
+        const name = (displayName || '').trim();
+        const options = name ? { data: { display_name: name } } : undefined;
+        const { data, error } = await db().auth.signUp({ email, password, options });
         if (error) throw error;
         return data;
+    },
+
+    async updateDisplayName(displayName) {
+        const { data, error } = await db().auth.updateUser({
+            data: { display_name: (displayName || '').trim() },
+        });
+        if (error) throw error;
+        return data.user;
     },
 
     async signIn(email, password) {

@@ -96,6 +96,22 @@ export const shell = {
         }
     },
 
+    // Personnalise l'en-tete avec le pseudo du compte (ou repli generique).
+    applyIdentity() {
+        const name = ((this.service && this.service.displayName) || '').trim();
+        const brand = name ? `Portefeuille de ${name}` : 'Your Portfolio';
+        document
+            .querySelectorAll('.app-brand span, .side-logo-text')
+            .forEach((el) => (el.textContent = brand));
+        const mark = document.querySelector('.side-logo-mark');
+        if (mark) mark.textContent = (name.charAt(0) || 'Y').toUpperCase();
+        document.title = name ? `${name} — Portfolio` : 'Your Portfolio';
+        const pseudoInput = /** @type {HTMLInputElement} */ (
+            document.getElementById('settingsPseudoInput')
+        );
+        if (pseudoInput && document.activeElement !== pseudoInput) pseudoInput.value = name;
+    },
+
     async init() {
         Icons.render();
         this.initTheme();
@@ -175,6 +191,8 @@ export const shell = {
             return;
         }
 
+        this.applyIdentity();
+
         if (!this._listenersReady) {
             this.setupEventListeners();
             this.initChart();
@@ -203,6 +221,10 @@ export const shell = {
         const authInfo = document.getElementById('authInfo');
         const emailGroup = document.getElementById('authEmailGroup');
         const passwordGroup = document.getElementById('authPasswordGroup');
+        const pseudoGroup = document.getElementById('authPseudoGroup');
+        const pseudoInput = /** @type {HTMLInputElement} */ (
+            authForm.querySelector('input[name="pseudo"]')
+        );
         const emailInput = /** @type {HTMLInputElement} */ (
             authForm.querySelector('input[name="email"]')
         );
@@ -216,6 +238,8 @@ export const shell = {
             authInfo.style.display = 'none';
             emailGroup.style.display = mode === 'recovery' ? 'none' : '';
             passwordGroup.style.display = mode === 'reset' ? 'none' : '';
+            if (pseudoGroup) pseudoGroup.style.display = mode === 'signup' ? '' : 'none';
+            if (pseudoInput) pseudoInput.required = mode === 'signup';
             emailInput.required = mode !== 'recovery';
             passwordInput.required = mode !== 'reset';
             authForgotBtn.style.display = mode === 'signin' ? '' : 'none';
@@ -262,7 +286,7 @@ export const shell = {
                     await AuthService.signIn(email, password);
                     await this.startApp();
                 } else if (mode === 'signup') {
-                    const data = await AuthService.signUp(email, password);
+                    const data = await AuthService.signUp(email, password, fd.get('pseudo'));
                     if (data.session) {
                         await this.startApp();
                     } else {
