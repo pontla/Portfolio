@@ -262,7 +262,7 @@ export const overview = {
                                 <span class="perf-logo-fallback" style="display:none;">${h.symbol.substring(0, 1)}</span>
                                 <div style="display:flex; flex-direction:column; gap:2px;">
                                     <span style="font-weight:700; color:var(--txt);">${h.symbol}</span>
-                                    <span style="font-size:12px; color:var(--dim);">${assetName || Utils.getExchangeName(h.symbol)} · ${h.weightPercent.toFixed(1)}%</span>
+                                    <span style="font-size:12px; color:var(--dim);">${assetName || Utils.getExchangeName(h.symbol)} · ${h.weightPercent.toFixed(1)}%${h.manuallyValued ? ' · valorisé à la main' : ''}</span>
                                     ${portTags ? `<div style="margin-top:2px; display:flex; gap:4px; flex-wrap:wrap;">${portTags}</div>` : ''}
                                 </div>
                             </div>

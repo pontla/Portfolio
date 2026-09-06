@@ -40,6 +40,9 @@ export class PortfolioService {
         /** @type {string[]} Devises dont le taux servi n'est pas un taux live. */
         this.estimatedFxCurrencies = [];
         this.dailyPriceCache = {};
+        // Cours implicites derives des relevés de valorisation manuelle, par
+        // symbole puis par date. Vide tant qu'aucune ligne VALUATION n'existe.
+        this.manualPrices = /** @type {Record<string, Record<string, number>>} */ ({});
         // Devise native par symbole. Alimentee par la colonne `currency` des
         // transactions (valeur figee a la saisie) puis corrigee par l'API au
         // rafraichissement. Consultee via symbolCurrency(), jamais en direct.
@@ -373,12 +376,27 @@ export class PortfolioService {
     }
 
     async refreshPrices() {
-        const uniqueSymbols = [
+        // Les relevés manuels sont derives avant tout appel reseau : ils
+        // decident quels symboles n'ont rien a demander a la source.
+        this.manualPrices = this._manualPriceSeries();
+
+        const allSymbols = [
             ...new Set(
                 this.trades.map((t) => t.symbol).filter((s) => !s.startsWith('$') && s !== '$FEE')
             ),
         ];
+        // Un titre valorise a la main ne doit ni etre interroge, ni compter
+        // parmi les cours indisponibles : sa valeur est connue, elle vient du
+        // releve. C'est le cas du fonds euros, qu'aucune source ne cote.
+        const uniqueSymbols = allSymbols.filter((s) => !this.isManuallyValued(s));
         this.marketPrices = {};
+
+        for (const sym of allSymbols) {
+            if (!this.isManuallyValued(sym)) continue;
+            const dates = sortedHistoryDates(this.manualPrices[sym]);
+            const last = dates[dates.length - 1];
+            if (last) this.marketPrices[sym] = this.manualPrices[sym][last];
+        }
         // Symboles dont le cours n'a pu etre obtenu : la position sera valorisee
         // a son cout d'achat, et l'UI doit le dire. Aucun cours n'est invente.
         this.unavailablePrices = [];
@@ -437,8 +455,75 @@ export class PortfolioService {
         emit('portfolio-updated');
     }
 
+    /**
+     * Quantite detenue d'un symbole a une date, dans un portefeuille donne.
+     * Ne depend d'aucun prix : sert a deriver le cours implicite d'une
+     * valorisation manuelle sans dependance circulaire avec getPriceOnDate.
+     * @param {string} symbol
+     * @param {string} dateStr
+     * @param {string} [portfolioId] limite au portefeuille (toutes si omis)
+     * @param {string} [excludeTradeId] ligne en cours d'edition
+     */
+    _qtyHeldOn(symbol, dateStr, portfolioId, excludeTradeId) {
+        const qty = this.trades
+            .filter(
+                (t) =>
+                    t.id !== excludeTradeId &&
+                    t.symbol === symbol &&
+                    (t.type === 'BUY' || t.type === 'SELL') &&
+                    (!portfolioId || t.portfolioId === portfolioId) &&
+                    Utils.compareDates(t.date, dateStr) <= 0
+            )
+            .reduce((q, t) => q + (t.type === 'BUY' ? t.qty : -t.qty), 0);
+        return Math.max(0, qty);
+    }
+
+    /**
+     * Cours implicites issus des relevés de valorisation, par symbole et par
+     * date : montant releve / quantite detenue a cette date, dans le
+     * portefeuille de la ligne.
+     *
+     * Le cours unitaire ainsi obtenu est une propriete du titre, pas du
+     * contrat : il s'applique donc globalement, comme n'importe quel cours.
+     * Ce detour par un prix unitaire permet a tout le moteur (qty x prix) de
+     * fonctionner sans changement sur un fonds que personne ne cote.
+     */
+    _manualPriceSeries() {
+        /** @type {Record<string, Record<string, number>>} */
+        const series = {};
+        for (const t of this.trades) {
+            if (t.type !== 'VALUATION' || !t.symbol || t.symbol.startsWith('$')) continue;
+            const held = this._qtyHeldOn(t.symbol, t.date, t.portfolioId);
+            if (!(held > 0.0001)) continue; // releve orphelin : ignore plutot qu'infini
+            const amount = t.amount > 0 ? t.amount : t.price;
+            if (!(amount > 0)) continue;
+            (series[t.symbol] = series[t.symbol] || {})[t.date] = amount / held;
+        }
+        return series;
+    }
+
+    /** Vrai si le titre est valorise a la main plutot que par l'API. */
+    isManuallyValued(symbol) {
+        return Boolean(this.manualPrices && this.manualPrices[symbol]);
+    }
+
     getPriceOnDate(symbol, dateStr, fallbackPrice = 100) {
         if (symbol.startsWith('$')) return 1.0;
+
+        // Valorisation manuelle : elle fait autorite, la source ne cote pas ce
+        // titre. On reprend le dernier releve connu a cette date ou avant ; un
+        // releve posterieur ne vaut pas pour le passe.
+        const manual = this.manualPrices && this.manualPrices[symbol];
+        if (manual) {
+            const dates = sortedHistoryDates(manual);
+            let last = null;
+            for (const d of dates) {
+                if (d <= dateStr) last = d;
+                else break;
+            }
+            // Avant le premier releve, le titre est valorise a son prix d'achat.
+            if (last) return manual[last];
+        }
 
         // Le jour courant est souvent absent de l'historique proxy : on retombe sur le prix
         // live pour que le dernier point du graphe colle a la carte "Valeur du portefeuille".
@@ -514,6 +599,16 @@ export class PortfolioService {
             price = amount;
         } else if (type === 'FEE') {
             symbol = '$FEE';
+            amount = amount > 0 ? amount : qty * price || price || 0;
+            qty = 1;
+            price = amount;
+        } else if (type === 'VALUATION') {
+            // Releve de valorisation : « a cette date, cette position vaut X ».
+            // Ce n'est pas un mouvement — ni cash, ni quantite, ni prix de
+            // revient ne bougent. Seule la valeur de marche est fixee a la main,
+            // pour ce que la source ne cote pas : fonds euros, UC sans VL.
+            // Meme forme que DIVIDEND (qty 1, price = montant) pour que la ligne
+            // reste bien formee partout ou amount n'est pas lu.
             amount = amount > 0 ? amount : qty * price || price || 0;
             qty = 1;
             price = amount;
@@ -729,6 +824,19 @@ export class PortfolioService {
                         `Quantité vendue (${n.qty}) supérieure à la quantité détenue à cette date (${held})`
                     );
                 }
+            }
+        } else if (n.type === 'VALUATION') {
+            if (!n.symbol || n.symbol.startsWith('$'))
+                errors.push('Symbole manquant : une valorisation porte sur une position');
+            if (!(n.amount > 0)) errors.push('Valorisation invalide (doit être > 0)');
+            else if (n.symbol && !n.symbol.startsWith('$')) {
+                // Sans position a cette date, il n'y a rien a valoriser : le prix
+                // implicite serait une division par zero.
+                const held = this._qtyHeldOn(n.symbol, n.date, n.portfolioId, excludeTradeId);
+                if (!(held > 0.0001))
+                    errors.push(
+                        'Aucune position détenue à cette date : enregistrez d’abord l’achat.'
+                    );
             }
         } else if (['DEPOSIT', 'WITHDRAWAL', 'DIVIDEND', 'FEE'].includes(n.type)) {
             if (!(n.amount > 0)) errors.push('Montant invalide (doit être > 0)');
@@ -1261,6 +1369,10 @@ export class PortfolioService {
                     currency: data.currency,
                     weightPercent: 0,
                     priceUnavailable,
+                    // Valeur issue d'un releve saisi a la main, pas d'une
+                    // cotation : l'UI doit pouvoir le dire, la valeur est aussi
+                    // fraiche que le dernier releve et pas davantage.
+                    manuallyValued: this.isManuallyValued(symbol),
                     portfolios: Array.from(data.portfolios || []),
                 };
             })
