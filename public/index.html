@@ -842,10 +842,11 @@
                     </div>
 
                     <div class="form-group" id="symbolGroup">
-                        <label id="symbolLabel">Symbole (ex: AAPL)</label>
+                        <label id="symbolLabel">Symbole ou ISIN (ex: AAPL, LU2358392376)</label>
                         <input type="text" name="symbol" id="symbolInputField" list="stockList" placeholder="Rechercher..." required
                             uppercase>
                         <datalist id="stockList"></datalist>
+                        <p id="symbolHint" class="form-hint"></p>
                     </div>
 
                     <div class="form-row form-row-3" id="qtyPriceRow">

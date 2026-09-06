@@ -418,6 +418,26 @@ export async function bootApp(page, opts = {}) {
 
         if (p.endsWith('/search')) {
             const q = (url.searchParams.get('q') || 'AAPL').toUpperCase();
+            // Recherche par ISIN : le worker rend le symbole resolu, l'ISIN
+            // d'origine et la disponibilite d'un historique.
+            const isins = {
+                LU2358392376: {
+                    displaySymbol: '0P0001OOS9.F',
+                    description: 'Varenne Valeur A EUR Acc',
+                    type: 'MUTUALFUND',
+                    isin: 'LU2358392376',
+                    hasHistory: true,
+                },
+                FR0010149302: {
+                    displaySymbol: 'Y9U3.F',
+                    description: 'Carmignac Emergents',
+                    type: 'ETF',
+                    isin: 'FR0010149302',
+                    hasHistory: false,
+                },
+            };
+            if (isins[q]) return json([{ ...isins[q], symbol: isins[q].displaySymbol }]);
+            if (/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(q)) return json([]); // ISIN inconnu
             return json([
                 {
                     displaySymbol: q,
@@ -557,6 +577,13 @@ export async function bootApp(page, opts = {}) {
         if (p.endsWith('/fundamentals')) return json(FUNDAMENTALS);
         if (p.endsWith('/quote')) {
             const sym = (url.searchParams.get('symbol') || 'AAPL').toUpperCase();
+            if (sym === '0P0001OOS9.F')
+                return json({
+                    symbol: sym,
+                    price: 489.17,
+                    currency: 'EUR',
+                    quoteType: 'MUTUALFUND',
+                });
             // OPCVM europeen : suffixe inconnu du repli heuristique, seule
             // l'API sait qu'il cote en euros.
             if (sym === '0P0001OOS9.X')

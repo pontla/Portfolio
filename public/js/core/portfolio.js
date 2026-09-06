@@ -47,6 +47,9 @@ export class PortfolioService {
         // Nature du titre (EQUITY, MUTUALFUND, ETF...) servie par l'API, pour
         // classer un OPCVM autrement que sur la forme de son symbole.
         this.symbolTypes = /** @type {Record<string, string>} */ ({});
+        // ISIN par symbole : le code Morningstar d'un OPCVM (0P0001OOS9.F) est
+        // opaque, l'ISIN est l'identifiant que portent les relevés.
+        this.symbolIsins = /** @type {Record<string, string>} */ ({});
         this.fxRate = 1.08;
         this.fxRates = /** @type {Record<string, number|null>} */ ({
             USD: 1,
@@ -184,6 +187,7 @@ export class PortfolioService {
             fxRate: Number(r.fx_rate) || null,
             cashSource: r.cash_source || null,
             currency: r.currency || null,
+            isin: r.isin || null,
             // Invariant : toute date en memoire est canonique (AAAA-MM-JJ).
             // Les ecritures passent par normalizeTradeInput, qui normalise deja ;
             // la lecture est l'autre porte d'entree (lignes anciennes, colonne
@@ -196,9 +200,11 @@ export class PortfolioService {
         // tout appel reseau : les calculs qui tournent pendant le chargement
         // des cours utilisent deja la bonne devise plutot que le suffixe.
         this.symbolCurrencies = {};
+        this.symbolIsins = {};
         for (const t of this.trades) {
-            if (t.currency && !t.symbol.startsWith('$'))
-                this.symbolCurrencies[t.symbol] = t.currency;
+            if (t.symbol.startsWith('$')) continue;
+            if (t.currency) this.symbolCurrencies[t.symbol] = t.currency;
+            if (t.isin) this.symbolIsins[t.symbol] = t.isin;
         }
 
         const storedActiveId = storage.get(CONFIG.ACTIVE_PORTFOLIO_STORAGE);
@@ -329,8 +335,14 @@ export class PortfolioService {
     /** Memorise la devise d'une ligne ecrite, pour les calculs anterieurs au
      * prochain refreshPrices(). @param {any} trade */
     _rememberCurrency(trade) {
-        if (trade && trade.currency && trade.symbol && !trade.symbol.startsWith('$'))
-            this.symbolCurrencies[trade.symbol] = trade.currency;
+        if (!trade || !trade.symbol || trade.symbol.startsWith('$')) return;
+        if (trade.currency) this.symbolCurrencies[trade.symbol] = trade.currency;
+        if (trade.isin) this.symbolIsins[trade.symbol] = trade.isin;
+    }
+
+    /** ISIN connu pour ce symbole, sinon `null`. */
+    symbolIsin(symbol) {
+        return (symbol && this.symbolIsins[symbol]) || null;
     }
 
     /**
@@ -554,6 +566,10 @@ export class PortfolioService {
             // elle qui evite de revaloriser une ligne dans une autre devise si
             // l'heuristique de suffixe change plus tard.
             currency: nativeCurrency,
+            // Fourni par la recherche (resolution ISIN) ou deja connu pour ce
+            // symbole. Une saisie qui n'est pas un ISIN valide est ignoree
+            // plutot que stockee telle quelle.
+            isin: Utils.normalizeIsin(tradeData.isin) || this.symbolIsins[symbol] || null,
             date: normalizedDate,
             portfolioId,
         };
@@ -760,6 +776,7 @@ export class PortfolioService {
                 fx_rate: n.fxRate,
                 cash_source: n.cashSource,
                 currency: n.currency,
+                isin: n.isin,
                 date: n.date,
             })
             .select()
@@ -778,6 +795,7 @@ export class PortfolioService {
             fxRate: Number(data.fx_rate) || null,
             cashSource: data.cash_source || null,
             currency: data.currency || null,
+            isin: data.isin || null,
             date: data.date,
         };
 
@@ -804,6 +822,7 @@ export class PortfolioService {
                 fx_rate: n.fxRate,
                 cash_source: n.cashSource,
                 currency: n.currency,
+                isin: n.isin,
                 date: n.date,
             })
             .eq('id', id)
@@ -823,6 +842,7 @@ export class PortfolioService {
             fxRate: Number(data.fx_rate) || null,
             cashSource: data.cash_source || null,
             currency: data.currency || null,
+            isin: data.isin || null,
             date: data.date,
         };
 
@@ -857,6 +877,7 @@ export class PortfolioService {
                 fx_rate: n.fxRate,
                 cash_source: n.cashSource,
                 currency: n.currency,
+                isin: n.isin,
                 date: n.date,
             };
         });
@@ -876,6 +897,7 @@ export class PortfolioService {
             fxRate: Number(d.fx_rate) || null,
             cashSource: d.cash_source || null,
             currency: d.currency || null,
+            isin: d.isin || null,
             date: d.date,
         }));
 

@@ -30,6 +30,9 @@ create table if not exists trades (
     -- cotation. NULL = lignes anterieures a la colonne -> repli sur
     -- l'heuristique de suffixe, corrigee des que l'API repond.
     currency text,
+    -- ISIN du titre, saisi ou resolu a la recherche. Identifiant stable la ou
+    -- le symbole Yahoo d'un OPCVM est un code Morningstar opaque.
+    isin text,
     date date not null,
     created_at timestamptz not null default now()
 );
@@ -47,12 +50,14 @@ create table if not exists user_settings (
 
 create index if not exists trades_user_id_idx on trades(user_id);
 create index if not exists trades_portfolio_id_idx on trades(portfolio_id);
+create index if not exists trades_isin_idx on trades(isin) where isin is not null;
 
 -- Migration pour une table trades deja existante :
 --   alter table trades add column if not exists fees numeric not null default 0;
 --   alter table trades add column if not exists fx_rate numeric;
 --   alter table trades add column if not exists cash_source text;
 --   alter table trades add column if not exists currency text;
+--   alter table trades add column if not exists isin text;
 
 alter table portfolios enable row level security;
 alter table trades enable row level security;

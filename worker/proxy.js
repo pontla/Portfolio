@@ -9,7 +9,7 @@
  * Routes exposees :
  *   GET /quote?symbol=SYM                      -> { symbol, price, currency, quoteType }
  *   GET /history?symbol=SYM&from=YYYY-MM-DD&to=YYYY-MM-DD -> { "YYYY-MM-DD": close, ... }
- *   GET /search?q=QUERY                        -> [{ displaySymbol, description, type }]
+ *   GET /search?q=QUERY                        -> [{ displaySymbol, description, type }] ; si QUERY est un ISIN, resultats classes (identifiant Morningstar prioritaire) et le premier porte { isin, hasHistory }
  *   GET /dividends?symbol=SYM&from=YYYY-MM-DD&to=YYYY-MM-DD -> [{ date, amountPerShare }]
  *   GET /sector?symbol=SYM -> { sector }  (via Finnhub, secret FINNHUB_API_KEY requis)
  *   GET /earnings?symbol=SYM -> { date, hour, epsEstimate, revenueEstimate } | { date: null } (Finnhub, actions US uniquement)
@@ -440,20 +440,92 @@ async function handleWebSearch(query, apiKey, kv) {
     return jsonResponse({ results }, 200, 1800); // cache 30min
 }
 
-async function handleSearch(query) {
+/** Format ISIN : 2 lettres de pays, 9 alphanumeriques, 1 chiffre de controle. */
+const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+async function yahooSearch(query) {
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0`;
     const res = await fetch(url, { headers: YAHOO_HEADERS });
     if (!res.ok) throw new Error(`Yahoo search HTTP ${res.status}`);
     const data = await res.json();
-    const quotes = (data && data.quotes) || [];
+    return ((data && data.quotes) || []).filter((q) => q.symbol);
+}
 
-    const results = quotes
-        .filter((q) => q.symbol)
-        .map((q) => ({
-            displaySymbol: q.symbol,
-            description: q.shortname || q.longname || q.symbol,
-            type: q.quoteType || 'EQUITY',
-        }));
+/**
+ * Qualite d'un candidat rendu par la recherche. Yahoo renvoie plusieurs
+ * symboles pour un meme ISIN et ils ne se valent pas : seul l'identifiant
+ * Morningstar `0P…` porte l'historique de VL complet. Les cotations de place
+ * d'un OPCVM (`<ISIN>.SG`) ou ses lignes ETF (`.MU`, `.F`) servent un prix
+ * mais un ou zero point d'historique, donc un graphe vide.
+ */
+function scoreCandidate(q) {
+    const sym = (q.symbol || '').toUpperCase();
+    const type = (q.quoteType || '').toUpperCase();
+    if (type === 'MUTUALFUND' && sym.startsWith('0P')) return 100;
+    if (type === 'MUTUALFUND') return 50;
+    if (type === 'ETF') return 40;
+    if (type === 'EQUITY') return 30;
+    return 10;
+}
+
+const rankCandidates = (quotes) =>
+    quotes
+        .map((q) => ({ q, score: scoreCandidate(q) }))
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.q);
+
+/** Nombre de cloture non nulles sur 90 jours ; -1 si le symbole ne repond pas. */
+async function countRecentCloses(symbol) {
+    const now = Math.floor(Date.now() / 1000);
+    try {
+        const r = await fetchYahooChart(symbol, now - 90 * 24 * 3600, now + 24 * 3600);
+        const closes =
+            (r.indicators &&
+                r.indicators.quote &&
+                r.indicators.quote[0] &&
+                r.indicators.quote[0].close) ||
+            [];
+        return closes.filter((c) => c !== null && c !== undefined).length;
+    } catch (e) {
+        return -1;
+    }
+}
+
+async function handleSearch(query) {
+    const q = (query || '').trim();
+    const isIsin = ISIN_RE.test(q.toUpperCase());
+
+    // Le classement ne s'applique qu'a une recherche par ISIN : sur une
+    // recherche texte, l'ordre de pertinence de Yahoo vaut mieux que le notre
+    // (« AAPL » doit rendre AAPL, pas un ETF qui le contient).
+    const raw = await yahooSearch(q);
+    let quotes = isIsin ? rankCandidates(raw) : raw;
+
+    // Recherche par ISIN : si le meilleur candidat n'est pas l'identifiant
+    // Morningstar, un second passage par le nom du fonds le retrouve souvent.
+    // Sans lui, une cotation de place gagnerait et le graphe resterait vide.
+    if (isIsin && (!quotes.length || scoreCandidate(quotes[0]) < 100)) {
+        const name = quotes[0] && (quotes[0].shortname || quotes[0].longname);
+        if (name) {
+            const better = rankCandidates(await yahooSearch(name));
+            if (better.length && scoreCandidate(better[0]) > scoreCandidate(quotes[0]))
+                quotes = better;
+        }
+    }
+
+    const results = quotes.map((x) => ({
+        displaySymbol: x.symbol,
+        description: x.shortname || x.longname || x.symbol,
+        type: x.quoteType || 'EQUITY',
+    }));
+
+    // Sur une recherche par ISIN uniquement : on verifie que le symbole retenu
+    // porte bien un historique, pour que l'UI puisse le dire au lieu d'afficher
+    // un graphe vide. Une seule requete, sur le premier candidat.
+    if (isIsin && results.length) {
+        results[0].isin = q.toUpperCase();
+        results[0].hasHistory = (await countRecentCloses(results[0].displaySymbol)) > 1;
+    }
 
     return jsonResponse(results, 200, 3600); // cache 1h
 }

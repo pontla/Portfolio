@@ -289,6 +289,7 @@ describe('PortfolioService.load', () => {
             fxRate: 1,
             cashSource: null,
             currency: null,
+            isin: null,
             date: '2026-02-01',
         });
     });
@@ -1485,5 +1486,78 @@ describe('PortfolioService.symbolCurrency', () => {
             cashSource: 'DIRECT',
         });
         expect(fake.of('trades', 'insert')[0].payload.currency).toBe('EUR');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ISIN : normalisation et persistance
+// ---------------------------------------------------------------------------
+
+describe('ISIN', () => {
+    it('normalise une saisie valide et rejette le reste', () => {
+        expect(Utils.normalizeIsin('lu2358392376')).toBe('LU2358392376');
+        expect(Utils.normalizeIsin('FR 0014008M99')).toBe('FR0014008M99');
+        expect(Utils.normalizeIsin('AAPL')).toBeNull();
+        expect(Utils.normalizeIsin('0P0001OOS9.F')).toBeNull();
+        expect(Utils.normalizeIsin('LU235839237')).toBeNull(); // trop court
+        expect(Utils.normalizeIsin('')).toBeNull();
+    });
+
+    it('l ISIN connu pour un symbole est ecrit en base sans etre resaisi', async () => {
+        const fake = harness({ portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }] });
+        const svc = new PortfolioService();
+        await svc.load();
+        // Memorise par la recherche au moment de choisir le symbole.
+        svc.symbolIsins['0P0001OOS9.F'] = 'LU2358392376';
+
+        await svc.addTrade({
+            type: 'BUY',
+            symbol: '0P0001OOS9.F',
+            qty: 1,
+            price: 489,
+            date: dayOffset(-1),
+            cashSource: 'DIRECT',
+        });
+        expect(fake.of('trades', 'insert')[0].payload.isin).toBe('LU2358392376');
+    });
+
+    it('une saisie qui n est pas un ISIN n est pas stockee telle quelle', async () => {
+        const fake = harness({ portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }] });
+        const svc = new PortfolioService();
+        await svc.load();
+
+        await svc.addTrade({
+            type: 'BUY',
+            symbol: 'AAPL',
+            qty: 1,
+            price: 100,
+            isin: 'pas-un-isin',
+            date: dayOffset(-1),
+            cashSource: 'DIRECT',
+        });
+        expect(fake.of('trades', 'insert')[0].payload.isin).toBeNull();
+    });
+
+    it('load() amorce la map depuis la colonne isin', async () => {
+        harness({
+            portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }],
+            tradeRows: [
+                {
+                    id: 't1',
+                    portfolio_id: 'p1',
+                    type: 'BUY',
+                    symbol: '0P0001OOS9.F',
+                    qty: 1,
+                    price: 489,
+                    amount: 489,
+                    isin: 'LU2358392376',
+                    date: '2026-02-01',
+                },
+            ],
+        });
+        const svc = new PortfolioService();
+        await svc.load();
+        expect(svc.symbolIsin('0P0001OOS9.F')).toBe('LU2358392376');
+        expect(svc.symbolIsin('AAPL')).toBeNull();
     });
 });
