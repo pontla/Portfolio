@@ -534,9 +534,8 @@ export const events = {
         const f = this._txForm();
 
         f.symbolInput.addEventListener('blur', () => {
-            if (f.symbolInput.value.trim()) {
-                this._applySymbolCurrency(f.symbolInput.value.trim());
-            }
+            const v = f.symbolInput.value.trim();
+            if (v) this._resolveSymbolInput(v);
         });
 
         f.symbolInput.addEventListener('click', () => {
@@ -892,6 +891,55 @@ export const events = {
     // Poignees DOM de la modale de transaction. Relues a chaque appel : les
     // elements sont statiques dans index.html, et cela evite que les methodes
     // qui manipulent le formulaire dependent d'une closure de cablage.
+    /** Message sous le champ symbole ; vide le masque. @param {string} [msg] */
+    _setSymbolHint(msg) {
+        const hint = this._txForm().symbolHint;
+        if (hint) hint.textContent = msg || '';
+    },
+
+    /**
+     * Traite la saisie du champ symbole. Un ISIN ne cote pas : il est traduit
+     * en symbole avant tout le reste, et conserve a cote pour l'enregistrement.
+     * C'est l'identifiant que portent les releves de PEA et d'assurance-vie,
+     * la ou le symbole d'un OPCVM est un code Morningstar opaque.
+     * @param {string} value saisie brute
+     */
+    async _resolveSymbolInput(value) {
+        const isin = Utils.normalizeIsin(value);
+        if (!isin) {
+            this._setSymbolHint('');
+            return this._applySymbolCurrency(value);
+        }
+
+        const f = this._txForm();
+        this._setSymbolHint('Recherche de l’ISIN…');
+        const results = await APIService.searchSymbol(isin);
+        const top = results && results[0];
+
+        // L'utilisateur a pu continuer a taper pendant la requete.
+        if (Utils.normalizeIsin(f.symbolInput.value.trim()) !== isin) return;
+
+        if (!top || !(top.displaySymbol || top.symbol)) {
+            this._setSymbolHint(
+                `ISIN introuvable chez le fournisseur de cours. Saisis le symbole si tu le connais.`
+            );
+            return;
+        }
+
+        const sym = top.displaySymbol || top.symbol;
+        f.symbolInput.value = sym;
+        this.service.symbolIsins[sym] = isin;
+
+        // hasHistory a false : le titre a un cours mais pas de serie exploitable,
+        // le graphe restera vide. Mieux vaut le dire que le laisser decouvrir.
+        this._setSymbolHint(
+            top.hasHistory === false
+                ? `${isin} → ${sym} · cours disponible, mais pas d’historique chez le fournisseur`
+                : `${isin} → ${sym}`
+        );
+        await this._applySymbolCurrency(sym);
+    },
+
     /**
      * Renseigne le champ devise pour un symbole. Affiche d'abord l'heuristique
      * de suffixe pour ne pas laisser le champ vide, puis la remplace par la
@@ -921,6 +969,7 @@ export const events = {
             form: /** @type {HTMLFormElement} */ ($('transactionForm')),
             symbolGroup: $('symbolGroup'),
             symbolInput: /** @type {HTMLInputElement} */ ($('symbolInputField')),
+            symbolHint: $('symbolHint'),
             qtyPriceRow: $('qtyPriceRow'),
             qtyInput: /** @type {HTMLInputElement} */ ($('qtyInputField')),
             priceInput: /** @type {HTMLInputElement} */ ($('priceInputField')),
@@ -1049,6 +1098,7 @@ export const events = {
         this.editingTradeId = null;
         f.title.textContent = 'Nouvelle Transaction';
         f.form.reset();
+        this._setSymbolHint('');
         f.form.elements['date'].value = Utils.getDateString();
         f.form.elements['type'].value = 'BUY';
         if (f.portSelect && this.service.activePortfolioId !== 'GLOBAL') {
@@ -1065,6 +1115,7 @@ export const events = {
         this.editingTradeId = trade.id;
         f.title.textContent = 'Modifier la transaction';
         f.form.reset();
+        this._setSymbolHint('');
         f.form.elements['type'].value = trade.type;
         this.syncTransactionFormFields(trade.type);
 
@@ -1075,6 +1126,8 @@ export const events = {
         // Une ligne deja enregistree porte sa devise : on la reaffiche telle
         // quelle plutot que de la rededuire, pour ne pas la reecrire a l'edition.
         f.priceCurrencyField.value = trade.currency || this.service.symbolCurrency(trade.symbol);
+        const knownIsin = trade.isin || this.service.symbolIsin(trade.symbol);
+        this._setSymbolHint(knownIsin ? `${knownIsin} → ${trade.symbol}` : '');
         f.feesInput.value = trade.fees || '';
         f.amountInput.value = trade.amount;
         if (f.portSelect) f.portSelect.value = trade.portfolioId;
@@ -1093,6 +1146,7 @@ export const events = {
         const f = this._txForm();
         f.title.textContent = `Vendre ${symbol}`;
         f.form.reset();
+        this._setSymbolHint('');
         f.form.elements['date'].value = Utils.getDateString();
         f.form.elements['type'].value = 'SELL';
         this.syncTransactionFormFields('SELL');
@@ -1176,6 +1230,7 @@ export const events = {
         this.editingTradeId = null;
         f.modal.classList.remove('open');
         f.form.reset();
+        this._setSymbolHint('');
     },
 
     // Edition d'un portefeuille : la modale reprend nom, couleur et icone.
@@ -1240,6 +1295,12 @@ export const events = {
                 const f = this._txForm();
                 f.symbolInput.value = sym;
                 searchModal.classList.remove('open');
+                if (item.isin) {
+                    this.service.symbolIsins[sym] = item.isin;
+                    this._setSymbolHint(`${item.isin} → ${sym}`);
+                } else {
+                    this._setSymbolHint('');
+                }
                 this._applySymbolCurrency(sym);
 
                 const livePrice = await APIService.getCurrentPrice(sym);

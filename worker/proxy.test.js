@@ -1230,3 +1230,93 @@ describe('/fundamentals — bloc OPCVM', () => {
         expect(b.fund).toBeNull();
     });
 });
+
+describe('/search — resolution par ISIN', () => {
+    /** @param {Record<string, any[]>} byQuery reponses indexees par requete `q` */
+    function routeSearch(byQuery, closes = [1, 2, 3]) {
+        fetchMock.mockImplementation(async (url) => {
+            const u = new URL(String(url));
+            if (u.pathname.includes('/v1/finance/search')) {
+                const q = u.searchParams.get('q');
+                return jsonFetchResponse({ quotes: byQuery[q] || [] });
+            }
+            if (u.pathname.includes('/v8/finance/chart'))
+                return jsonFetchResponse(chartResult({ closes }));
+            return { ok: false, status: 404 };
+        });
+    }
+
+    it('classe l identifiant Morningstar avant la cotation de place', async () => {
+        routeSearch({
+            LU1819480192: [
+                { symbol: 'LU1819480192.SG', quoteType: 'MUTUALFUND', shortname: 'Echiquier AI' },
+                { symbol: 'EHQ6.MU', quoteType: 'ETF', shortname: 'Echiquier AI' },
+                { symbol: '0P0001DYQM.F', quoteType: 'MUTUALFUND', shortname: 'Echiquier AI' },
+            ],
+        });
+        const r = await (await call('/search?q=LU1819480192')).json();
+
+        // Sans le classement, la cotation Stuttgart gagnait et le graphe restait vide.
+        expect(r[0].displaySymbol).toBe('0P0001DYQM.F');
+        expect(r[0].isin).toBe('LU1819480192');
+        expect(r[0].hasHistory).toBe(true);
+    });
+
+    it('second passage par le nom quand l ISIN ne rend aucun identifiant Morningstar', async () => {
+        routeSearch({
+            LU1279334210: [
+                {
+                    symbol: 'LU1279334210.SG',
+                    quoteType: 'MUTUALFUND',
+                    shortname: 'Pictet - Robotics - P EUR',
+                },
+            ],
+            'Pictet - Robotics - P EUR': [
+                { symbol: '0P00016UT5.F', quoteType: 'MUTUALFUND', shortname: 'Pictet Robotics' },
+            ],
+        });
+        const r = await (await call('/search?q=LU1279334210')).json();
+
+        expect(r[0].displaySymbol).toBe('0P00016UT5.F');
+    });
+
+    it('signale un symbole sans historique exploitable', async () => {
+        routeSearch(
+            { FR0010149302: [{ symbol: 'Y9U3.F', quoteType: 'ETF', shortname: 'Carmignac' }] },
+            [42] // une seule cloture : cotation illiquide
+        );
+        const r = await (await call('/search?q=FR0010149302')).json();
+
+        expect(r[0].displaySymbol).toBe('Y9U3.F');
+        expect(r[0].hasHistory).toBe(false);
+    });
+
+    it('ISIN inconnu : aucun resultat, sans repli invente', async () => {
+        routeSearch({ LU1244893696: [] });
+        expect(await (await call('/search?q=LU1244893696')).json()).toEqual([]);
+    });
+
+    it('recherche texte : l ordre de pertinence de Yahoo est preserve', async () => {
+        routeSearch({
+            AAPL: [
+                { symbol: 'AAPL', quoteType: 'EQUITY', shortname: 'Apple Inc' },
+                { symbol: 'AAPW', quoteType: 'ETF', shortname: 'YieldMax AAPL' },
+            ],
+        });
+        const r = await (await call('/search?q=AAPL')).json();
+
+        // Le classement par type ferait remonter l'ETF : il ne doit pas s'appliquer ici.
+        expect(r[0].displaySymbol).toBe('AAPL');
+        expect(r[0].isin).toBeUndefined();
+        expect(r[0].hasHistory).toBeUndefined();
+    });
+
+    it('recherche texte : aucune requete d historique inutile', async () => {
+        routeSearch({ AAPL: [{ symbol: 'AAPL', quoteType: 'EQUITY' }] });
+        await call('/search?q=AAPL');
+
+        expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/v8/finance/chart'))).toBe(
+            false
+        );
+    });
+});

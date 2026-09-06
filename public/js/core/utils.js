@@ -311,6 +311,17 @@ export const Utils = {
         return 'USD';
     },
 
+    /** Format ISIN : 2 lettres de pays, 9 alphanumeriques, 1 chiffre de controle. */
+    ISIN_RE: /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/,
+
+    /** ISIN normalise en majuscules, ou `null` si l'entree n'en est pas un. */
+    normalizeIsin: (value) => {
+        const v = String(value || '')
+            .toUpperCase()
+            .replace(/[\s-]/g, '');
+        return Utils.ISIN_RE.test(v) ? v : null;
+    },
+
     /**
      * Vrai pour un symbole de fonds tel que Yahoo les nomme : identifiant
      * Morningstar `0P…` (les OPCVM europeens n'ont pas de ticker de place),
