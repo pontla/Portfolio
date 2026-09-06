@@ -290,7 +290,11 @@ export class PortfolioService {
 
     getActivePortfolio() {
         if (this.activePortfolioId === 'GLOBAL') {
-            return { id: 'GLOBAL', name: 'Tous les portefeuilles (Global)', color: '#4f46e5' };
+            // Ardoise : la teinte neutre de la palette Portfolio Accent. La vue
+            // consolidee n'est pas un vrai portefeuille et ne doit pas
+            // concurrencer les couleurs choisies par l'utilisateur
+            // (DESIGN.md, The Portfolio Accent Boundary Rule).
+            return { id: 'GLOBAL', name: 'Tous les portefeuilles (Global)', color: '#64748b' };
         }
         return this.portfolios.find((p) => p.id === this.activePortfolioId) || this.portfolios[0];
     }
