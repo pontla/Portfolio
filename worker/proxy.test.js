@@ -995,3 +995,110 @@ describe('/recommendation /insider /peers (Finnhub)', () => {
         expect((await res.json())[0].strongBuy).toBe(22);
     });
 });
+
+describe('/fundamentals', () => {
+    it('renvoie 400 si symbol manquant', async () => {
+        const res = await call('/fundamentals');
+        expect(res.status).toBe(400);
+    });
+
+    /**
+     * Aiguille les appels sortants par URL : /fundamentals enchaine la meta
+     * Yahoo, puis Finnhub (actions US) ou quoteSummary (repli international).
+     * @param {{ chart?: any, summary?: any, metric?: any, profile?: any }} routes
+     */
+    function routeFetch({ chart, summary, metric, profile }) {
+        fetchMock.mockImplementation(async (url) => {
+            const u = String(url);
+            if (u.includes('/v8/finance/chart'))
+                return chart ? jsonFetchResponse(chart) : { ok: false, status: 404 };
+            if (u.includes('quoteSummary'))
+                return summary ? jsonFetchResponse(summary) : { ok: false, status: 404 };
+            if (u.includes('/stock/metric'))
+                return metric ? jsonFetchResponse(metric) : { ok: false, status: 404 };
+            if (u.includes('/stock/profile2'))
+                return profile ? jsonFetchResponse(profile) : { ok: false, status: 404 };
+            return { ok: false, status: 404 };
+        });
+    }
+
+    const euroSummary = {
+        quoteSummary: {
+            result: [
+                {
+                    price: { longName: 'Airbus SE', currency: 'EUR', marketCap: { raw: 1.57e11 } },
+                    summaryDetail: {
+                        trailingPE: { raw: 26.5 },
+                        beta: { raw: 0.878 },
+                        dividendYield: { raw: 0.0161 },
+                    },
+                    defaultKeyStatistics: { priceToBook: { raw: 6.08 }, trailingEps: { raw: 7.5 } },
+                    financialData: {
+                        returnOnEquity: { raw: 0.23193 },
+                        profitMargins: { raw: 0.07714 },
+                        revenueGrowth: { raw: 0.277 },
+                    },
+                    assetProfile: { sector: 'Industrials', country: 'Netherlands' },
+                },
+            ],
+        },
+    };
+
+    it('action europeenne : ratios servis par quoteSummary et non plus vides', async () => {
+        routeFetch({
+            chart: chartResult({ symbol: 'AIR.PA', regularMarketPrice: 175, currency: 'EUR' }),
+            summary: euroSummary,
+        });
+        const res = await call('/fundamentals?symbol=AIR.PA');
+        const body = await res.json();
+
+        expect(body.fundamentalsSource).toBe('yahoo');
+        expect(body.currency).toBe('EUR');
+        expect(body.peTTM).toBe(26.5);
+        expect(body.pbAnnual).toBe(6.08);
+        expect(body.marketCap).toBe(1.57e11);
+        expect(body.industry).toBe('Industrials');
+    });
+
+    it('quoteSummary : fractions converties dans l unite pourcentage attendue par l UI', async () => {
+        routeFetch({
+            chart: chartResult({ symbol: 'AIR.PA', regularMarketPrice: 175, currency: 'EUR' }),
+            summary: euroSummary,
+        });
+        const body = await (await call('/fundamentals?symbol=AIR.PA')).json();
+
+        // Yahoo sert des fractions, Finnhub des pourcentages : l'UI n'en
+        // connait qu'une seule, sinon un ROE de 23 % s'afficherait a 0,23 %.
+        expect(body.roeTTM).toBeCloseTo(23.193, 3);
+        expect(body.netMarginTTM).toBeCloseTo(7.714, 3);
+        expect(body.revenueGrowthTTM).toBeCloseTo(27.7, 3);
+        expect(body.dividendYield).toBeCloseTo(1.61, 2);
+    });
+
+    it('action US : Finnhub reste prioritaire, sans appel a quoteSummary', async () => {
+        routeFetch({
+            chart: chartResult({ symbol: 'MSFT', regularMarketPrice: 420 }),
+            metric: { metric: { peTTM: 32, roeTTM: 35.2 } },
+            profile: { marketCapitalization: 3.1e6, finnhubIndustry: 'Technology' },
+        });
+        const body = await (
+            await call('/fundamentals?symbol=MSFT', { FINNHUB_API_KEY: 'k' })
+        ).json();
+
+        expect(body.fundamentalsSource).toBe('finnhub');
+        expect(body.peTTM).toBe(32);
+        expect(body.roeTTM).toBe(35.2); // deja en pourcentage : pas de x100
+        expect(fetchMock.mock.calls.some(([u]) => String(u).includes('quoteSummary'))).toBe(false);
+    });
+
+    it('aucune source de ratios : source nulle plutot qu une source annoncee a vide', async () => {
+        routeFetch({
+            chart: chartResult({ symbol: 'XX.PA', regularMarketPrice: 10, currency: 'EUR' }),
+        });
+        const body = await (await call('/fundamentals?symbol=XX.PA')).json();
+
+        expect(body.fundamentalsSource).toBeNull();
+        expect(body.peTTM).toBeNull();
+        expect(body.price).toBe(10); // la meta reste servie
+    });
+});

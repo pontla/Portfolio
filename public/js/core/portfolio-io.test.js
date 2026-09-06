@@ -288,6 +288,7 @@ describe('PortfolioService.load', () => {
             fees: 1.2,
             fxRate: 1,
             cashSource: null,
+            currency: null,
             date: '2026-02-01',
         });
     });
@@ -1388,5 +1389,101 @@ describe('PortfolioService.importFromCSV', () => {
         expect(rows.map((r) => r.symbol)).toEqual(['$CASH', 'AAPL', 'MC.PA']);
         expect(rows[1]).toMatchObject({ qty: 1.5, price: 150.75, fees: 0.99 });
         expect(rows[2].price).toBe(600); // EUR natif, EUR en colonne : pas de conversion
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Devise native : resolution et persistance (colonne `currency`)
+// ---------------------------------------------------------------------------
+
+describe('PortfolioService.symbolCurrency', () => {
+    afterEach(() => {
+        APIService.currencyCache = {};
+    });
+
+    it('sans devise connue : repli sur l heuristique de suffixe', () => {
+        const svc = new PortfolioService();
+        expect(svc.symbolCurrency('AAPL')).toBe('USD');
+        expect(svc.symbolCurrency('MC.PA')).toBe('EUR');
+        expect(svc.symbolCurrency('$CASH')).toBe('USD');
+    });
+
+    it('un OPCVM europeen n est plus valorise en USD par defaut', () => {
+        const svc = new PortfolioService();
+        // Suffixes des places allemandes qui cotent les OPCVM europeens.
+        expect(svc.symbolCurrency('0P0001OOS9.F')).toBe('EUR');
+        expect(svc.symbolCurrency('LU1279334210.SG')).toBe('EUR');
+    });
+
+    it('la devise resolue prime sur le suffixe', () => {
+        const svc = new PortfolioService();
+        svc.symbolCurrencies['SHOP.TO'] = 'USD'; // cotation reelle, pas le CAD du suffixe
+        expect(svc.symbolCurrency('SHOP.TO')).toBe('USD');
+    });
+
+    it('load() amorce la map avec la devise figee en base', async () => {
+        harness({
+            portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }],
+            tradeRows: [
+                {
+                    id: 't1',
+                    portfolio_id: 'p1',
+                    type: 'BUY',
+                    symbol: '0P0001OOS9.X',
+                    qty: 1,
+                    price: 489,
+                    amount: 489,
+                    currency: 'EUR',
+                    date: '2026-02-01',
+                },
+            ],
+        });
+        const svc = new PortfolioService();
+        await svc.load();
+        // Suffixe inconnu : sans la colonne, le titre tombait en USD.
+        expect(Utils.getCurrency('0P0001OOS9.X')).toBe('USD');
+        expect(svc.symbolCurrency('0P0001OOS9.X')).toBe('EUR');
+    });
+
+    it('refreshPrices corrige la map depuis la devise servie par l API', async () => {
+        stubMarket({ prices: { 'FOO.XX': 10 } });
+        APIService.currencyCache = { 'FOO.XX': 'EUR' };
+        harness({
+            portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }],
+            tradeRows: [
+                {
+                    id: 't1',
+                    portfolio_id: 'p1',
+                    type: 'BUY',
+                    symbol: 'FOO.XX',
+                    qty: 1,
+                    price: 10,
+                    amount: 10,
+                    currency: 'USD', // valeur figee a tort a la saisie
+                    date: '2026-02-01',
+                },
+            ],
+        });
+        const svc = new PortfolioService();
+        await svc.load();
+        // load() lance refreshPrices sans l'attendre : la correction arrive au
+        // cycle suivant, avant le prochain rendu.
+        await svc.refreshPrices();
+        expect(svc.symbolCurrency('FOO.XX')).toBe('EUR');
+    });
+
+    it('la devise native est ecrite en base a l insertion', async () => {
+        const fake = harness({ portfolioRows: [{ id: 'p1', name: 'P', color: '#111' }] });
+        const svc = new PortfolioService();
+        await svc.load();
+        await svc.addTrade({
+            type: 'BUY',
+            symbol: 'MC.PA',
+            qty: 1,
+            price: 600,
+            date: dayOffset(-1),
+            cashSource: 'DIRECT',
+        });
+        expect(fake.of('trades', 'insert')[0].payload.currency).toBe('EUR');
     });
 });

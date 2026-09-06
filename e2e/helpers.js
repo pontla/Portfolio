@@ -497,7 +497,14 @@ export async function bootApp(page, opts = {}) {
             }
         }
         if (p.endsWith('/fundamentals')) return json(FUNDAMENTALS);
-        if (p.endsWith('/quote')) return json({ symbol: 'AAPL', price: 192.5, currency: 'USD' });
+        if (p.endsWith('/quote')) {
+            const sym = (url.searchParams.get('symbol') || 'AAPL').toUpperCase();
+            // OPCVM europeen : suffixe inconnu du repli heuristique, seule
+            // l'API sait qu'il cote en euros.
+            if (sym === '0P0001OOS9.X')
+                return json({ symbol: sym, price: 489.17, currency: 'EUR' });
+            return json({ symbol: 'AAPL', price: 192.5, currency: 'USD' });
+        }
         if (p.endsWith('/history')) {
             return json(buildHistory(url.searchParams.get('from'), url.searchParams.get('to')));
         }

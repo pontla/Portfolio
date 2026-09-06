@@ -26,6 +26,10 @@ create table if not exists trades (
     -- 'DIRECT' (achat hors cash, sans depot prealable). NULL sur les autres
     -- types et sur les lignes anterieures a la colonne.
     cash_source text check (cash_source is null or cash_source in ('CASH', 'DIRECT')),
+    -- Devise native du titre, figee a la saisie et alimentee par l'API de
+    -- cotation. NULL = lignes anterieures a la colonne -> repli sur
+    -- l'heuristique de suffixe, corrigee des que l'API repond.
+    currency text,
     date date not null,
     created_at timestamptz not null default now()
 );
@@ -48,6 +52,7 @@ create index if not exists trades_portfolio_id_idx on trades(portfolio_id);
 --   alter table trades add column if not exists fees numeric not null default 0;
 --   alter table trades add column if not exists fx_rate numeric;
 --   alter table trades add column if not exists cash_source text;
+--   alter table trades add column if not exists currency text;
 
 alter table portfolios enable row level security;
 alter table trades enable row level security;

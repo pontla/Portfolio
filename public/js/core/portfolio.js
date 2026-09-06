@@ -40,6 +40,10 @@ export class PortfolioService {
         /** @type {string[]} Devises dont le taux servi n'est pas un taux live. */
         this.estimatedFxCurrencies = [];
         this.dailyPriceCache = {};
+        // Devise native par symbole. Alimentee par la colonne `currency` des
+        // transactions (valeur figee a la saisie) puis corrigee par l'API au
+        // rafraichissement. Consultee via symbolCurrency(), jamais en direct.
+        this.symbolCurrencies = /** @type {Record<string, string>} */ ({});
         this.fxRate = 1.08;
         this.fxRates = /** @type {Record<string, number|null>} */ ({
             USD: 1,
@@ -176,6 +180,7 @@ export class PortfolioService {
             fees: Number(r.fees) || 0,
             fxRate: Number(r.fx_rate) || null,
             cashSource: r.cash_source || null,
+            currency: r.currency || null,
             // Invariant : toute date en memoire est canonique (AAAA-MM-JJ).
             // Les ecritures passent par normalizeTradeInput, qui normalise deja ;
             // la lecture est l'autre porte d'entree (lignes anciennes, colonne
@@ -183,6 +188,15 @@ export class PortfolioService {
             // canonique faussait chaque comparaison de dates du moteur.
             date: r.date ? Utils.getDateString(r.date) : r.date,
         }));
+
+        // Amorce la map des devises avec ce qui a ete fige a la saisie, avant
+        // tout appel reseau : les calculs qui tournent pendant le chargement
+        // des cours utilisent deja la bonne devise plutot que le suffixe.
+        this.symbolCurrencies = {};
+        for (const t of this.trades) {
+            if (t.currency && !t.symbol.startsWith('$'))
+                this.symbolCurrencies[t.symbol] = t.currency;
+        }
 
         const storedActiveId = storage.get(CONFIG.ACTIVE_PORTFOLIO_STORAGE);
         this.activePortfolioId = storedActiveId || this.portfolios[0].id;
@@ -305,6 +319,26 @@ export class PortfolioService {
         return sorted.length > 0 ? Utils.parseDate(sorted[0].date) : null;
     }
 
+    /** Memorise la devise d'une ligne ecrite, pour les calculs anterieurs au
+     * prochain refreshPrices(). @param {any} trade */
+    _rememberCurrency(trade) {
+        if (trade && trade.currency && trade.symbol && !trade.symbol.startsWith('$'))
+            this.symbolCurrencies[trade.symbol] = trade.currency;
+    }
+
+    /**
+     * Devise native d'un symbole. Ordre : devise resolue par l'API (figee a la
+     * saisie puis corrigee au rafraichissement) > heuristique de suffixe.
+     * Unique point d'entree : aucun calcul ne doit appeler Utils.getCurrency()
+     * directement, sous peine de valoriser un OPCVM europeen en USD.
+     * @param {string} symbol
+     */
+    symbolCurrency(symbol) {
+        if (!symbol) return 'USD';
+        if (symbol.startsWith('$')) return 'USD';
+        return this.symbolCurrencies[symbol] || Utils.getCurrency(symbol);
+    }
+
     async refreshPrices() {
         const uniqueSymbols = [
             ...new Set(
@@ -321,6 +355,11 @@ export class PortfolioService {
                 const price = await APIService.getCurrentPrice(sym);
                 if (price > 0) this.marketPrices[sym] = price;
                 else this.unavailablePrices.push(sym);
+                // La devise servie par l'API prime sur celle figee a la saisie :
+                // elle corrige en memoire les lignes anciennes saisies avant la
+                // colonne `currency`, ou deduites d'un suffixe inconnu.
+                const apiCurrency = APIService.cachedCurrency(sym);
+                if (apiCurrency) this.symbolCurrencies[sym] = apiCurrency;
             })
         );
         this.unavailablePrices.sort();
@@ -449,7 +488,7 @@ export class PortfolioService {
 
         // Taux de change fige a la saisie (USD pour 1 unite de la devise native du titre).
         // Reutilise une valeur fournie (ex. re-edition, import) sinon prend le spot courant.
-        const nativeCurrency = Utils.getCurrency(symbol);
+        const nativeCurrency = this.symbolCurrency(symbol);
         let fxRate = tradeData.fxRate != null ? Number(tradeData.fxRate) : null;
         if (!(fxRate > 0)) {
             fxRate =
@@ -488,6 +527,10 @@ export class PortfolioService {
             fees,
             fxRate,
             cashSource,
+            // Devise native figee a la saisie, au meme titre que fxRate : c'est
+            // elle qui evite de revaloriser une ligne dans une autre devise si
+            // l'heuristique de suffixe change plus tard.
+            currency: nativeCurrency,
             date: normalizedDate,
             portfolioId,
         };
@@ -514,7 +557,7 @@ export class PortfolioService {
      * @param {number} [sellQtyOverride]
      */
     _applyTradeToCash(st, trade, sellQtyOverride) {
-        const currency = Utils.getCurrency(trade.symbol);
+        const currency = this.symbolCurrency(trade.symbol);
         const toUSD = (val) => this.convertCurrency(val, currency, 'USD');
         // Ecrete a ce qui est disponible : le solde ne descend jamais sous zero.
         const debit = (amountUSD) => {
@@ -618,7 +661,7 @@ export class PortfolioService {
                     excludeTradeId,
                     portfolioId: n.portfolioId,
                 });
-                const currency = Utils.getCurrency(n.symbol);
+                const currency = this.symbolCurrency(n.symbol);
                 const costUSD = this.convertCurrency(
                     n.qty * n.price + (n.fees || 0),
                     currency,
@@ -660,7 +703,7 @@ export class PortfolioService {
                 });
                 const amountUSD = this.convertCurrency(
                     n.amount,
-                    Utils.getCurrency(n.symbol),
+                    this.symbolCurrency(n.symbol),
                     'USD'
                 );
                 if (amountUSD > availableUSD + 0.0001) {
@@ -693,6 +736,7 @@ export class PortfolioService {
                 fees: n.fees,
                 fx_rate: n.fxRate,
                 cash_source: n.cashSource,
+                currency: n.currency,
                 date: n.date,
             })
             .select()
@@ -710,9 +754,11 @@ export class PortfolioService {
             fees: Number(data.fees) || 0,
             fxRate: Number(data.fx_rate) || null,
             cashSource: data.cash_source || null,
+            currency: data.currency || null,
             date: data.date,
         };
 
+        this._rememberCurrency(newTrade);
         this.trades.push(newTrade);
         this.refreshPrices();
         return newTrade;
@@ -734,6 +780,7 @@ export class PortfolioService {
                 fees: n.fees,
                 fx_rate: n.fxRate,
                 cash_source: n.cashSource,
+                currency: n.currency,
                 date: n.date,
             })
             .eq('id', id)
@@ -752,10 +799,12 @@ export class PortfolioService {
             fees: Number(data.fees) || 0,
             fxRate: Number(data.fx_rate) || null,
             cashSource: data.cash_source || null,
+            currency: data.currency || null,
             date: data.date,
         };
 
         const idx = this.trades.findIndex((t) => t.id === id);
+        this._rememberCurrency(updatedTrade);
         if (idx !== -1) this.trades[idx] = updatedTrade;
 
         this.refreshPrices();
@@ -784,6 +833,7 @@ export class PortfolioService {
                 fees: n.fees,
                 fx_rate: n.fxRate,
                 cash_source: n.cashSource,
+                currency: n.currency,
                 date: n.date,
             };
         });
@@ -802,9 +852,11 @@ export class PortfolioService {
             fees: Number(d.fees) || 0,
             fxRate: Number(d.fx_rate) || null,
             cashSource: d.cash_source || null,
+            currency: d.currency || null,
             date: d.date,
         }));
 
+        newTrades.forEach((t) => this._rememberCurrency(t));
         this.trades.push(...newTrades);
         this.refreshPrices();
         return newTrades.length;
@@ -830,7 +882,7 @@ export class PortfolioService {
             .sort((a, b) => Utils.parseDate(a.date).getTime() - Utils.parseDate(b.date).getTime())
             .forEach((t) => {
                 const port = this.getPortfolioById(t.portfolioId);
-                const currency = Utils.getCurrency(t.symbol);
+                const currency = this.symbolCurrency(t.symbol);
                 lines.push(
                     [
                         t.date,
@@ -887,7 +939,7 @@ export class PortfolioService {
 
                 if ((type === 'BUY' || type === 'SELL') && row.currency) {
                     const enteredCurrency = row.currency.toUpperCase();
-                    const nativeCurrency = Utils.getCurrency(symbol);
+                    const nativeCurrency = this.symbolCurrency(symbol);
                     if (enteredCurrency !== nativeCurrency) {
                         price = this.convertCurrency(price, enteredCurrency, nativeCurrency);
                         fees = this.convertCurrency(fees, enteredCurrency, nativeCurrency);
@@ -1038,7 +1090,7 @@ export class PortfolioService {
         const firstTradeDate = this.getFirstTradeDate();
 
         sortedTrades.forEach((trade) => {
-            const currency = Utils.getCurrency(trade.symbol);
+            const currency = this.symbolCurrency(trade.symbol);
             const toUSD = (val) => this.convertCurrency(val, currency, 'USD');
 
             switch (trade.type) {
@@ -1385,7 +1437,7 @@ export class PortfolioService {
     }
 
     _applyTradeToProfitState(st, trade) {
-        const currency = Utils.getCurrency(trade.symbol);
+        const currency = this.symbolCurrency(trade.symbol);
         const toUSD = (val) => this.convertCurrency(val, currency, 'USD');
 
         switch (trade.type) {
@@ -1445,7 +1497,7 @@ export class PortfolioService {
             holdingsCostUSD = 0;
         Object.entries(st.holdings).forEach(([symbol, h]) => {
             if (h.qty <= 0.0001) return;
-            const currency = Utils.getCurrency(symbol);
+            const currency = this.symbolCurrency(symbol);
             // `getPriceOnDate` renvoie un cours en devise de cotation, reconverti en
             // USD juste apres : le prix de repli doit donc etre natif lui aussi. Le
             // PRU stocke est en USD, d'ou la conversion inverse -- sans elle la
@@ -1479,7 +1531,7 @@ export class PortfolioService {
      * de l'etat de resultat, qui ecrete pour ne pas realiser de gain fantome.
      */
     _applyTradeToDayHoldings(dayHoldings, trade) {
-        const currency = Utils.getCurrency(trade.symbol);
+        const currency = this.symbolCurrency(trade.symbol);
         const toUSD = (v) => this.convertCurrency(v, currency, 'USD');
 
         if (trade.type === 'BUY') {
@@ -1548,7 +1600,7 @@ export class PortfolioService {
                 if (t.type !== 'DEPOSIT' && t.type !== 'WITHDRAWAL') return;
                 const amount = this.convertCurrency(
                     t.amount,
-                    Utils.getCurrency(t.symbol),
+                    this.symbolCurrency(t.symbol),
                     targetCurrency
                 );
                 const remaining = Utils.daysBetween(t.date, toStr) / totalDays;
@@ -1670,7 +1722,7 @@ export class PortfolioService {
                 if (tradeTime === dayTime && (trade.type === 'BUY' || trade.type === 'SELL')) {
                     const flow = this.convertCurrency(
                         trade.qty * trade.price,
-                        Utils.getCurrency(trade.symbol),
+                        this.symbolCurrency(trade.symbol),
                         'USD'
                     );
                     dayFlowUSD += trade.type === 'BUY' ? flow : -flow;
@@ -1683,7 +1735,7 @@ export class PortfolioService {
             Object.entries(dayHoldings).forEach(([symbol, h]) => {
                 if (h.qty > 0.0001) {
                     const priceOnDay = this.getPriceOnDate(symbol, dateStr, h.buyPrice);
-                    const currency = Utils.getCurrency(symbol);
+                    const currency = this.symbolCurrency(symbol);
                     const valUSD = this.convertCurrency(h.qty * priceOnDay, currency, 'USD');
                     dayHoldingsValueUSD += valUSD;
                     dayHoldingsCostUSD += h.costUSD;

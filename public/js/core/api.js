@@ -15,6 +15,8 @@ const SYNTHETIC_HISTORY = Symbol('syntheticHistory');
 
 export const APIService = {
     quoteCache: {},
+    /** Devise de cotation par symbole, telle que renvoyee par l'API (pas de TTL). */
+    currencyCache: /** @type {Record<string, string>} */ ({}),
     candleCache: {},
     cachedFxRate: null,
 
@@ -137,6 +139,11 @@ export const APIService = {
             const data = await res.json();
             if (data && typeof data.price === 'number' && data.price > 0) {
                 this.quoteCache[symbol] = { timestamp: now, price: data.price };
+                // La devise de cotation vient de la meta Yahoo : c'est la seule
+                // source qui fasse autorite. Elle est conservee separement du
+                // cache de cours, qui expire en 5 minutes alors que la devise
+                // d'un titre ne change pas.
+                if (data.currency) this.currencyCache[symbol] = String(data.currency).toUpperCase();
                 return data.price;
             }
             throw new Error('prix invalide');
@@ -147,6 +154,25 @@ export const APIService = {
             console.warn(`Quote proxy error pour ${symbol}, cours indisponible`, e);
             return null;
         }
+    },
+
+    /** Devise deja resolue par l'API pour ce symbole, sinon `null`. Synchrone. */
+    cachedCurrency(symbol) {
+        if (!symbol) return null;
+        if (symbol.startsWith('$')) return 'USD';
+        return this.currencyCache[symbol] || null;
+    },
+
+    /**
+     * Devise de cotation faisant autorite. Interroge /quote si elle n'est pas
+     * deja connue. Renvoie `null` si l'API n'a pas repondu : l'appelant retombe
+     * alors sur l'heuristique de suffixe (Utils.getCurrency).
+     */
+    async resolveCurrency(symbol) {
+        const known = this.cachedCurrency(symbol);
+        if (known) return known;
+        await this.getCurrentPrice(symbol);
+        return this.cachedCurrency(symbol);
     },
 
     // Taux USD par unite de devise. Contrairement aux cours, un taux de change
@@ -333,6 +359,8 @@ export const APIService = {
             if (!res.ok) throw new Error(`proxy HTTP ${res.status}`);
             const data = await res.json();
             this._fundCache[symbol] = { timestamp: now, data };
+            if (data && data.currency)
+                this.currencyCache[symbol] = String(data.currency).toUpperCase();
             return data;
         } catch (e) {
             console.warn(`Fundamentals proxy error pour ${symbol}`, e);
