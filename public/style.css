@@ -764,6 +764,20 @@ textarea {
     font-size: 14px;
 }
 
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 32px;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 20px) center, calc(100% - 14px) center;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    color: inherit;
+    cursor: pointer;
+}
+
 input:focus {
     outline: none;
     border-color: var(--accent-blue);
@@ -3906,7 +3920,7 @@ input[type='email'],
 input[type='password'],
 select,
 textarea {
-    background: var(--f3);
+    background-color: var(--f3);
     color: var(--txt);
     border: 1px solid var(--l3);
 }
@@ -3926,10 +3940,11 @@ textarea:focus {
 #targetPortfolioSelect,
 #priceCurrencyField,
 #aiProviderSelect {
-    background: var(--f3) !important;
+    background-color: var(--f3) !important;
     color: var(--txt);
     border: 1px solid var(--l3) !important;
     padding: 10px;
+    padding-right: 32px;
 }
 select option {
     background: var(--surf);
@@ -4294,7 +4309,7 @@ input[type='email'],
 input[type='password'],
 select,
 textarea {
-    background: var(--f3);
+    background-color: var(--f3);
     color: var(--txt);
     border: 1px solid var(--l3);
 }
@@ -4314,10 +4329,11 @@ textarea:focus {
 #targetPortfolioSelect,
 #priceCurrencyField,
 #aiProviderSelect {
-    background: var(--f3) !important;
+    background-color: var(--f3) !important;
     color: var(--txt);
     border: 1px solid var(--l3) !important;
     padding: 10px;
+    padding-right: 32px;
 }
 select option {
     background: var(--surf);
