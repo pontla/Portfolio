@@ -764,6 +764,16 @@ textarea {
     font-size: 14px;
 }
 
+input[type='number'] {
+    -moz-appearance: textfield;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 select {
     appearance: none;
     -webkit-appearance: none;
@@ -5927,34 +5937,6 @@ select option {
         margin-top: 0;
     }
 
-    /* --- Panneau Reglages ancre --- */
-    #settingsModal.open {
-        justify-content: flex-end;
-        align-items: flex-start;
-        padding: 0;
-        background: transparent;
-        -webkit-backdrop-filter: none;
-        backdrop-filter: none;
-    }
-    #settingsModal .modal {
-        margin: 64px 28px 0 0;
-        width: 296px;
-        max-width: 296px;
-        border-radius: 16px;
-        border: 1px solid var(--l2);
-        box-shadow: 0 24px 60px var(--shadow);
-        animation: popIn 0.22s ease;
-    }
-    @keyframes popIn {
-        from {
-            opacity: 0;
-            transform: translateY(6px) scale(0.98);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
-    }
 }
 
 /* ============================================================

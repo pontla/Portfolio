@@ -204,6 +204,9 @@ export const events = {
         if (settingsBtn && settingsModal) {
             settingsBtn.onclick = () => settingsModal.classList.add('open');
             closeSettings.onclick = () => settingsModal.classList.remove('open');
+            settingsModal.addEventListener('click', (e) => {
+                if (e.target === settingsModal) settingsModal.classList.remove('open');
+            });
         }
         if (reloadPricesBtn) {
             reloadPricesBtn.onclick = () => {
@@ -521,6 +524,9 @@ export const events = {
             };
 
         document.getElementById('closeModalBtn').onclick = () => f.modal.classList.remove('open');
+        f.modal.addEventListener('click', (e) => {
+            if (e.target === f.modal) f.modal.classList.remove('open');
+        });
         f.form.onsubmit = (e) => this.submitTransactionForm(e);
     },
 
