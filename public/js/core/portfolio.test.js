@@ -1803,3 +1803,148 @@ describe('PortfolioService : financement des achats et cash', () => {
         expect(s.totalValue).toBeCloseTo(s.holdingsValue + s.cash);
     });
 });
+
+// ---------------------------------------------------------------------------
+// VALUATION : valorisation manuelle des supports que la source ne cote pas
+// (fonds euros, UC sans VL publiee)
+// ---------------------------------------------------------------------------
+
+describe('PortfolioService — valorisation manuelle', () => {
+    /**
+     * Fonds euros modelise en « parts » a 1 € : 10 000 € verses, releve a
+     * 10 340 € plus tard. Le prix implicite vaut donc 1,034.
+     */
+    function fundService(valuations = []) {
+        const svc = new PortfolioService();
+        svc.portfolios = [{ id: 'p1', name: 'AV' }];
+        svc.activePortfolioId = 'GLOBAL';
+        svc.symbolCurrencies = { FONDSEURO: 'EUR' };
+        svc.fxRates = { USD: 1, EUR: 1 };
+        svc.trades = [
+            {
+                id: 'b1',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'FONDSEURO',
+                qty: 10000,
+                price: 1,
+                amount: 10000,
+                fees: 0,
+                cashSource: 'DIRECT',
+                currency: 'EUR',
+                date: '2026-01-01',
+            },
+            ...valuations,
+        ];
+        svc.manualPrices = svc._manualPriceSeries();
+        return svc;
+    }
+
+    const valuation = (id, date, amount) => ({
+        id,
+        portfolioId: 'p1',
+        type: 'VALUATION',
+        symbol: 'FONDSEURO',
+        qty: 1,
+        price: amount,
+        amount,
+        fees: 0,
+        cashSource: null,
+        currency: 'EUR',
+        date,
+    });
+
+    it('derive un cours implicite du montant releve et de la quantite detenue', () => {
+        const svc = fundService([valuation('v1', '2026-06-30', 10340)]);
+        expect(svc.manualPrices.FONDSEURO['2026-06-30']).toBeCloseTo(1.034, 6);
+        expect(svc.isManuallyValued('FONDSEURO')).toBe(true);
+    });
+
+    it('le releve fait autorite a sa date et est reporte ensuite', () => {
+        const svc = fundService([valuation('v1', '2026-06-30', 10340)]);
+        expect(svc.getPriceOnDate('FONDSEURO', '2026-06-30')).toBeCloseTo(1.034, 6);
+        expect(svc.getPriceOnDate('FONDSEURO', '2026-08-15')).toBeCloseTo(1.034, 6);
+    });
+
+    it('avant le premier releve, aucune valeur n est extrapolee vers le passe', () => {
+        const svc = fundService([valuation('v1', '2026-06-30', 10340)]);
+        // Repli sur le prix d'achat fourni par l'appelant, pas sur le releve.
+        expect(svc.getPriceOnDate('FONDSEURO', '2026-03-01', 1)).toBe(1);
+    });
+
+    it('plusieurs releves : chacun ne vaut que jusqu au suivant', () => {
+        const svc = fundService([
+            valuation('v1', '2026-03-31', 10100),
+            valuation('v2', '2026-06-30', 10340),
+        ]);
+        expect(svc.getPriceOnDate('FONDSEURO', '2026-05-01')).toBeCloseTo(1.01, 6);
+        expect(svc.getPriceOnDate('FONDSEURO', '2026-07-01')).toBeCloseTo(1.034, 6);
+    });
+
+    it('ne touche ni au cash, ni a la quantite, ni au prix de revient', () => {
+        const withVal = fundService([valuation('v1', '2026-06-30', 10340)]);
+        withVal.marketPrices = { FONDSEURO: 1.034 };
+        const s = withVal.calculatePortfolio('EUR');
+        const h = s.holdings.find((x) => x.symbol === 'FONDSEURO');
+
+        expect(h.qty).toBe(10000); // la valorisation n'ajoute aucune part
+        expect(h.avgPrice).toBeCloseTo(1, 6); // ni ne deplace le prix de revient
+        expect(s.cash).toBeCloseTo(0); // achat direct, aucun mouvement de cash
+        expect(h.valueNative).toBeCloseTo(10340, 2);
+        expect(h.gainNative).toBeCloseTo(340, 2);
+    });
+
+    it('la position n est pas comptee comme cours indisponible', () => {
+        const svc = fundService([valuation('v1', '2026-06-30', 10340)]);
+        svc.marketPrices = { FONDSEURO: 1.034 };
+        const h = svc.calculatePortfolio('EUR').holdings[0];
+        expect(h.priceUnavailable).toBe(false);
+        expect(h.manuallyValued).toBe(true);
+    });
+
+    it('un releve sans position a cette date est ignore plutot que divise par zero', () => {
+        const svc = fundService([valuation('v1', '2025-01-01', 5000)]); // avant l'achat
+        expect(svc.manualPrices.FONDSEURO).toBeUndefined();
+        expect(svc.isManuallyValued('FONDSEURO')).toBe(false);
+    });
+
+    it('refuse une valorisation sans position detenue a cette date', () => {
+        const svc = fundService();
+        expect(() =>
+            svc.validateTrade({
+                type: 'VALUATION',
+                symbol: 'FONDSEURO',
+                amount: 9000,
+                qty: 1,
+                price: 9000,
+                portfolioId: 'p1',
+                date: '2025-06-01',
+            })
+        ).toThrow(/Aucune position/);
+    });
+
+    it('refuse une valorisation sans symbole ou a montant nul', () => {
+        const svc = fundService();
+        const base = { type: 'VALUATION', portfolioId: 'p1', date: '2026-06-30' };
+        expect(() => svc.validateTrade({ ...base, symbol: '', amount: 100 })).toThrow(/Symbole/);
+        expect(() => svc.validateTrade({ ...base, symbol: 'FONDSEURO', amount: 0 })).toThrow(
+            /Valorisation invalide/
+        );
+    });
+
+    it('normalise la saisie sans financement ni quantite', () => {
+        const svc = fundService();
+        const n = svc.normalizeTradeInput({
+            type: 'VALUATION',
+            symbol: 'FONDSEURO',
+            amount: 10340,
+            portfolioId: 'p1',
+            date: '2026-06-30',
+        });
+        expect(n.type).toBe('VALUATION');
+        expect(n.amount).toBe(10340);
+        expect(n.qty).toBe(1);
+        expect(n.cashSource).toBeNull();
+        expect(n.currency).toBe('EUR');
+    });
+});

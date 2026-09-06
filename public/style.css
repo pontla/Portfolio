@@ -856,6 +856,13 @@ input:focus {
     color: var(--dim);
 }
 
+/* Valorisation manuelle : ce n'est pas un mouvement, d'ou un badge neutre —
+   il ne doit pas se lire comme une entree ou une sortie. Tokens seuls. */
+.badge-valuation {
+    background-color: var(--f3);
+    color: var(--text-secondary);
+}
+
 .hidden {
     display: none !important;
 }

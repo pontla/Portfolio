@@ -891,6 +891,22 @@ export const events = {
     // Poignees DOM de la modale de transaction. Relues a chaque appel : les
     // elements sont statiques dans index.html, et cela evite que les methodes
     // qui manipulent le formulaire dependent d'une closure de cablage.
+    /**
+     * Libelle du champ montant en mode valorisation. Le releve est lu dans la
+     * devise du support (un fonds euros se releve en euros) : il est stocke tel
+     * quel, sans conversion, contrairement au dividende qui se saisit en USD.
+     * Le libelle doit donc nommer la devise attendue.
+     */
+    _syncValuationLabel() {
+        const f = this._txForm();
+        if (f.form.elements['type'].value !== 'VALUATION') return;
+        const sym = f.symbolInput.value.trim();
+        const cur = sym ? this.service.symbolCurrency(sym) : null;
+        f.amountLabel.textContent = cur
+            ? `Valeur totale de la position à cette date (${Utils.currencySymbol(cur)})`
+            : 'Valeur totale de la position à cette date';
+    },
+
     /** Message sous le champ symbole ; vide le masque. @param {string} [msg] */
     _setSymbolHint(msg) {
         const hint = this._txForm().symbolHint;
@@ -959,6 +975,7 @@ export const events = {
         // L'utilisateur a pu changer de symbole pendant la requete.
         if (f.symbolInput.value.trim().toUpperCase() === sym.toUpperCase())
             f.priceCurrencyField.value = resolved;
+        this._syncValuationLabel();
     },
 
     _txForm() {
@@ -1004,6 +1021,24 @@ export const events = {
             f.amountInput.setAttribute('required', 'true');
             f.amountLabel.textContent =
                 type === 'DEPOSIT' ? 'Montant du dépôt ($)' : 'Montant du retrait ($)';
+            f.cashSourceGroup.style.display = 'none';
+        } else if (type === 'VALUATION') {
+            // Releve de valorisation : le symbole et le montant total suffisent.
+            // Ni quantite, ni prix unitaire, ni financement — rien ne bouge dans
+            // le portefeuille, seule la valeur de marche est fixee a la main.
+            f.symbolGroup.style.display = 'block';
+            f.symbolInput.setAttribute('required', 'true');
+            f.symbolInput.placeholder = 'Symbole ou ISIN du support';
+
+            f.qtyPriceRow.style.display = 'none';
+            f.qtyInput.removeAttribute('required');
+            f.priceInput.removeAttribute('required');
+            f.priceCurrencyGroup.style.display = 'none';
+            f.feesGroup.style.display = 'none';
+
+            f.amountGroup.style.display = 'block';
+            f.amountInput.setAttribute('required', 'true');
+            this._syncValuationLabel();
             f.cashSourceGroup.style.display = 'none';
         } else if (type === 'DIVIDEND' || type === 'FEE') {
             f.symbolGroup.style.display = 'block';

@@ -119,14 +119,22 @@ export const transactions = {
                       } else if (t.type === 'FEE') {
                           badgeClass = 'badge-fee';
                           typeLabel = 'Frais';
+                      } else if (t.type === 'VALUATION') {
+                          badgeClass = 'badge-valuation';
+                          typeLabel = 'Valorisation';
                       }
 
                       const port = this.service.getPortfolioById(t.portfolioId);
-                      const tradeCurrency = Utils.getCurrency(t.symbol);
+                      const tradeCurrency = this.service.symbolCurrency(t.symbol);
+                      // Une valorisation porte une valeur totale relevee, pas un
+                      // produit quantite x prix : ni quantite ni prix unitaire.
+                      const isValuation = t.type === 'VALUATION';
                       const totalFormatted =
                           t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL'
                               ? Utils.formatCurrency(t.amount, curr)
-                              : Utils.formatCurrency(t.qty * t.price, tradeCurrency);
+                              : isValuation
+                                ? Utils.formatCurrency(t.amount, tradeCurrency)
+                                : Utils.formatCurrency(t.qty * t.price, tradeCurrency);
                       const assetName = this.assetNameCache[t.symbol];
 
                       return `
@@ -141,8 +149,8 @@ export const transactions = {
                     <td data-label="Type"><span class="badge ${badgeClass}">${typeLabel}</span></td>
                     <td data-label="Actif" style="font-weight:600;">${t.symbol}</td>
                     <td data-label="Nom" style="color:var(--text-secondary); font-size:13px;">${assetName || ''}</td>
-                    <td data-label="Quantité">${t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL' ? '—' : t.qty}</td>
-                    <td data-label="Prix">${t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL' ? '—' : Utils.formatCurrency(t.price, tradeCurrency)}</td>
+                    <td data-label="Quantité">${t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL' || isValuation ? '—' : t.qty}</td>
+                    <td data-label="Prix">${t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL' || isValuation ? '—' : Utils.formatCurrency(t.price, tradeCurrency)}</td>
                     <td data-label="Total" style="font-weight:600;">${totalFormatted}</td>
                     <td data-label="Actions">
                         <button class="edit-trade-btn" data-id="${t.id}" style="color:var(--dim); border:none; background:none; cursor:pointer;" title="Modifier">
@@ -198,14 +206,18 @@ export const transactions = {
                           } else if (t.type === 'FEE') {
                               badgeClass = 'badge-fee';
                               typeLabel = 'Frais';
+                          } else if (t.type === 'VALUATION') {
+                              badgeClass = 'badge-valuation';
+                              typeLabel = 'Valorisation';
                           }
 
-                          const tradeCurrency = Utils.getCurrency(t.symbol);
+                          const tradeCurrency = this.service.symbolCurrency(t.symbol);
                           const d = Utils.parseDate(t.date);
                           const sym = t.symbol.replace(/^\$/, '') || 'CASH';
-                          const sub = isCash
-                              ? '_'
-                              : `${t.qty} × ${Utils.formatCurrency(t.price, tradeCurrency)}`;
+                          const sub =
+                              isCash || t.type === 'VALUATION'
+                                  ? '_'
+                                  : `${t.qty} × ${Utils.formatCurrency(t.price, tradeCurrency)}`;
 
                           let amount,
                               amountCls = '';
@@ -225,6 +237,9 @@ export const transactions = {
                                       isCash ? curr : tradeCurrency
                                   );
                               amountCls = 'text-red';
+                          } else if (t.type === 'VALUATION') {
+                              // Ni entree ni sortie : aucun signe, aucune couleur.
+                              amount = Utils.formatCurrency(t.amount, tradeCurrency);
                           } else {
                               amount = Utils.formatCurrency(t.qty * t.price, tradeCurrency);
                           }

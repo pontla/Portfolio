@@ -186,6 +186,15 @@ export const Utils = {
         return `${sign}$${body}`;
     },
 
+    /** Symbole d'affichage d'une devise (€, $, £, CA$). */
+    currencySymbol: (currency) => {
+        const c = (currency || 'USD').toUpperCase();
+        if (c === 'EUR') return '€';
+        if (c === 'GBP') return '£';
+        if (c === 'CAD') return 'CA$';
+        return '$';
+    },
+
     formatPercent: (num, withSign = true) => {
         if (num === null || num === undefined || isNaN(num)) return '0,00 %';
         const sign = num < 0 ? '−' : withSign && num > 0 ? '+' : '';
