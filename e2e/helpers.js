@@ -471,6 +471,64 @@ export async function bootApp(page, opts = {}) {
         }
 
         // Action US identique au profil complet, mais sans aucun dividende.
+        // OPCVM : aucun ratio d'action, mais un bloc `fund` complet. Sert a
+        // verifier que la carte « Profil du fonds » remplace la carte de ratios
+        // au lieu de laisser un ecran vide.
+        if (profile === 'fund') {
+            if (p.endsWith('/fundamentals'))
+                return json({
+                    symbol: '0P0001OOS9.F',
+                    name: 'Varenne Valeur A EUR Acc',
+                    price: 489.17,
+                    previousClose: 487,
+                    currency: 'EUR',
+                    exchange: 'Francfort',
+                    quoteType: 'MUTUALFUND',
+                    fundamentalsSource: null,
+                    peTTM: null,
+                    pbAnnual: null,
+                    roeTTM: null,
+                    fund: {
+                        quoteType: 'MUTUALFUND',
+                        family: 'Varenne Capital Partners',
+                        inceptionDate: '2024-09-02',
+                        morningstarRating: 4,
+                        riskRating: 4,
+                        beta3Year: 1.4,
+                        riskStatistics: [
+                            {
+                                period: '3y',
+                                alpha: -1.83,
+                                beta: 1.11,
+                                stdDev: 10.81,
+                                sharpeRatio: 0.62,
+                            },
+                        ],
+                        annualReturns: [
+                            { year: '2025', ret: 0.0906901 },
+                            { year: '2024', ret: 0.0659253 },
+                        ],
+                        allocation: { stock: 0.7798, bond: 0, cash: 0.2202, other: 0 },
+                        holdings: [
+                            { symbol: 'ASML.AS', name: 'ASML Holding NV', weight: 0.0319 },
+                            { symbol: 'MU', name: 'Micron Technology Inc', weight: 0.03 },
+                        ],
+                        sectorWeights: [
+                            { sector: 'technology', weight: 0.31 },
+                            { sector: 'consumer_cyclical', weight: 0.1018 },
+                        ],
+                    },
+                });
+            if (p.endsWith('/quote'))
+                return json({
+                    symbol: '0P0001OOS9.F',
+                    price: 489.17,
+                    currency: 'EUR',
+                    quoteType: 'MUTUALFUND',
+                });
+            if (p.endsWith('/history'))
+                return json(buildHistory(url.searchParams.get('from'), url.searchParams.get('to')));
+        }
         if (profile === 'nodiv') {
             if (p.endsWith('/dividends')) return json([]);
             if (p.endsWith('/quoteSummary'))

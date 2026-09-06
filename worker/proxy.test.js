@@ -559,7 +559,12 @@ describe('/quote', () => {
         const res = await call('/quote?symbol=AAPL');
         expect(res.status).toBe(200);
         expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=60');
-        expect(await res.json()).toEqual({ symbol: 'AAPL', price: 225.5, currency: 'USD' });
+        expect(await res.json()).toEqual({
+            symbol: 'AAPL',
+            price: 225.5,
+            currency: 'USD',
+            quoteType: null, // absent de la meta du double : pas d'invention
+        });
     });
 
     it('retombe sur le dernier close valide si regularMarketPrice absent', async () => {
@@ -1100,5 +1105,128 @@ describe('/fundamentals', () => {
         expect(body.fundamentalsSource).toBeNull();
         expect(body.peTTM).toBeNull();
         expect(body.price).toBe(10); // la meta reste servie
+    });
+});
+
+describe('/fundamentals — bloc OPCVM', () => {
+    /** Reponse quoteSummary d'un fonds : modules fund* et topHoldings presents. */
+    const fundSummary = {
+        quoteSummary: {
+            result: [
+                {
+                    price: { quoteType: 'MUTUALFUND', longName: 'Varenne Valeur', currency: 'EUR' },
+                    defaultKeyStatistics: {
+                        fundInceptionDate: { raw: 1725235200 },
+                        morningStarOverallRating: { raw: 4 },
+                        beta3Year: { raw: 1.4 },
+                        annualReportExpenseRatio: { raw: 0 },
+                    },
+                    fundProfile: { family: 'Varenne Capital Partners', categoryName: null },
+                    fundPerformance: {
+                        riskOverviewStatistics: {
+                            riskRating: { raw: 4 },
+                            riskStatistics: [
+                                { year: '5y', alpha: { raw: -0.93 }, sharpeRatio: { raw: 0.23 } },
+                                { year: '3y', sharpeRatio: { raw: 0.62 }, stdDev: { raw: 10.81 } },
+                            ],
+                        },
+                        annualTotalReturns: {
+                            returns: [
+                                { year: '2026', annualValue: {} }, // exercice en cours
+                                { year: '2025', annualValue: { raw: 0.0906901 } },
+                                { year: '2024', annualValue: { raw: 0.0659253 } },
+                            ],
+                        },
+                    },
+                    topHoldings: {
+                        stockPosition: { raw: 0.7798 },
+                        cashPosition: { raw: 0.2202 },
+                        holdings: [
+                            {
+                                symbol: 'ASML.AS',
+                                holdingName: 'ASML Holding NV',
+                                holdingPercent: { raw: 0.0319 },
+                            },
+                        ],
+                        sectorWeightings: [
+                            { realestate: { raw: 0 } },
+                            { consumer_cyclical: { raw: 0.1018 } },
+                        ],
+                    },
+                },
+            ],
+        },
+    };
+
+    function routeFund(summary) {
+        fetchMock.mockImplementation(async (url) => {
+            const u = String(url);
+            if (u.includes('/v8/finance/chart'))
+                return jsonFetchResponse(
+                    chartResult({ symbol: 'F.PA', regularMarketPrice: 489, currency: 'EUR' })
+                );
+            if (u.includes('quoteSummary')) return jsonFetchResponse(summary);
+            return { ok: false, status: 404 };
+        });
+    }
+
+    it('expose le profil, les perfs calendaires et les principales lignes', async () => {
+        routeFund(fundSummary);
+        const b = await (await call('/fundamentals?symbol=0P0001OOS9.F')).json();
+
+        expect(b.quoteType).toBe('MUTUALFUND');
+        expect(b.fund.family).toBe('Varenne Capital Partners');
+        expect(b.fund.inceptionDate).toBe('2024-09-02');
+        expect(b.fund.morningstarRating).toBe(4);
+        expect(b.fund.riskRating).toBe(4);
+        expect(b.fund.allocation).toMatchObject({ stock: 0.7798, cash: 0.2202 });
+        expect(b.fund.holdings).toEqual([
+            { symbol: 'ASML.AS', name: 'ASML Holding NV', weight: 0.0319 },
+        ]);
+    });
+
+    it('ecarte l exercice en cours, sans valeur, plutot que de le servir a zero', async () => {
+        routeFund(fundSummary);
+        const b = await (await call('/fundamentals?symbol=0P0001OOS9.F')).json();
+
+        expect(b.fund.annualReturns.map((r) => r.year)).toEqual(['2025', '2024']);
+        expect(b.fund.annualReturns[0].ret).toBeCloseTo(0.0906901, 6);
+    });
+
+    it('aplatit les ponderations sectorielles servies en objets a une cle', async () => {
+        routeFund(fundSummary);
+        const b = await (await call('/fundamentals?symbol=0P0001OOS9.F')).json();
+
+        expect(b.fund.sectorWeights).toEqual([
+            { sector: 'realestate', weight: 0 },
+            { sector: 'consumer_cyclical', weight: 0.1018 },
+        ]);
+    });
+
+    it('ne sert aucun champ de frais : Yahoo les renvoie a 0 sur les OPCVM europeens', async () => {
+        routeFund(fundSummary);
+        const b = await (await call('/fundamentals?symbol=0P0001OOS9.F')).json();
+
+        expect(b.fund).not.toHaveProperty('expenseRatio');
+        expect(b.fund).not.toHaveProperty('netExpRatio');
+        expect(JSON.stringify(b.fund)).not.toMatch(/expense/i);
+    });
+
+    it('action : aucun bloc fonds, la carte reste masquee', async () => {
+        routeFund({
+            quoteSummary: {
+                result: [
+                    {
+                        price: { quoteType: 'EQUITY', currency: 'EUR' },
+                        summaryDetail: { trailingPE: { raw: 26.5 } },
+                        defaultKeyStatistics: { priceToBook: { raw: 6.08 } },
+                    },
+                ],
+            },
+        });
+        const b = await (await call('/fundamentals?symbol=AIR.PA')).json();
+
+        expect(b.quoteType).toBe('EQUITY');
+        expect(b.fund).toBeNull();
     });
 });

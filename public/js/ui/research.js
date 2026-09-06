@@ -268,6 +268,7 @@ export const research = {
 
         this.renderResearchPosition(symbol, cur, price);
         this.renderResearchKey(fund, cur, price);
+        this.renderResearchFund(fund);
         this.renderResearchAbout(fund);
         await this.renderResearchChart(symbol);
         this.renderResearchNews(symbol, displayName);
@@ -638,6 +639,109 @@ export const research = {
         } else {
             bar.hidden = true;
         }
+    },
+
+    /**
+     * Carte « Profil du fonds ». Masquee pour une action (bloc `fund` a null).
+     *
+     * Les frais courants ne sont volontairement pas affiches : Yahoo les sert a
+     * 0 sur tous les OPCVM europeens testes, et un « 0,00 % » se lirait comme
+     * une information alors que c'est une absence.
+     * @param {any} fund reponse /fundamentals
+     */
+    renderResearchFund(fund) {
+        const card = document.getElementById('researchFundCard');
+        const grid = document.getElementById('researchFundGrid');
+        const series = document.getElementById('researchFundSeries');
+        const note = document.getElementById('researchFundNote');
+        const src = document.getElementById('researchFundSrc');
+        if (!card || !grid || !series) return;
+
+        const f = fund && fund.fund;
+        if (!f) {
+            card.hidden = true;
+            return;
+        }
+        card.hidden = false;
+        if (src) src.textContent = 'Données fonds : Yahoo Finance';
+
+        const kv = (k, v) =>
+            `<div class="research-kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+        const n1 = (x, d = 2) => (x == null || isNaN(x) ? '—' : Number(x).toFixed(d));
+        // Les poids et performances arrivent en fraction.
+        const frac = (x) => (x == null || isNaN(x) ? '—' : Utils.formatPercent(x * 100, false));
+        const stars = (n) =>
+            n == null
+                ? '—'
+                : '★'.repeat(Math.round(n)) + '☆'.repeat(Math.max(0, 5 - Math.round(n)));
+
+        // Horizon 3 ans : la reference usuelle pour comparer des fonds.
+        const r3 = (f.riskStatistics || []).find((r) => r.period === '3y') || {};
+
+        grid.innerHTML =
+            kv('Société de gestion', f.family || '—') +
+            kv('Création', f.inceptionDate ? Utils.formatDateDisplay(f.inceptionDate) : '—') +
+            kv('Notation Morningstar', stars(f.morningstarRating)) +
+            // Provenance explicite : la note vient de Morningstar via Yahoo, sur
+            // une echelle qui lui est propre. La nommer evite de la lire comme
+            // un score maison sans reference.
+            kv('Risque Morningstar', f.riskRating == null ? '—' : String(f.riskRating)) +
+            kv('Bêta 3 ans', n1(f.beta3Year)) +
+            kv('Ratio de Sharpe 3 ans', n1(r3.sharpeRatio)) +
+            kv(
+                'Volatilité 3 ans',
+                r3.stdDev == null ? '—' : Utils.formatPercent(r3.stdDev, false)
+            ) +
+            kv('Frais courants', '—') +
+            kv('Actions', frac(f.allocation && f.allocation.stock)) +
+            kv('Obligations', frac(f.allocation && f.allocation.bond)) +
+            kv('Liquidités', frac(f.allocation && f.allocation.cash));
+
+        series.innerHTML =
+            this._fundBlock(
+                'Performances calendaires',
+                (f.annualReturns || []).slice(0, 6).map((r) => ({ label: r.year, value: r.ret }))
+            ) +
+            this._fundBlock(
+                'Principales lignes',
+                (f.holdings || []).slice(0, 8).map((h) => ({ label: h.name, value: h.weight }))
+            ) +
+            this._fundBlock(
+                'Répartition sectorielle',
+                (f.sectorWeights || [])
+                    .filter((x) => x.weight > 0)
+                    .sort((a, b) => b.weight - a.weight)
+                    .slice(0, 8)
+                    .map((x) => ({ label: Utils.sectorLabel(x.sector), value: x.weight }))
+            );
+
+        if (note)
+            note.textContent =
+                'Frais courants non publiés par la source : à vérifier sur le DIC du fonds.';
+    },
+
+    /**
+     * Bloc de barres d'un profil de fonds. Les valeurs sont des fractions ;
+     * la barre est proportionnelle a la plus grande valeur absolue du bloc.
+     * @param {string} title
+     * @param {{label: string|null, value: number|null}[]} rows
+     */
+    _fundBlock(title, rows) {
+        if (!rows || !rows.length) return '';
+        const max = Math.max(...rows.map((r) => Math.abs(r.value || 0)), 0.0001);
+        const body = rows
+            .map((r) => {
+                const v = r.value;
+                const w = v == null ? 0 : Math.max(2, (Math.abs(v) / max) * 100);
+                const label = Utils.escapeHtml(String(r.label ?? '—'));
+                return (
+                    `<div class="gs-row wide"><span class="gs-year" title="${label}">${label}</span>` +
+                    `<span class="gs-bar-wrap"><span class="gs-bar${v < 0 ? ' neg' : ''}" style="width:${w.toFixed(1)}%"></span></span>` +
+                    `<span class="gs-val">${v == null ? '—' : Utils.formatPercent(v * 100, false)}</span></div>`
+                );
+            })
+            .join('');
+        return `<div class="gs-block"><div class="gs-title">${title}</div>${body}</div>`;
     },
 
     renderResearchAbout(fund) {

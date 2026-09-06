@@ -266,7 +266,7 @@ export const charts = {
         };
 
         const byAsset = groupBy((h) => h.symbol);
-        const byClass = groupBy((h) => Utils.getAssetClass(h.symbol));
+        const byClass = groupBy((h) => this.service.symbolAssetClass(h.symbol));
         const byCurrency = groupBy((h) => h.currency);
 
         this.updateDoughnutChart(this.assetChart, 'assetLegend', byAsset, undefined, {

@@ -311,11 +311,43 @@ export const Utils = {
         return 'USD';
     },
 
+    /**
+     * Vrai pour un symbole de fonds tel que Yahoo les nomme : identifiant
+     * Morningstar `0P…` (les OPCVM europeens n'ont pas de ticker de place),
+     * ou ISIN suffixe d'une place. Heuristique de repli uniquement : le
+     * `quoteType` servi par l'API fait autorite (PortfolioService.symbolAssetClass).
+     */
+    looksLikeFund: (symbol) => {
+        if (!symbol) return false;
+        const s = symbol.toUpperCase();
+        if (/^0P[0-9A-Z]{8}(\.[A-Z]+)?$/.test(s)) return true;
+        return /^[A-Z]{2}[A-Z0-9]{9}[0-9](\.[A-Z]+)?$/.test(s);
+    },
+
+    // Cles de secteur servies par Yahoo (topHoldings.sectorWeightings).
+    SECTOR_LABELS: {
+        technology: 'Technologie',
+        financial_services: 'Services financiers',
+        healthcare: 'Santé',
+        consumer_cyclical: 'Consommation cyclique',
+        consumer_defensive: 'Consommation de base',
+        industrials: 'Industrie',
+        communication_services: 'Communication',
+        energy: 'Énergie',
+        basic_materials: 'Matériaux',
+        utilities: 'Services aux collectivités',
+        realestate: 'Immobilier',
+    },
+
+    /** Libelle francais d'un secteur Yahoo ; la cle brute a defaut. */
+    sectorLabel: (key) => (key && Utils.SECTOR_LABELS[key]) || key || '—',
+
     getAssetClass: (symbol) => {
         if (!symbol) return 'Actions & ETF';
         const s = symbol.toUpperCase();
         if (s.startsWith('$')) return 'Trésorerie';
         if (s.endsWith('-USD') || ['BTC', 'ETH', 'SOL'].includes(s)) return 'Crypto';
+        if (Utils.looksLikeFund(s)) return 'Fonds & OPCVM';
         return 'Actions & ETF';
     },
 

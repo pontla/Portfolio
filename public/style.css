@@ -2645,6 +2645,16 @@ input:focus {
 .gs-year {
     color: var(--text-secondary);
 }
+/* Lignes a libelle long (nom de position, secteur) : la colonne d'annee ne
+   suffit pas. Le nom est tronque plutot que de pousser la barre hors carte. */
+.gs-row.wide {
+    grid-template-columns: minmax(0, 1.4fr) 1fr auto;
+}
+.gs-row.wide .gs-year {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .gs-bar-wrap {
     height: 7px;
     background: var(--tile);
