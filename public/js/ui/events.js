@@ -816,9 +816,9 @@ export const events = {
             }
 
             const assetCell = /** @type {HTMLElement} */ (
-                /** @type {Element} */ (e.target).closest('.holding-asset-cell')
+                /** @type {Element} */ (e.target).closest('.holding-asset-cell, .asset-link')
             );
-            if (assetCell) {
+            if (assetCell && assetCell.dataset.symbol) {
                 this.goToResearch(assetCell.dataset.symbol);
             }
 

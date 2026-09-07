@@ -527,7 +527,7 @@ export const overview = {
                     <img class="perf-logo" src="${this.getLogoUrl(h.symbol)}" alt=""
                         data-fallback="sibling">
                     <span class="perf-logo-fallback" style="display:none;">${h.symbol.substring(0, 1)}</span>
-                    <span class="perf-ticker">${h.symbol}</span>
+                    <span class="perf-ticker asset-link" data-symbol="${h.symbol}">${h.symbol}</span>
                     <div class="perf-bar-track">
                         <div class="perf-bar-fill ${barClass}" style="width:${widthPct}%;"></div>
                     </div>
@@ -567,7 +567,7 @@ export const overview = {
                         <img class="perf-logo" src="${this.getLogoUrl(m.symbol)}" alt=""
                             data-fallback="sibling">
                         <span class="perf-logo-fallback" style="display:none;">${m.symbol.substring(0, 1)}</span>
-                        <span class="perf-ticker">${m.symbol}</span>
+                        <span class="perf-ticker asset-link" data-symbol="${m.symbol}">${m.symbol}</span>
                         <div class="perf-bar-track">
                             <div class="perf-bar-fill ${barClass}" style="width:${widthPct}%;"></div>
                         </div>

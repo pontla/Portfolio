@@ -136,6 +136,14 @@ export const transactions = {
                                 ? Utils.formatCurrency(t.amount, tradeCurrency)
                                 : Utils.formatCurrency(t.qty * t.price, tradeCurrency);
                       const assetName = this.assetNameCache[t.symbol];
+                      const linkableSym =
+                          t.symbol &&
+                          !t.symbol.startsWith('$') &&
+                          t.type !== 'DEPOSIT' &&
+                          t.type !== 'WITHDRAWAL';
+                      const symCell = linkableSym
+                          ? `<span class="asset-link" data-symbol="${t.symbol}">${t.symbol}</span>`
+                          : t.symbol;
 
                       return `
                 <tr>
@@ -147,7 +155,7 @@ export const transactions = {
                         </span>
                     </td>
                     <td data-label="Type"><span class="badge ${badgeClass}">${typeLabel}</span></td>
-                    <td data-label="Actif" style="font-weight:600;">${t.symbol}</td>
+                    <td data-label="Actif" style="font-weight:600;">${symCell}</td>
                     <td data-label="Nom" style="color:var(--text-secondary); font-size:13px;">${assetName || ''}</td>
                     <td data-label="Quantité">${t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL' || isValuation ? '—' : t.qty}</td>
                     <td data-label="Prix">${t.type === 'DEPOSIT' || t.type === 'WITHDRAWAL' || isValuation ? '—' : Utils.formatCurrency(t.price, tradeCurrency)}</td>
@@ -214,6 +222,7 @@ export const transactions = {
                           const tradeCurrency = this.service.symbolCurrency(t.symbol);
                           const d = Utils.parseDate(t.date);
                           const sym = t.symbol.replace(/^\$/, '') || 'CASH';
+                          const symLinkable = !isCash && t.symbol && !t.symbol.startsWith('$');
                           const sub =
                               isCash || t.type === 'VALUATION'
                                   ? '_'
@@ -248,7 +257,7 @@ export const transactions = {
                 <div class="tx-card">
                     <div class="tx-date"><b>${d.getDate()}</b><span>${MONTHS[d.getMonth()]}</span></div>
                     <div class="tx-main">
-                        <div class="tx-line1"><span class="badge ${badgeClass}">${typeLabel}</span><span class="tx-sym">${Utils.escapeHtml(sym)}</span></div>
+                        <div class="tx-line1"><span class="badge ${badgeClass}">${typeLabel}</span><span class="tx-sym${symLinkable ? ' asset-link' : ''}"${symLinkable ? ` data-symbol="${Utils.escapeHtml(t.symbol)}"` : ''}>${Utils.escapeHtml(sym)}</span></div>
                         <div class="tx-line2">${Utils.escapeHtml(sub)}</div>
                     </div>
                     <div class="tx-amount ${amountCls}">${amount}</div>

@@ -3304,6 +3304,16 @@ input:focus {
     text-align: center;
 }
 
+/* Ticker cliquable : renvoie vers l'Explorer sur la valeur concernee. */
+.asset-link {
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.asset-link:hover {
+    color: var(--acc);
+    text-decoration: underline;
+}
+
 .perf-bar-track {
     flex: 1;
     height: 8px;
