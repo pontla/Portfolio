@@ -35,6 +35,11 @@
 4. **Données manquantes :** Remplacer systématiquement les mentions "Donnée indisponible" ou les cartes vides par un tiret discret (`—`)[cite: 6].
 5. **Composants :** Toujours créer des éléments atomiques réutilisables dans `src/components/`.
 
+# COMMANDES UTILES
+- Dev local (KV persistant) : `npm run dev`
+- Build : `npm run deploy --dry-run`
+- Clean check : `npm run clean-check`
+
 # Compte test
 
 Email : claude-test-portfolio@mailinator.com

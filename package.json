@@ -2,7 +2,7 @@
   "name": "portfolio-tools",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --persist",
     "serve": "node scripts/static-server.mjs",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
