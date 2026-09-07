@@ -30,6 +30,14 @@ function sortedHistoryDates(history) {
     return dates;
 }
 
+/**
+ * Un symbole cotable est court et sans espace. La recherche par libelle peut
+ * renvoyer le libelle lui-meme faute de correspondance : mieux vaut signaler la
+ * ligne que lui inventer un symbole.
+ * @param {string} sym
+ */
+const isPlausibleSymbol = (sym) => /^[A-Za-z0-9.^=-]{1,20}$/.test(sym || '');
+
 // --- DATA & MULTI-PORTFOLIO ENGINE LAYER ---
 export class PortfolioService {
     constructor() {
@@ -1100,12 +1108,8 @@ export class PortfolioService {
      * @param {any} row
      */
     async _resolveDegiroSymbol(row) {
-        // Un symbole cotable est court et sans espace. La recherche par libelle
-        // peut renvoyer le libelle lui-meme faute de correspondance : mieux vaut
-        // signaler la ligne que lui inventer un symbole.
-        const plausible = (sym) => /^[A-Za-z0-9.^=-]{1,20}$/.test(sym || '');
         const pick = (list) => {
-            const items = (list || []).filter((x) => x && plausible(x.displaySymbol));
+            const items = (list || []).filter((x) => x && isPlausibleSymbol(x.displaySymbol));
             if (!items.length) return null;
             if (row.expectedSuffix == null) return items[0].displaySymbol;
             const match = items.find(
@@ -1119,7 +1123,7 @@ export class PortfolioService {
         if (!found && row.product) found = pick(await APIService.searchSymbol(row.product));
         // Aucune cotation ne correspond a la place du releve : plutot que de
         // perdre la ligne, on retient la meilleure reponse de l'ISIN.
-        if (!found && byIsin.length && plausible(byIsin[0].displaySymbol))
+        if (!found && byIsin.length && isPlausibleSymbol(byIsin[0].displaySymbol))
             found = byIsin[0].displaySymbol;
         return found || null;
     }
@@ -1169,9 +1173,8 @@ export class PortfolioService {
      * @param {any} row
      */
     async _resolveInsurancePosition(row) {
-        const plausible = (sym) => /^[A-Za-z0-9.^=-]{1,20}$/.test(sym || '');
         const byIsin = row.isin ? await APIService.searchSymbol(row.isin) : [];
-        const best = byIsin.find((x) => x && plausible(x.displaySymbol));
+        const best = byIsin.find((x) => x && isPlausibleSymbol(x.displaySymbol));
         return {
             symbol: best ? best.displaySymbol : null,
             hasHistory: Boolean(byIsin[0] && byIsin[0].hasHistory),

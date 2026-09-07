@@ -481,6 +481,19 @@ export const Utils = {
     },
 
     /**
+     * Index de la premiere colonne dont l'en-tete figure dans `labels`, ou -1.
+     * Les en-tetes sont supposes deja normalises (cf. `fold`).
+     * @param {string[]} headers @param {string[]} labels
+     */
+    findHeaderColumn: (headers, labels) => {
+        for (const label of labels) {
+            const idx = headers.indexOf(label);
+            if (idx !== -1) return idx;
+        }
+        return -1;
+    },
+
+    /**
      * Nombre au format FR (`1 234,56 €`) ou US (`1234.56`), symbole monetaire,
      * pourcentage et espaces (dont insecables) tolerees. Renvoie `null` — et
      * non zero — quand la cellule est vide : un montant absent et un montant

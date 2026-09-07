@@ -24,14 +24,7 @@ const COLUMNS = {
 /** Delimiteurs essayes, dans cet ordre a egalite de score (collage tableur -> tabulation). */
 const DELIMITERS = ['\t', ';', ','];
 
-/** Index de la premiere colonne dont l'en-tete figure dans `labels`. */
-function findColumn(headers, labels) {
-    for (const label of labels) {
-        const idx = headers.indexOf(label);
-        if (idx !== -1) return idx;
-    }
-    return -1;
-}
+const findColumn = Utils.findHeaderColumn;
 
 /**
  * Delimiteur le plus plausible pour la ligne d'en-tete : celui qui fait

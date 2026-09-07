@@ -86,14 +86,7 @@ function parseDegiroDate(val) {
     return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
-/** Index de la premiere colonne dont l'en-tete figure dans `labels`. */
-function findColumn(headers, labels) {
-    for (const label of labels) {
-        const idx = headers.indexOf(label);
-        if (idx !== -1) return idx;
-    }
-    return -1;
-}
+const findColumn = Utils.findHeaderColumn;
 
 /**
  * Vrai si le texte ressemble a un releve Degiro. Le CSV natif de
@@ -237,5 +230,3 @@ export function parseDegiroCSV(text, { portfolioName = '' } = {}) {
     rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     return { rows, warnings };
 }
-
-export const _internals = { parseNumber, parseDegiroDate, fold, VENUE_SUFFIX };
