@@ -261,8 +261,8 @@ export const overview = {
                                     data-fallback="sibling">
                                 <span class="perf-logo-fallback" style="display:none;">${h.symbol.substring(0, 1)}</span>
                                 <div style="display:flex; flex-direction:column; gap:2px;">
-                                    <span style="font-weight:700; color:var(--txt);">${h.symbol}</span>
-                                    <span style="font-size:12px; color:var(--dim);">${assetName || Utils.getExchangeName(h.symbol)} · ${h.weightPercent.toFixed(1)}%${h.manuallyValued ? ' · valorisé à la main' : ''}</span>
+                                    <span style="font-weight:700; color:var(--txt);">${assetName || Utils.getExchangeName(h.symbol)}</span>
+                                    <span style="font-size:12px; color:var(--dim);">${h.symbol} · ${h.weightPercent.toFixed(1)}%${h.manuallyValued ? ' · valorisé à la main' : ''}</span>
                                     ${portTags ? `<div style="margin-top:2px; display:flex; gap:4px; flex-wrap:wrap;">${portTags}</div>` : ''}
                                 </div>
                             </div>
@@ -324,13 +324,13 @@ export const overview = {
                             <img class="hc-logo" src="${this.getLogoUrl(h.symbol)}" alt="" data-fallback="sibling">
                             <span class="hc-logo-fb" style="display:none;">${h.symbol.substring(0, 1)}</span>
                             <div class="hc-id">
-                                <span class="hc-sym">${h.symbol}</span>
+                                <span class="hc-sym">${Utils.escapeHtml(nm)}</span>
                                 <span class="hc-weight">${h.weightPercent.toFixed(1).replace('.', ',')} %</span>
                             </div>
                             <span class="hc-value">${Utils.formatCurrency(h.valueNative, h.currency)}</span>
                         </div>
                         <div class="hc-row2">
-                            <span class="hc-name">${Utils.escapeHtml(nm)}</span>
+                            <span class="hc-name">${h.symbol}</span>
                             <span class="hc-gain ${noPrice ? 'val-unknown' : isProfit ? 'text-green' : 'text-red'}">${noPrice ? '— cours indisponible' : `${isProfit ? '+' : ''}${Utils.formatCurrency(h.gainNative, h.currency)} · ${Utils.formatPercent(h.gainPercent)}`}</span>
                         </div>
                         <div class="hc-bar"><i style="width:${barW}%"></i></div>
