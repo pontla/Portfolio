@@ -25,7 +25,7 @@ export const insights = {
                 <img class="perf-logo" src="${this.getLogoUrl(d.symbol)}" alt=""
                     data-fallback="sibling">
                 <span class="perf-logo-fallback" style="display:none;">${d.symbol.substring(0, 1)}</span>
-                <span class="perf-ticker">${d.symbol}</span>
+                <span class="perf-ticker asset-link" data-symbol="${d.symbol}">${d.symbol}</span>
                 <span style="flex:1; color:var(--text-secondary); font-size:13px;">${Utils.formatDateDisplay(d.estimatedDate)} (est.)</span>
                 <span style="width:90px; text-align:right; font-weight:600; font-size:13px;">${Utils.formatCurrency(d.amount, curr)}</span>
                 <span style="width:60px; text-align:right; color:var(--text-secondary); font-size:12px;">${d.yieldPercent.toFixed(2)}%</span>
@@ -75,7 +75,7 @@ export const insights = {
                     <img class="insights-logo" src="${this.getLogoUrl(g.symbol)}" alt=""
                         data-fallback="sibling">
                     <span class="insights-logo-fallback" style="display:none;">${g.symbol.substring(0, 1)}</span>
-                    <span class="insights-group-title">${Utils.escapeHtml(g.symbol)}</span>
+                    <span class="insights-group-title asset-link" data-symbol="${Utils.escapeHtml(g.symbol)}">${Utils.escapeHtml(g.symbol)}</span>
                     ${g.name ? `<span class="insights-group-name">${Utils.escapeHtml(g.name)}</span>` : ''}
                 </div>
                 <div class="insights-item" style="border-bottom:none;">
@@ -362,7 +362,7 @@ Pour chaque titre du portefeuille, donne 2 à 4 actualités/événements les plu
                 <img class="perf-logo" src="${this.getLogoUrl(e.symbol)}" alt=""
                     data-fallback="sibling">
                 <span class="perf-logo-fallback" style="display:none;">${e.symbol.substring(0, 1)}</span>
-                <span class="perf-ticker">${e.symbol}</span>
+                <span class="perf-ticker asset-link" data-symbol="${e.symbol}">${e.symbol}</span>
                 <span style="flex:1; color:var(--text-secondary); font-size:13px;">${Utils.formatDateDisplay(e.date)}</span>
                 <span style="width:110px; text-align:right; color:var(--text-secondary); font-size:12px;">${e.epsEstimate !== null ? `EPS est. ${e.epsEstimate}` : ''}</span>
             </div>
