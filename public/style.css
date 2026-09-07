@@ -827,10 +827,15 @@ select {
     -webkit-appearance: none;
     -moz-appearance: none;
     padding-right: 32px;
-    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    background-image:
+        linear-gradient(45deg, transparent 50%, currentColor 50%),
         linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position: calc(100% - 20px) center, calc(100% - 14px) center;
-    background-size: 6px 6px, 6px 6px;
+    background-position:
+        calc(100% - 20px) center,
+        calc(100% - 14px) center;
+    background-size:
+        6px 6px,
+        6px 6px;
     background-repeat: no-repeat;
     color: inherit;
     cursor: pointer;
@@ -1637,17 +1642,29 @@ input:focus {
     display: flex;
     align-items: center;
     gap: 8px;
+    max-width: 560px;
     background: var(--tile);
     border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 10px 12px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+.research-search:focus-within {
+    border-color: var(--acc);
+    box-shadow: 0 0 0 3px rgba(0, 211, 242, 0.18);
 }
 .research-search input {
     flex: 1;
+    width: auto;
     background: none;
     border: none;
+    border-radius: 0;
+    padding: 0;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.4;
     outline: none;
     min-width: 0;
 }
@@ -2963,75 +2980,6 @@ input:focus {
     padding: 6px 0;
 }
 
-.tx-filters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    padding-bottom: 16px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.tx-filters input[type='text'],
-.tx-filters input[type='date'],
-.tx-filters select {
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    font-family: inherit;
-    font-size: 13px;
-    background: var(--hover-bg);
-    color: var(--text-primary);
-    height: 36px;
-}
-
-.tx-filters input:focus,
-.tx-filters select:focus {
-    outline: none;
-    border-color: var(--accent-blue);
-    background: var(--surf);
-}
-
-.tx-filters #txSearchInput {
-    flex: 1 1 180px;
-    min-width: 140px;
-    width: auto;
-}
-
-.tx-filters select,
-.tx-filters input[type='date'] {
-    flex: 0 0 auto;
-    width: 140px;
-}
-
-.tx-filters .btn-sm {
-    flex: 0 0 auto;
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-weight: 500;
-    cursor: pointer;
-    padding: 8px 4px;
-}
-
-.tx-filters .btn-sm:hover {
-    color: var(--text-primary);
-    text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-    .tx-filters {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .tx-filters input[type='text'],
-    .tx-filters input[type='date'],
-    .tx-filters select {
-        width: 100%;
-    }
-}
-
 #boostInsightsBtn:disabled {
     background: var(--hover-bg);
     color: var(--text-secondary);
@@ -4279,404 +4227,6 @@ select option {
 }
 .text-red {
     color: var(--dn);
-}
-
-.tx-filters {
-    border-bottom-color: var(--l1);
-}
-.tx-filters input,
-.tx-filters select {
-    background: var(--f3);
-    color: var(--txt);
-}
-
-.settings-section-label {
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin: 4px 0 10px;
-}
-
-.theme-segmented {
-    display: flex;
-    gap: 4px;
-    padding: 4px;
-    border-radius: 14px;
-    background: var(--f3);
-}
-
-.theme-seg-btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 0;
-    border: none;
-    border-radius: 10px;
-    background: none;
-    cursor: pointer;
-    font-family: var(--font-ui);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--dim);
-    transition:
-        background 0.18s,
-        color 0.18s;
-}
-
-.theme-seg-btn .theme-seg-ring {
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    border: 2px solid currentColor;
-}
-
-.theme-seg-btn[aria-checked='true'] {
-    background: rgba(0, 211, 242, 0.14);
-    color: var(--txt);
-}
-
-.theme-seg-btn[aria-checked='true'] .theme-seg-ring {
-    border-color: var(--acc);
-}
-.theme-seg-btn[data-theme-choice='light'][aria-checked='true'] .theme-seg-ring {
-    background: var(--acc);
-}
-
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-    }
-}
-
-/* ============================================================
-   REDESIGN - Phase 1 : ajustements theme sombre / clair
-   ============================================================ */
-
-input[type='text'],
-input[type='number'],
-input[type='date'],
-input[type='email'],
-input[type='password'],
-select,
-textarea {
-    background-color: var(--f3);
-    color: var(--txt);
-    border: 1px solid var(--l3);
-}
-
-input::placeholder {
-    color: var(--dim);
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-    outline: none;
-    border-color: var(--accTxt);
-    box-shadow: 0 0 0 3px rgba(0, 211, 242, 0.18);
-}
-
-#targetPortfolioSelect,
-#priceCurrencyField,
-#aiProviderSelect {
-    background-color: var(--f3) !important;
-    color: var(--txt);
-    border: 1px solid var(--l3) !important;
-    padding: 10px;
-    padding-right: 32px;
-}
-select option {
-    background: var(--surf);
-    color: var(--txt);
-}
-
-.modal-body p[style] {
-    color: var(--dim) !important;
-}
-
-#downloadTemplateBtn,
-#exportCsvBtn,
-#importCsvBtn,
-#saveAiKeyBtn,
-#clearAiKeyBtn {
-    background: var(--f4) !important;
-    color: var(--txt) !important;
-    border: 1px solid var(--l3);
-}
-
-.card,
-.stat-card,
-.analysis-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    border-radius: 18px;
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    box-shadow: var(--shadow-card);
-}
-
-.card:hover,
-.stat-card:hover,
-.analysis-card:hover {
-    background: var(--bg-card-hover);
-}
-
-.modal {
-    background: var(--sheet);
-    -webkit-backdrop-filter: blur(24px);
-    backdrop-filter: blur(24px);
-    border: 1px solid var(--l2);
-    box-shadow: 0 24px 60px var(--shadow);
-}
-
-.modal-overlay {
-    background: var(--scrim);
-    -webkit-backdrop-filter: blur(3px);
-    backdrop-filter: blur(3px);
-}
-
-.portfolio-switcher-btn,
-.icon-btn,
-.benchmark-checkbox-btn {
-    background: var(--f4);
-    border-color: var(--l3);
-    color: var(--txt);
-}
-
-.portfolio-switcher-btn:hover,
-.benchmark-checkbox-btn:hover {
-    background: var(--f5);
-}
-
-.portfolio-dropdown-menu {
-    background: var(--sheet);
-    border: 1px solid var(--l2);
-    -webkit-backdrop-filter: blur(24px);
-    backdrop-filter: blur(24px);
-    box-shadow: 0 24px 60px var(--shadow);
-}
-
-.portfolio-dropdown-item:hover {
-    background: var(--f4);
-}
-.portfolio-dropdown-item.active {
-    background: rgba(0, 211, 242, 0.07);
-}
-.dropdown-action-btn {
-    color: var(--accTxt);
-}
-.dropdown-action-btn:hover {
-    background: rgba(0, 211, 242, 0.08);
-}
-
-.toggle-group {
-    background: var(--f3);
-    border: 1px solid var(--l5);
-}
-.toggle-btn {
-    color: var(--dim);
-}
-.toggle-btn.active {
-    background: var(--l3);
-    color: var(--txt);
-    box-shadow: none;
-}
-#currencyToggle .toggle-btn.active {
-    background: rgba(0, 211, 242, 0.14);
-    color: var(--accTxt);
-    box-shadow: inset 0 0 0 1px rgba(0, 211, 242, 0.4);
-}
-
-.radio-group {
-    background: var(--f3);
-}
-.radio-label span {
-    color: var(--dim);
-}
-.radio-label input:checked + span {
-    background: var(--up-bg);
-    color: var(--up);
-    box-shadow: none;
-}
-
-.range-btn:hover {
-    background: var(--f4);
-}
-.range-btn.active {
-    background: rgba(0, 211, 242, 0.1);
-    box-shadow: inset 0 0 0 1px rgba(0, 211, 242, 0.35);
-}
-.range-btn .value.text-green {
-    color: var(--up);
-}
-.range-btn .value.text-red {
-    color: var(--dn);
-}
-
-.tabs {
-    border-bottom-color: var(--l1);
-}
-.tabs .tab-btn.active {
-    color: var(--txt);
-}
-.tabs .tab-btn.active::after {
-    background: var(--accTxt);
-}
-.bottom-nav-btn.active,
-.bottom-nav-btn.active i {
-    color: var(--accTxt);
-}
-
-.fab-btn,
-#addTransactionBtn.btn-primary {
-    background: var(--acc);
-    color: var(--acc-ink);
-}
-.fab-btn {
-    box-shadow: 0 12px 32px rgba(0, 211, 242, 0.34);
-}
-#addTransactionBtn.btn-primary {
-    box-shadow: 0 8px 24px rgba(0, 211, 242, 0.26);
-}
-.btn-primary {
-    transition:
-        background 0.18s,
-        opacity 0.2s;
-}
-.btn-primary:hover {
-    opacity: 1;
-}
-
-.table th {
-    color: var(--dim);
-    border-bottom-color: var(--l1);
-}
-.table td {
-    border-bottom-color: var(--l5);
-    color: var(--txt);
-}
-.table td.text-green {
-    color: var(--up);
-}
-.table td.text-red {
-    color: var(--dn);
-}
-
-.perf-ticker {
-    background: var(--f3);
-    color: var(--txt);
-}
-.perf-bar-track {
-    background: var(--l4);
-}
-.perf-bar-fill.positive {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--up) 35%, transparent), var(--up));
-}
-.perf-bar-fill.negative {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--dn) 35%, transparent), var(--dn));
-}
-.perf-tooltip {
-    background: var(--sheet);
-    border: 1px solid var(--l2);
-}
-.perf-row-header {
-    border-bottom-color: var(--l4);
-}
-
-.insights-summary {
-    background: var(--f2);
-    color: var(--soft);
-}
-.insights-stale-notice {
-    background: rgba(255, 176, 32, 0.14);
-    color: var(--s4);
-}
-.insights-group {
-    border-bottom-color: var(--l1);
-}
-.insights-item:not(:last-child) {
-    border-bottom-color: var(--l5);
-}
-.insights-toggle-btn,
-.insights-item-detail {
-    color: var(--soft2);
-}
-.insights-logo-fallback {
-    background: var(--tile);
-    color: var(--dim2);
-}
-
-.analysis-legend .label {
-    color: var(--soft);
-}
-.analysis-legend .pct {
-    color: var(--soft2);
-}
-.chart-center-label .ccl-label {
-    color: var(--dim);
-}
-
-.search-result-row {
-    border-bottom-color: var(--l5);
-}
-.search-result-row:hover {
-    background: var(--f4);
-}
-.result-symbol {
-    color: var(--txt);
-}
-.result-icon {
-    background: var(--tile);
-    color: var(--dim2);
-}
-.filter-btn {
-    background: var(--f3);
-    color: var(--soft);
-}
-.filter-btn.active {
-    background: var(--acc);
-    color: var(--acc-ink);
-}
-
-.auth-card,
-.feature-card,
-.mock-card {
-    background: var(--surf);
-    border-color: var(--l1);
-}
-.landing-cta-final {
-    background: var(--f2);
-}
-.btn-outline {
-    background: none;
-    border-color: var(--l3);
-    color: var(--txt);
-}
-.feature-card i {
-    color: var(--accTxt);
-}
-.text-green {
-    color: var(--up);
-}
-.text-red {
-    color: var(--dn);
-}
-
-.tx-filters {
-    border-bottom-color: var(--l1);
-}
-.tx-filters input,
-.tx-filters select {
-    background: var(--f3);
-    color: var(--txt);
 }
 
 .settings-section-label {
@@ -5984,7 +5534,6 @@ select option {
     .overview-tables-row .profit-section {
         margin-top: 0;
     }
-
 }
 
 /* ============================================================
@@ -6387,30 +5936,42 @@ select option {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 10px;
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 16px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--l1);
 }
 
 .tx-search {
-    flex: 1;
+    flex: 1 1 auto;
+    max-width: 460px;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
-    border-radius: 13px;
+    padding: 9px 12px;
+    border-radius: 8px;
     border: 1px solid var(--l3);
     background: var(--f3);
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+.tx-search:focus-within {
+    border-color: var(--acc);
+    box-shadow: 0 0 0 3px rgba(0, 211, 242, 0.18);
 }
 .tx-search input {
     flex: 1;
     width: auto;
+    min-width: 0;
     border: none;
     background: none;
     padding: 0;
     color: var(--txt);
     font-size: 13px;
+    line-height: 1.4;
     height: auto;
 }
 .tx-search input:focus {
@@ -6439,13 +6000,20 @@ select option {
 
 .tx-filter-open {
     flex: 0 0 auto;
-    padding: 10px 14px;
-    border-radius: 13px;
+    padding: 9px 14px;
+    border-radius: 8px;
     border: 1px solid var(--l3);
     background: var(--f3);
     color: var(--soft);
-    font: 600 13px var(--font-ui);
+    font: 600 13px / 1.4 var(--font-ui);
     cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+.tx-filter-open:hover {
+    color: var(--txt);
+    border-color: var(--l2);
 }
 .tx-filter-open.has-filters {
     border-color: rgba(0, 211, 242, 0.35);
@@ -6495,121 +6063,17 @@ select option {
     font-size: 13px;
 }
 
-/* ============================================================
-   REDESIGN - Phase 6 : finitions (recherche + feuille de filtres tx)
-   ============================================================ */
-
-.tx-filters {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 16px;
+/* Sous 1024px la carte Transactions perd son fond/padding :
+   la barre d'outils s'aligne alors sur le bord de l'ecran. */
+@media (max-width: 1023px) {
+    .tx-filters {
+        padding: 0 0 14px;
+    }
+    .tx-search {
+        max-width: none;
+    }
 }
 
-.tx-search {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-radius: 13px;
-    border: 1px solid var(--l3);
-    background: var(--f3);
-}
-.tx-search input {
-    flex: 1;
-    width: auto;
-    border: none;
-    background: none;
-    padding: 0;
-    color: var(--txt);
-    font-size: 13px;
-    height: auto;
-}
-.tx-search input:focus {
-    outline: none;
-    box-shadow: none;
-    background: none;
-}
-.tx-search-ico {
-    width: 11px;
-    height: 11px;
-    flex: none;
-    border: 1.6px solid var(--dim);
-    border-radius: 50%;
-    position: relative;
-}
-.tx-search-ico::after {
-    content: '';
-    position: absolute;
-    right: -3px;
-    bottom: -2px;
-    width: 5px;
-    height: 1.6px;
-    background: var(--dim);
-    transform: rotate(45deg);
-}
-
-.tx-filter-open {
-    flex: 0 0 auto;
-    padding: 10px 14px;
-    border-radius: 13px;
-    border: 1px solid var(--l3);
-    background: var(--f3);
-    color: var(--soft);
-    font: 600 13px var(--font-ui);
-    cursor: pointer;
-}
-.tx-filter-open.has-filters {
-    border-color: rgba(0, 211, 242, 0.35);
-    background: rgba(0, 211, 242, 0.1);
-    color: var(--accTxt);
-}
-
-.tx-type-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 6px;
-}
-.tx-type-pills button {
-    padding: 8px 13px;
-    border-radius: 20px;
-    border: 1px solid var(--l3);
-    background: var(--f3);
-    color: var(--soft);
-    font: 600 12.5px var(--font-ui);
-    cursor: pointer;
-}
-.tx-type-pills button.active {
-    border-color: rgba(0, 211, 242, 0.4);
-    background: rgba(0, 211, 242, 0.14);
-    color: var(--accTxt);
-}
-
-.tx-date-row {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 16px;
-}
-.tx-date-field {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-.tx-date-field span {
-    font-size: 10.5px;
-    color: var(--dim);
-}
-.tx-date-field input {
-    border-radius: 13px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-}
 /* ============================================================
    REDESIGN - Carte graphique (mobile ET desktop, cf. maquette)
    ============================================================ */

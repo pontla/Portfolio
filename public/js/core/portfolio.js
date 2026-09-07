@@ -232,8 +232,7 @@ export class PortfolioService {
     // Met a jour le pseudo du compte (Supabase Auth user_metadata).
     async setDisplayName(name) {
         const user = await AuthService.updateDisplayName(name);
-        this.displayName =
-            (user && user.user_metadata && user.user_metadata.display_name) || '';
+        this.displayName = (user && user.user_metadata && user.user_metadata.display_name) || '';
         return this.displayName;
     }
 
