@@ -289,6 +289,54 @@ header {
     }
 }
 
+/* Confirmation visuelle de l'enregistrement du pseudo */
+#savePseudoBtn {
+    transition:
+        background 0.18s ease,
+        color 0.18s ease,
+        border-color 0.18s ease;
+}
+#savePseudoBtn.is-saved {
+    background: var(--accent-green) !important;
+    color: #06140d !important;
+    border-color: var(--accent-green) !important;
+    animation: pseudoSavedPop 0.42s ease;
+}
+@keyframes pseudoSavedPop {
+    0% {
+        transform: scale(1);
+    }
+    35% {
+        transform: scale(1.035);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.side-logo-text.identity-flash,
+.app-brand span.identity-flash {
+    animation: identityFlash 0.9s ease;
+}
+@keyframes identityFlash {
+    0% {
+        color: var(--accent-green);
+        text-shadow: 0 0 14px color-mix(in srgb, var(--accent-green) 55%, transparent);
+    }
+    100% {
+        color: inherit;
+        text-shadow: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #savePseudoBtn.is-saved,
+    .side-logo-text.identity-flash,
+    .app-brand span.identity-flash {
+        animation: none;
+    }
+}
+
 .header-left h1 {
     font-size: 24px;
     font-weight: 700;
