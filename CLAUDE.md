@@ -14,6 +14,7 @@
 2. **Validation par les tests (Obligatoire) :**
    - Une fois la modification terminée, lance la suite de tests unitaires : `npm test`.
    - Si la modification impacte l'UI, les composants ou un parcours utilisateur, lance également : `npm run test:e2e`[cite: 3].
+   - Avant de commiter toute modification, exécute `npm run format` puis `npm run format:check`.
    - **Interdiction absolue de commiter** tant que l'ensemble des tests ne passe pas à 100 %[cite: 3].
 
 3. **Commit automatique sur la branche :**
