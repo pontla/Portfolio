@@ -33,3 +33,7 @@ CLAUDE.md
 
 # Design handoff archive (source material, not tracked)
 /Portfolio App Redesign.zip
+# Cache/état runtime du hook Impeccable
+.impeccable/config.json
+.impeccable/hook.cache.json
+.impeccable/live/
