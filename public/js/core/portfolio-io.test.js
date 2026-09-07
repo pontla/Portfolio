@@ -209,6 +209,8 @@ const realApi = {
     getDailyHistory: APIService.getDailyHistory,
     getDividends: APIService.getDividends,
     fxEstimatedCurrencies: APIService.fxEstimatedCurrencies,
+    searchSymbol: APIService.searchSymbol,
+    resolveCurrency: APIService.resolveCurrency,
 };
 
 /** Prix et taux inertes : refreshPrices est declenche par presque tout le CRUD. */
@@ -222,6 +224,23 @@ function stubMarket({ prices = {}, rates = { USD: 1, EUR: 1.08 }, history = {} }
         return history[sym] || {};
     };
     return seen;
+}
+
+/**
+ * Double de la recherche de symbole, pour l'import d'un releve de courtier.
+ * `results` associe une requete (ISIN ou libelle) a la reponse du proxy ;
+ * `currencies` la devise que l'API renverra pour le symbole resolu.
+ * @param {Record<string, {displaySymbol: string}[]>} results
+ * @param {Record<string, string>} [currencies]
+ */
+function stubSearch(results, currencies = {}) {
+    const asked = [];
+    APIService.searchSymbol = async (q) => {
+        asked.push(q);
+        return results[q] || [];
+    };
+    APIService.resolveCurrency = async (sym) => currencies[sym] || 'USD';
+    return asked;
 }
 
 /** Date decalee de `days` jours, au format YYYY-MM-DD. */
@@ -1224,6 +1243,153 @@ describe('PortfolioService.exportToCSV', () => {
     });
 });
 
+describe('PortfolioService.importFromCSV — releve Degiro', () => {
+    /** @type {PortfolioService} */
+    let svc;
+    let fake;
+
+    beforeEach(() => {
+        fake = harness();
+        svc = new PortfolioService();
+        svc.userId = 'user-1';
+        svc.portfolios = [{ id: 'p1', name: 'Principal', color: '#111' }];
+        svc.activePortfolioId = 'p1';
+    });
+
+    const HEADER =
+        "Date,Heure,Produit,Code ISIN,Place boursière sectionnée,Lieu d'exécution,Quantité,Cours,," +
+        'Montant devise locale,,Montant EUR,Taux de change,Frais conversion AutoFX,' +
+        'Frais de courtage et/ou de parties,Montant négocié EUR,ID Ordre';
+
+    /** @param {string} date @param {number} qty */
+    const gigacloud = (date, qty = 10) =>
+        `${date},18:35,GIGACLOUD TECHNOLOGY INC CLASS A,KYG386441037,NDQ,EDGX,${qty},"35,0000",USD,` +
+        '"-350,00",USD,"-301,65","1,1603","-0,75","-2,00","-304,40",6e1cbf61';
+
+    /** Meme decalage que dayOffset, au format JJ-MM-AAAA du releve. */
+    const frOffset = (days) => dayOffset(days).split('-').reverse().join('-');
+
+    const csv = (...lines) => [HEADER, ...lines].join('\n');
+
+    it('resout l ISIN, cree le portefeuille demande et enregistre la ligne', async () => {
+        stubSearch({ KYG386441037: [{ displaySymbol: 'GCT' }] });
+        const res = await svc.importFromCSV(csv(gigacloud(frOffset(-10))), {
+            portfolioName: 'CTO Degiro',
+        });
+        expect(res.added).toBe(1);
+        expect(fake.of('portfolios', 'insert')[0].payload.name).toBe('CTO Degiro');
+        const row = fake.of('trades', 'insert')[0].payload[0];
+        expect(row).toMatchObject({
+            type: 'BUY',
+            symbol: 'GCT',
+            qty: 10,
+            price: 35,
+            currency: 'USD',
+            isin: 'KYG386441037',
+        });
+    });
+
+    it('l ISIN resolu est memorise pour le symbole', async () => {
+        stubSearch({ KYG386441037: [{ displaySymbol: 'GCT' }] });
+        await svc.importFromCSV(csv(gigacloud(frOffset(-10))), { portfolioName: 'CTO Degiro' });
+        expect(svc.symbolIsin('GCT')).toBe('KYG386441037');
+    });
+
+    it('une place americaine ecarte la cotation etrangere du meme ISIN', async () => {
+        const perion =
+            `${frOffset(-10)},18:00,PERION NETWORK LTD,IL0010958192,NDQ,SOHO,-24,"12,9000",USD,` +
+            '"309,60",USD,"288,40","1,0735","-0,72","-2,00","285,68",97b9cfad';
+        const asked = stubSearch({
+            // L'ISIN israelien ne rend d'abord que la ligne de Tel-Aviv.
+            IL0010958192: [{ displaySymbol: 'PERI.TA' }],
+            'PERION NETWORK LTD': [{ displaySymbol: 'PERI' }, { displaySymbol: 'PERI.TA' }],
+        });
+        svc.trades = [
+            {
+                id: 't0',
+                portfolioId: 'p1',
+                type: 'BUY',
+                symbol: 'PERI',
+                qty: 24,
+                price: 24.49,
+                amount: 587.76,
+                fees: 0,
+                date: dayOffset(-20),
+            },
+        ];
+        await svc.importFromCSV(csv(perion), { portfolioName: 'Principal' });
+        expect(asked).toEqual(['IL0010958192', 'PERION NETWORK LTD']);
+        expect(fake.of('trades', 'insert')[0].payload[0].symbol).toBe('PERI');
+    });
+
+    it('sans cotation correspondant a la place, la meilleure reponse de l ISIN est retenue', async () => {
+        // Un OPCVM n'a pas de ligne sur la place ou il a ete souscrit : le
+        // symbole Morningstar reste la seule reponse utile.
+        const fonds =
+            `${frOffset(-10)},10:00,PICTET ROBOTICS,LU1279334210,EPA,,3,"250,0000",EUR,` +
+            '"-750,00",EUR,"-750,00","1,0000","0,00","-2,00","-752,00",zz';
+        stubSearch(
+            { LU1279334210: [{ displaySymbol: '0P00016UT5.F' }] },
+            { '0P00016UT5.F': 'EUR' }
+        );
+        await svc.importFromCSV(csv(fonds), { portfolioName: 'PEA' });
+        expect(fake.of('trades', 'insert')[0].payload[0]).toMatchObject({
+            symbol: '0P00016UT5.F',
+            currency: 'EUR',
+            price: 250,
+        });
+    });
+
+    it('un titre introuvable est signale avec sa ligne d origine, sans bloquer les autres', async () => {
+        stubSearch({ KYG386441037: [{ displaySymbol: 'GCT' }] });
+        const inconnu =
+            `${frOffset(-8)},10:14,CATALYST PHARMACEUTICALS INC,US14888U1016,NDQ,,13,"26,2000",USD,` +
+            '"-340,60",USD,"-289,28","1,1774","-0,72","-2,00","-292,01",8279c4b8';
+        const res = await svc.importFromCSV(csv(gigacloud(frOffset(-10)), inconnu), {
+            portfolioName: 'CTO Degiro',
+        });
+        expect(res.added).toBe(1);
+        expect(res.errors).toHaveLength(1);
+        expect(res.errors[0]).toContain('Ligne 3');
+        expect(res.errors[0]).toContain('aucun symbole coté trouvé');
+    });
+
+    it('la devise servie par l API prime sur l heuristique de suffixe', async () => {
+        // Symbole sans point : l'heuristique conclurait USD et convertirait le
+        // cours a tort. La reponse de l'API le rattache bien a l'euro.
+        const ligne =
+            `${frOffset(-10)},10:00,ACME SA,FR0000000000,EPA,,2,"100,0000",EUR,` +
+            '"-200,00",EUR,"-200,00","1,0000","0,00","0,00","-200,00",aa';
+        stubSearch({ FR0000000000: [{ displaySymbol: 'ACME' }] }, { ACME: 'EUR' });
+        await svc.importFromCSV(csv(ligne), { portfolioName: 'PEA' });
+        expect(fake.of('trades', 'insert')[0].payload[0]).toMatchObject({
+            price: 100,
+            currency: 'EUR',
+        });
+    });
+
+    it('un meme ISIN n est resolu qu une fois pour tout le fichier', async () => {
+        const asked = stubSearch({ KYG386441037: [{ displaySymbol: 'GCT' }] });
+        await svc.importFromCSV(
+            csv(gigacloud(frOffset(-10)), gigacloud(frOffset(-9)), gigacloud(frOffset(-8), -5)),
+            { portfolioName: 'CTO Degiro' }
+        );
+        expect(asked).toEqual(['KYG386441037']);
+        expect(fake.of('trades', 'insert')[0].payload).toHaveLength(3);
+    });
+
+    it('un releve sans ligne exploitable rend les avertissements du parseur', async () => {
+        stubSearch({});
+        const zero =
+            `${frOffset(-10)},10:14,STRIVE INC CLASS A,US8629451027,NDQ,,-8,"0,0000",USD,` +
+            '"0,00",USD,"0,00","1,1915","0,00",,"0,00",';
+        const res = await svc.importFromCSV(csv(zero), { portfolioName: 'CTO Degiro' });
+        expect(res.added).toBe(0);
+        expect(res.errors).toHaveLength(1);
+        expect(res.errors[0]).toContain('cours à 0');
+    });
+});
+
 describe('PortfolioService.importFromCSV', () => {
     /** @type {PortfolioService} */
     let svc;
@@ -1276,6 +1442,32 @@ describe('PortfolioService.importFromCSV', () => {
         const res = await svc.importFromCSV(csv);
         expect(res).toEqual({ added: 2, errors: [] });
         expect(fake.of('trades', 'insert')[0].payload).toHaveLength(2);
+    });
+
+    it('une vente est validee contre les achats du meme fichier', async () => {
+        const csv = [
+            HEADER,
+            `${dayOffset(-10)};BUY;AAPL;10;150;USD;0;1500;Principal`,
+            `${dayOffset(-5)};SELL;AAPL;4;180;USD;0;720;Principal`,
+        ].join('\n');
+        expect(await svc.importFromCSV(csv)).toEqual({ added: 2, errors: [] });
+    });
+
+    it('une vente reste refusee si rien ne la couvre', async () => {
+        const csv = [
+            HEADER,
+            `${dayOffset(-10)};BUY;AAPL;2;150;USD;0;300;Principal`,
+            `${dayOffset(-5)};SELL;AAPL;9;180;USD;0;1620;Principal`,
+        ].join('\n');
+        const res = await svc.importFromCSV(csv);
+        expect(res.added).toBe(1);
+        expect(res.errors[0]).toContain('Ligne 3');
+    });
+
+    it('l etat du moteur n est pas pollue par les lignes refusees', async () => {
+        const csv = [HEADER, `${dayOffset(-5)};SELL;AAPL;9;180;USD;0;1620;Principal`].join('\n');
+        await svc.importFromCSV(csv);
+        expect(svc.trades).toEqual([]);
     });
 
     it('numerote les erreurs sur les lignes du fichier, en-tete compris', async () => {

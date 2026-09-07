@@ -436,7 +436,38 @@ export async function bootApp(page, opts = {}) {
                     hasHistory: false,
                 },
             };
+            // Actions americaines d'un releve de courtier. PERION n'a qu'une
+            // ligne de Tel-Aviv sous son ISIN : c'est le libelle du produit qui
+            // ramene la cotation du Nasdaq, comme chez Yahoo.
+            const brokerIsins = {
+                US5500211090: 'LULU',
+                US44812J1043: 'HUT',
+                IL0010958192: 'PERI.TA',
+            };
+            const byName = {
+                'PERION NETWORK LTD': ['PERI', 'PERI.TA'],
+            };
             if (isins[q]) return json([{ ...isins[q], symbol: isins[q].displaySymbol }]);
+            if (brokerIsins[q])
+                return json([
+                    {
+                        displaySymbol: brokerIsins[q],
+                        symbol: brokerIsins[q],
+                        description: brokerIsins[q],
+                        type: 'EQUITY',
+                        isin: q,
+                        hasHistory: true,
+                    },
+                ]);
+            if (byName[q])
+                return json(
+                    byName[q].map((sym) => ({
+                        displaySymbol: sym,
+                        symbol: sym,
+                        description: q,
+                        type: 'EQUITY',
+                    }))
+                );
             if (/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(q)) return json([]); // ISIN inconnu
             return json([
                 {
