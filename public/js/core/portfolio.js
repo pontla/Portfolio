@@ -11,6 +11,7 @@ import { Utils } from './utils.js';
 import { APIService } from './api.js';
 import { AuthService, isJwtTimingError, jwtIssuedAt } from './auth.js';
 import { isDegiroCSV, parseDegiroCSV } from './import-degiro.js';
+import { isPositionCSV, parsePositionCSV } from './import-position.js';
 
 // Dates d'un historique quotidien, triees une fois pour toutes. Les historiques
 // sont toujours remplaces en bloc (refreshPrices assigne l'objet renvoye par
@@ -1159,18 +1160,131 @@ export class PortfolioService {
     }
 
     /**
-     * @param {string} csvText CSV natif (`;`) ou releve de courtier reconnu.
+     * Symbole cotable pour une ligne de releve de position. Meme principe que
+     * Degiro (ISIN d'abord) mais sans place boursiere pour departager
+     * plusieurs cotations d'un meme ISIN : c'est `hasHistory`, servi par le
+     * proxy sur une recherche par ISIN (cf. worker/proxy.js), qui tranche
+     * entre un support que l'API peut suivre seule et un support que seule une
+     * valorisation manuelle peut couvrir (fonds euros, UC sans historique).
+     * @param {any} row
+     */
+    async _resolveInsurancePosition(row) {
+        const plausible = (sym) => /^[A-Za-z0-9.^=-]{1,20}$/.test(sym || '');
+        const byIsin = row.isin ? await APIService.searchSymbol(row.isin) : [];
+        const best = byIsin.find((x) => x && plausible(x.displaySymbol));
+        return {
+            symbol: best ? best.displaySymbol : null,
+            hasHistory: Boolean(byIsin[0] && byIsin[0].hasHistory),
+        };
+    }
+
+    /**
+     * Traduit les lignes d'un releve de position (une par support) en lignes
+     * au format d'import natif : un achat (`BUY`, prix = PMPA) qui fixe la
+     * quantite et le prix de revient, et — seulement quand la source ne
+     * fournit pas d'historique fiable sur ce support — une valorisation
+     * manuelle (`VALUATION`) au montant du releve. Un support bien couvert par
+     * l'API (fonds Morningstar, ETF...) n'a besoin que de l'achat : l'API
+     * prend ensuite le relais pour son cours et son historique.
+     * @param {any[]} rows sortie de parsePositionCSV
+     * @param {string} openDate date d'achat commune (cf. parsePositionCSV : `openDate`)
+     * @param {string} portfolioName
+     * @param {string[]} warnings enrichi sur place
+     */
+    async _resolveInsurancePositions(rows, openDate, portfolioName, warnings) {
+        /** @type {Record<string, {symbol: string|null, hasHistory: boolean}>} */
+        const cache = {};
+        const resolved = [];
+        for (const row of rows) {
+            if (!(row.isin in cache)) cache[row.isin] = await this._resolveInsurancePosition(row);
+            const { hasHistory } = cache[row.isin];
+            let symbol = cache[row.isin].symbol;
+
+            if (symbol) {
+                // Devise faisant autorite demandee a l'API avant toute conversion
+                // (meme raison que pour Degiro, cf. _resolveDegiroSymbols).
+                const apiCurrency = await APIService.resolveCurrency(symbol);
+                if (apiCurrency) this.symbolCurrencies[symbol] = apiCurrency;
+            } else {
+                // Aucune cotation trouvee : le support est retenu sous son propre
+                // ISIN plutot que perdu — il passe le format attendu d'un
+                // symbole. Sans devise API, l'heuristique de suffixe le
+                // classerait a tort en USD (un ISIN n'a pas de point) ; le
+                // releve d'assurance vie est en euros, donc forcee ici.
+                symbol = row.isin;
+                this.symbolCurrencies[symbol] = 'EUR';
+                warnings.push(
+                    `${row.product} (${row.isin}) — aucune cotation trouvée, support valorisé manuellement à partir du relevé.`
+                );
+            }
+            this.symbolIsins[symbol] = row.isin;
+
+            resolved.push({
+                line: row.line,
+                date: openDate,
+                type: 'BUY',
+                symbol,
+                qty: row.qty,
+                price: row.pmpa,
+                currency: 'EUR',
+                fees: 0,
+                amount: '',
+                cashsource: 'DIRECT',
+                portfolio: portfolioName,
+                isin: row.isin,
+            });
+
+            // Historique fiable : l'API prend le relais, aucune valorisation
+            // manuelle n'est ajoutee. Sinon, le montant du releve fait foi tant
+            // qu'aucun nouveau releve n'est importe (cf. _manualPriceSeries).
+            if (!hasHistory) {
+                resolved.push({
+                    line: row.line,
+                    date: row.valuationDate || openDate,
+                    type: 'VALUATION',
+                    symbol,
+                    qty: '',
+                    price: '',
+                    currency: 'EUR',
+                    fees: 0,
+                    amount: row.amount,
+                    cashsource: '',
+                    portfolio: portfolioName,
+                    isin: row.isin,
+                });
+            }
+        }
+        return resolved;
+    }
+
+    /**
+     * @param {string} csvText CSV natif (`;`) ou releve de courtier / de position reconnu.
      * @param {{portfolioName?: string}} [opts] nom du portefeuille destinataire
-     *   pour un releve sans colonne « portfolio » (cas Degiro).
+     *   pour un releve sans colonne « portfolio » (cas Degiro et releve de position).
      */
     async importFromCSV(csvText, { portfolioName = '' } = {}) {
         const errors = [];
         const degiro = isDegiroCSV(csvText);
+        const position = !degiro && isPositionCSV(csvText);
         let rows;
         if (degiro) {
             const parsed = parseDegiroCSV(csvText, { portfolioName });
             errors.push(...parsed.warnings);
             rows = await this._resolveDegiroSymbols(parsed.rows, errors);
+        } else if (position) {
+            const parsed = parsePositionCSV(csvText);
+            errors.push(...parsed.warnings);
+            if (parsed.rows.length && !parsed.openDate) {
+                errors.push('Aucune date de VL exploitable dans le relevé : import annulé.');
+                rows = [];
+            } else {
+                rows = await this._resolveInsurancePositions(
+                    parsed.rows,
+                    parsed.openDate,
+                    portfolioName,
+                    errors
+                );
+            }
         } else {
             rows = Utils.parseCSV(csvText);
         }

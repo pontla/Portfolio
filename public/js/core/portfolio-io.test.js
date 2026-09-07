@@ -230,7 +230,7 @@ function stubMarket({ prices = {}, rates = { USD: 1, EUR: 1.08 }, history = {} }
  * Double de la recherche de symbole, pour l'import d'un releve de courtier.
  * `results` associe une requete (ISIN ou libelle) a la reponse du proxy ;
  * `currencies` la devise que l'API renverra pour le symbole resolu.
- * @param {Record<string, {displaySymbol: string}[]>} results
+ * @param {Record<string, {displaySymbol: string, hasHistory?: boolean}[]>} results
  * @param {Record<string, string>} [currencies]
  */
 function stubSearch(results, currencies = {}) {
@@ -1387,6 +1387,157 @@ describe('PortfolioService.importFromCSV — releve Degiro', () => {
         expect(res.added).toBe(0);
         expect(res.errors).toHaveLength(1);
         expect(res.errors[0]).toContain('cours à 0');
+    });
+});
+
+describe('PortfolioService.importFromCSV — releve de position (assurance vie)', () => {
+    /** @type {PortfolioService} */
+    let svc;
+    let fake;
+
+    beforeEach(() => {
+        fake = harness();
+        svc = new PortfolioService();
+        svc.userId = 'user-1';
+        svc.portfolios = [];
+        svc.activePortfolioId = 'GLOBAL';
+    });
+
+    const HEADER = 'Nom du support;ISIN;Nombre de parts;Montant;PMPA;Date VL';
+    const row = (name, isin, qty, montant, pmpa, dateVL) =>
+        [name, isin, qty, montant, pmpa, dateVL].join(';');
+    const csv = (...lines) => [HEADER, ...lines].join('\n');
+
+    it('support bien couvert par l API : achat seul, pas de valorisation manuelle', async () => {
+        stubSearch(
+            { LU1819480192: [{ displaySymbol: '0P0001DYQM.F', hasHistory: true }] },
+            { '0P0001DYQM.F': 'EUR' }
+        );
+        const res = await svc.importFromCSV(
+            csv(
+                row(
+                    'Echiquier Artificial Intelligence B',
+                    'LU1819480192',
+                    '20,5410',
+                    '5 956,69 €',
+                    '78,53 €',
+                    '03/09/2026'
+                )
+            ),
+            { portfolioName: 'Assurance Vie' }
+        );
+        expect(res.added).toBe(1);
+        const inserted = fake.of('trades', 'insert')[0].payload;
+        expect(inserted).toHaveLength(1);
+        expect(inserted[0]).toMatchObject({
+            type: 'BUY',
+            symbol: '0P0001DYQM.F',
+            qty: 20.541,
+            price: 78.53,
+            cash_source: 'DIRECT',
+            isin: 'LU1819480192',
+        });
+    });
+
+    it('support sans historique fiable : achat au PMPA + valorisation manuelle au montant du releve', async () => {
+        stubSearch(
+            { LU1279334210: [{ displaySymbol: 'LU1279334210.SG', hasHistory: false }] },
+            { 'LU1279334210.SG': 'EUR' }
+        );
+        const res = await svc.importFromCSV(
+            csv(
+                row(
+                    'Pictet - Robotics - P EUR',
+                    'LU1279334210',
+                    '12,1171',
+                    '6 300,38 €',
+                    '415,86 €',
+                    '03/09/2026'
+                )
+            ),
+            { portfolioName: 'Assurance Vie' }
+        );
+        expect(res.added).toBe(2);
+        const inserted = fake.of('trades', 'insert')[0].payload;
+        const buy = inserted.find((t) => t.type === 'BUY');
+        const val = inserted.find((t) => t.type === 'VALUATION');
+        expect(buy).toMatchObject({
+            symbol: 'LU1279334210.SG',
+            qty: 12.1171,
+            price: 415.86,
+            cash_source: 'DIRECT',
+            date: '2026-09-03',
+        });
+        expect(val).toMatchObject({
+            symbol: 'LU1279334210.SG',
+            amount: 6300.38,
+            date: '2026-09-03',
+        });
+    });
+
+    it('ISIN introuvable : le support est retenu sous son propre ISIN, en euros, et signale', async () => {
+        stubSearch({ LU1244893696: [] });
+        const res = await svc.importFromCSV(
+            csv(
+                row(
+                    'EdR Fd Big Data A EUR',
+                    'LU1244893696',
+                    '32,7292',
+                    '13 262,18 €',
+                    '191,70 €',
+                    '03/09/2026'
+                )
+            ),
+            { portfolioName: 'Assurance Vie' }
+        );
+        expect(res.added).toBe(2);
+        expect(res.errors[0]).toContain('aucune cotation trouvée');
+        const inserted = fake.of('trades', 'insert')[0].payload;
+        const buy = inserted.find((t) => t.type === 'BUY');
+        expect(buy).toMatchObject({
+            symbol: 'LU1244893696',
+            currency: 'EUR',
+            price: 191.7,
+        });
+    });
+
+    it('la date d achat est la plus ancienne date de VL du releve, aucun cash n est cree', async () => {
+        stubSearch(
+            {
+                LU1244893696: [],
+                LU1279334210: [{ displaySymbol: 'LU1279334210.SG', hasHistory: false }],
+            },
+            { 'LU1279334210.SG': 'EUR' }
+        );
+        const res = await svc.importFromCSV(
+            csv(
+                row(
+                    'EdR Fd Big Data A EUR',
+                    'LU1244893696',
+                    '32,7292',
+                    '13 262,18 €',
+                    '191,70 €',
+                    '03/09/2026'
+                ),
+                row(
+                    'Pictet - Robotics - P EUR',
+                    'LU1279334210',
+                    '12,1171',
+                    '6 300,38 €',
+                    '415,86 €',
+                    '02/09/2026'
+                )
+            ),
+            { portfolioName: 'Assurance Vie' }
+        );
+        const inserted = fake.of('trades', 'insert')[0].payload;
+        const buys = inserted.filter((t) => t.type === 'BUY');
+        expect(buys.map((t) => t.date)).toEqual(['2026-09-02', '2026-09-02']);
+        // Financement DIRECT sur tous les achats : aucun depot n'est requis, le
+        // solde de cash du portefeuille reste a zero.
+        expect(inserted.every((t) => t.type !== 'BUY' || t.cash_source === 'DIRECT')).toBe(true);
+        // Aucun des deux supports n'a d'historique fiable : achat + valorisation pour chacun.
+        expect(res.added).toBe(4);
     });
 });
 
