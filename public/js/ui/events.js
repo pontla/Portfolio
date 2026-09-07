@@ -10,6 +10,7 @@ import { AuthService } from '../core/auth.js';
 import { Utils } from '../core/utils.js';
 import { APIService } from '../core/api.js';
 import { isDegiroCSV } from '../core/import-degiro.js';
+import { isPositionCSV } from '../core/import-position.js';
 
 export const events = {
     // Le cablage est decoupe par ecran : chaque bind* ne connait que ses propres
@@ -25,6 +26,7 @@ export const events = {
         this.bindChartControls();
         this.bindDelegatedActions();
         this.bindTransactionFilters();
+        this.bindPositionImport();
     },
 
     // --- REPLIS SANS HANDLERS INLINE (compat CSP stricte) ---
@@ -402,18 +404,23 @@ export const events = {
                 const text = await file.text();
                 importCsvInput.value = '';
 
-                // Un releve de courtier ne porte pas de colonne « portfolio » :
-                // il faut savoir ou le deposer avant de lancer l'import.
+                // Un releve de courtier ou de position ne porte pas de colonne
+                // « portfolio » : il faut savoir ou le deposer avant l'import.
                 let portfolioName = '';
-                if (isDegiroCSV(text)) {
+                if (isDegiroCSV(text) || isPositionCSV(text)) {
                     const active = this.service.getPortfolioById(this.service.activePortfolioId);
                     const suggested =
                         this.service.activePortfolioId !== 'GLOBAL' && active
                             ? active.name
-                            : 'CTO Degiro';
+                            : isPositionCSV(text)
+                              ? 'Assurance Vie'
+                              : 'CTO Degiro';
                     portfolioName = (
                         prompt(
-                            'Relevé Degiro détecté.\nNom du portefeuille de destination (créé s’il n’existe pas) :',
+                            (isPositionCSV(text)
+                                ? 'Relevé de position détecté.'
+                                : 'Relevé Degiro détecté.') +
+                                '\nNom du portefeuille de destination (créé s’il n’existe pas) :',
                             suggested
                         ) || ''
                     ).trim();
@@ -545,6 +552,85 @@ export const events = {
         if (refreshInsightsBtn) {
             refreshInsightsBtn.onclick = () => this.refreshPortfolioInsights(true);
         }
+    },
+
+    // --- IMPORT D'UN RELEVE DE POSITION (assurance vie, PER...) ------------
+    //
+    // Contrairement au CSV Degiro (un fichier telecharge), ce format vient
+    // d'un copier-coller du tableau de position affiche chez l'assureur : une
+    // modale dediee, avec textarea, remplace donc l'input file.
+    bindPositionImport() {
+        const openBtn = document.getElementById('openPositionImportBtn');
+        const modal = document.getElementById('positionImportModal');
+        const closeBtn = document.getElementById('closePositionImportModalBtn');
+        const portfolioInput = /** @type {HTMLInputElement} */ (
+            document.getElementById('positionImportPortfolio')
+        );
+        const textarea = /** @type {HTMLTextAreaElement} */ (
+            document.getElementById('positionImportTextarea')
+        );
+        const hint = document.getElementById('positionImportHint');
+        const submitBtn = /** @type {HTMLButtonElement} */ (
+            document.getElementById('positionImportSubmitBtn')
+        );
+        if (!openBtn || !modal || !submitBtn) return;
+
+        const close = () => modal.classList.remove('open');
+
+        openBtn.onclick = () => {
+            const settingsModal = document.getElementById('settingsModal');
+            if (settingsModal) settingsModal.classList.remove('open');
+            const active = this.service.getPortfolioById(this.service.activePortfolioId);
+            if (portfolioInput)
+                portfolioInput.value =
+                    this.service.activePortfolioId !== 'GLOBAL' && active
+                        ? active.name
+                        : 'Assurance Vie';
+            if (textarea) textarea.value = '';
+            if (hint) hint.textContent = '';
+            modal.classList.add('open');
+        };
+        if (closeBtn) closeBtn.onclick = close;
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) close();
+        });
+
+        const submitLabel = submitBtn.textContent;
+        submitBtn.onclick = async () => {
+            const text = (textarea && textarea.value) || '';
+            const portfolioName = ((portfolioInput && portfolioInput.value) || '').trim();
+            if (!text.trim()) {
+                if (hint) hint.textContent = 'Colle le tableau de ton contrat avant d’importer.';
+                return;
+            }
+            if (!portfolioName) {
+                if (hint) hint.textContent = 'Indique le portefeuille de destination.';
+                return;
+            }
+            if (submitBtn.classList.contains('is-loading')) return;
+            submitBtn.classList.add('is-loading');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Import en cours…';
+            try {
+                const { added, errors } = await this.service.importFromCSV(text, {
+                    portfolioName,
+                });
+                let msg = `${added} transaction(s) importée(s).`;
+                if (errors.length)
+                    msg +=
+                        `\n\n${errors.length} ligne(s) en avertissement (support valorisé manuellement ou ligne ignorée) :\n` +
+                        errors.slice(0, 15).join('\n') +
+                        (errors.length > 15 ? `\n… et ${errors.length - 15} autre(s).` : '');
+                alert(msg);
+                close();
+            } catch (err) {
+                if (hint) hint.textContent = 'Erreur import : ' + err.message;
+            } finally {
+                submitBtn.classList.remove('is-loading');
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitLabel;
+            }
+        };
     },
 
     // --- MODALE DE TRANSACTION : ouverture et soumission -------------------

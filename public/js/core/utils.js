@@ -437,4 +437,76 @@ export const Utils = {
         const n = parseFloat(String(val).trim().replace(',', '.'));
         return isNaN(n) ? 0 : n;
     },
+
+    /**
+     * Minuscules sans accents, pour comparer des en-tetes de releve saisis a
+     * la main (adaptateurs Degiro / releve de position AV).
+     */
+    fold: (s) =>
+        String(s || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase(),
+
+    /** Decoupe une ligne CSV/TSV en respectant les guillemets, sur un delimiteur donne. */
+    splitDelimited: (line, delimiter) => {
+        const cells = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (inQuotes) {
+                if (c === '"') {
+                    if (line[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    cur += c;
+                }
+            } else if (c === '"') {
+                inQuotes = true;
+            } else if (c === delimiter) {
+                cells.push(cur);
+                cur = '';
+            } else {
+                cur += c;
+            }
+        }
+        cells.push(cur);
+        return cells.map((c) => c.trim());
+    },
+
+    /**
+     * Index de la premiere colonne dont l'en-tete figure dans `labels`, ou -1.
+     * Les en-tetes sont supposes deja normalises (cf. `fold`).
+     * @param {string[]} headers @param {string[]} labels
+     */
+    findHeaderColumn: (headers, labels) => {
+        for (const label of labels) {
+            const idx = headers.indexOf(label);
+            if (idx !== -1) return idx;
+        }
+        return -1;
+    },
+
+    /**
+     * Nombre au format FR (`1 234,56 €`) ou US (`1234.56`), symbole monetaire,
+     * pourcentage et espaces (dont insecables) tolerees. Renvoie `null` — et
+     * non zero — quand la cellule est vide : un montant absent et un montant
+     * nul n'ont pas le meme sens dans un releve.
+     * @returns {number|null}
+     */
+    parseLocaleNumber: (val) => {
+        let s = String(val == null ? '' : val)
+            .replace(/[\u20ac$%\s\u00a0\u202f]/g, '')
+            .trim();
+        if (!s) return null;
+        if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+        const n = parseFloat(s);
+        return isNaN(n) ? null : n;
+    },
 };

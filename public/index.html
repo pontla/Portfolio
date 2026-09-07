@@ -956,6 +956,12 @@
                 <input type="file" id="importCsvInput" accept=".csv,text/csv" style="display:none;">
 
                 <p class="settings-hint">
+                    Pas de relevé de transactions (assurance vie, PER...) ? Colle
+                    directement le tableau de position de ton contrat.
+                </p>
+                <button type="button" id="openPositionImportBtn" class="btn-primary full-width">Importer un relevé de position</button>
+
+                <p class="settings-hint">
                     Résumé IA (optionnel) — choisis ton fournisseur et saisis ta clé une fois.
                     Elle est chiffrée côté serveur, liée à ton compte (donc dispo sur tous tes
                     appareils) et n'est jamais réaffichée. Aucun fournisseur = résumé factuel sans IA.
@@ -1080,6 +1086,35 @@
                     </div>
                     <button type="submit" class="btn-primary full-width" id="portfolioSubmitBtn">Enregistrer le portefeuille</button>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="positionImportModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Importer un relevé de position</h3>
+                <button class="close-btn" id="closePositionImportModalBtn" aria-label="Fermer"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-hint settings-hint--lead">
+                    Pour un contrat sans relevé de transactions (assurance vie, PER...) :
+                    colle ici le tableau de position de ton contrat — nom du support,
+                    ISIN, nombre de parts, PMPA, montant, date de VL. Sélectionne le
+                    tableau chez ton assureur (Ctrl+C) puis colle-le ci-dessous
+                    (Ctrl+V) : les colonnes tabulées, à point-virgule ou à virgule
+                    sont reconnues.
+                </p>
+                <div class="form-group">
+                    <label for="positionImportPortfolio">Portefeuille de destination</label>
+                    <input type="text" id="positionImportPortfolio" placeholder="Ex: Assurance Vie">
+                </div>
+                <div class="form-group">
+                    <label for="positionImportTextarea">Relevé de position</label>
+                    <textarea id="positionImportTextarea" rows="10" style="width:100%; font-family:'Roboto Mono',monospace; font-size:12px;" placeholder="Nom du support&#9;ISIN&#9;Nombre de parts&#9;Valeur liquidative&#9;Montant&#9;Poids&#9;PMPA&#9;+/- value €&#9;+/- value %&#9;Date VL"></textarea>
+                </div>
+                <p class="settings-hint" id="positionImportHint"></p>
+                <button type="button" id="positionImportSubmitBtn" class="btn-primary full-width">Importer</button>
             </div>
         </div>
     </div>

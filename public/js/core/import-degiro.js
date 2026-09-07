@@ -12,6 +12,8 @@
  * Aucune dependance au DOM ni au reseau.
  */
 
+import { Utils } from './utils.js';
+
 /** Colonnes du releve, par libelles acceptes (accents et casse ignores). */
 const COLUMNS = {
     date: ['date'],
@@ -71,61 +73,11 @@ const VENUE_SUFFIX = {
 
 const CURRENCY_RE = /^[A-Z]{3}$/;
 
-/** Minuscules sans accents, pour comparer des en-tetes saisis a la main. */
-function fold(s) {
-    return String(s || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
-}
-
-/** Decoupe une ligne CSV en respectant les guillemets. */
-function splitLine(line, delimiter) {
-    const cells = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (inQuotes) {
-            if (c === '"') {
-                if (line[i + 1] === '"') {
-                    cur += '"';
-                    i++;
-                } else {
-                    inQuotes = false;
-                }
-            } else {
-                cur += c;
-            }
-        } else if (c === '"') {
-            inQuotes = true;
-        } else if (c === delimiter) {
-            cells.push(cur);
-            cur = '';
-        } else {
-            cur += c;
-        }
-    }
-    cells.push(cur);
-    return cells.map((c) => c.trim());
-}
-
-/**
- * Nombre au format FR (`1.234,56`) ou US (`1234.56`). Renvoie `null` — et non
- * zero — quand la cellule est vide : un cours absent et un cours nul n'ont pas
- * le meme sens ici.
- * @returns {number|null}
- */
-function parseNumber(val) {
-    let s = String(val == null ? '' : val)
-        .replace(/[\s\u00a0\u202f]/g, '')
-        .trim();
-    if (!s) return null;
-    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
-    const n = parseFloat(s);
-    return isNaN(n) ? null : n;
-}
+// fold / splitLine / parseNumber vivent dans Utils (utils.js), partages avec
+// l'adaptateur releve de position (import-position.js).
+const fold = Utils.fold;
+const splitLine = Utils.splitDelimited;
+const parseNumber = Utils.parseLocaleNumber;
 
 /** `15-07-2026` (ou `15/07/2026`) -> `2026-07-15`. */
 function parseDegiroDate(val) {
@@ -134,14 +86,7 @@ function parseDegiroDate(val) {
     return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
-/** Index de la premiere colonne dont l'en-tete figure dans `labels`. */
-function findColumn(headers, labels) {
-    for (const label of labels) {
-        const idx = headers.indexOf(label);
-        if (idx !== -1) return idx;
-    }
-    return -1;
-}
+const findColumn = Utils.findHeaderColumn;
 
 /**
  * Vrai si le texte ressemble a un releve Degiro. Le CSV natif de
@@ -285,5 +230,3 @@ export function parseDegiroCSV(text, { portfolioName = '' } = {}) {
     rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     return { rows, warnings };
 }
-
-export const _internals = { parseNumber, parseDegiroDate, fold, VENUE_SUFFIX };
