@@ -112,6 +112,18 @@ export const shell = {
         if (pseudoInput && document.activeElement !== pseudoInput) pseudoInput.value = name;
     },
 
+    // Bref surlignage vert de l'en-tete quand le pseudo vient d'etre enregistre.
+    flashIdentity() {
+        /** @type {NodeListOf<HTMLElement>} */ (
+            document.querySelectorAll('.app-brand span, .side-logo-text')
+        ).forEach((el) => {
+            el.classList.remove('identity-flash');
+            void el.offsetWidth; // force le redemarrage de l'animation
+            el.classList.add('identity-flash');
+            setTimeout(() => el.classList.remove('identity-flash'), 1000);
+        });
+    },
+
     async init() {
         Icons.render();
         this.initTheme();

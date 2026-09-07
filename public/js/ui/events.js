@@ -222,13 +222,24 @@ export const events = {
             document.getElementById('savePseudoBtn')
         );
         if (pseudoInput && savePseudoBtn) {
+            const pseudoBtnLabel = savePseudoBtn.textContent;
             savePseudoBtn.onclick = async () => {
                 if (savePseudoBtn.classList.contains('is-loading')) return;
+                clearTimeout(this._pseudoSavedTimer);
+                savePseudoBtn.classList.remove('is-saved');
+                savePseudoBtn.textContent = pseudoBtnLabel;
                 savePseudoBtn.classList.add('is-loading');
                 savePseudoBtn.disabled = true;
                 try {
                     await this.service.setDisplayName(pseudoInput.value);
                     this.applyIdentity();
+                    this.flashIdentity();
+                    savePseudoBtn.textContent = 'Pseudo enregistré ✓';
+                    savePseudoBtn.classList.add('is-saved');
+                    this._pseudoSavedTimer = setTimeout(() => {
+                        savePseudoBtn.textContent = pseudoBtnLabel;
+                        savePseudoBtn.classList.remove('is-saved');
+                    }, 1800);
                 } catch (err) {
                     alert('Impossible d’enregistrer le pseudo : ' + err.message);
                 } finally {
