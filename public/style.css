@@ -1642,17 +1642,29 @@ input:focus {
     display: flex;
     align-items: center;
     gap: 8px;
+    max-width: 560px;
     background: var(--tile);
     border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 10px 12px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+.research-search:focus-within {
+    border-color: var(--acc);
+    box-shadow: 0 0 0 3px rgba(0, 211, 242, 0.18);
 }
 .research-search input {
     flex: 1;
+    width: auto;
     background: none;
     border: none;
+    border-radius: 0;
+    padding: 0;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.4;
     outline: none;
     min-width: 0;
 }
@@ -2968,75 +2980,6 @@ input:focus {
     padding: 6px 0;
 }
 
-.tx-filters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    padding-bottom: 16px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.tx-filters input[type='text'],
-.tx-filters input[type='date'],
-.tx-filters select {
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    font-family: inherit;
-    font-size: 13px;
-    background: var(--hover-bg);
-    color: var(--text-primary);
-    height: 36px;
-}
-
-.tx-filters input:focus,
-.tx-filters select:focus {
-    outline: none;
-    border-color: var(--accent-blue);
-    background: var(--surf);
-}
-
-.tx-filters #txSearchInput {
-    flex: 1 1 180px;
-    min-width: 140px;
-    width: auto;
-}
-
-.tx-filters select,
-.tx-filters input[type='date'] {
-    flex: 0 0 auto;
-    width: 140px;
-}
-
-.tx-filters .btn-sm {
-    flex: 0 0 auto;
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-weight: 500;
-    cursor: pointer;
-    padding: 8px 4px;
-}
-
-.tx-filters .btn-sm:hover {
-    color: var(--text-primary);
-    text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-    .tx-filters {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .tx-filters input[type='text'],
-    .tx-filters input[type='date'],
-    .tx-filters select {
-        width: 100%;
-    }
-}
-
 #boostInsightsBtn:disabled {
     background: var(--hover-bg);
     color: var(--text-secondary);
@@ -4284,15 +4227,6 @@ select option {
 }
 .text-red {
     color: var(--dn);
-}
-
-.tx-filters {
-    border-bottom-color: var(--l1);
-}
-.tx-filters input,
-.tx-filters select {
-    background: var(--f3);
-    color: var(--txt);
 }
 
 .settings-section-label {
@@ -6002,30 +5936,42 @@ select option {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 10px;
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 16px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--l1);
 }
 
 .tx-search {
-    flex: 1;
+    flex: 1 1 auto;
+    max-width: 460px;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
-    border-radius: 13px;
+    padding: 9px 12px;
+    border-radius: 8px;
     border: 1px solid var(--l3);
     background: var(--f3);
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+.tx-search:focus-within {
+    border-color: var(--acc);
+    box-shadow: 0 0 0 3px rgba(0, 211, 242, 0.18);
 }
 .tx-search input {
     flex: 1;
     width: auto;
+    min-width: 0;
     border: none;
     background: none;
     padding: 0;
     color: var(--txt);
     font-size: 13px;
+    line-height: 1.4;
     height: auto;
 }
 .tx-search input:focus {
@@ -6054,13 +6000,20 @@ select option {
 
 .tx-filter-open {
     flex: 0 0 auto;
-    padding: 10px 14px;
-    border-radius: 13px;
+    padding: 9px 14px;
+    border-radius: 8px;
     border: 1px solid var(--l3);
     background: var(--f3);
     color: var(--soft);
-    font: 600 13px var(--font-ui);
+    font: 600 13px / 1.4 var(--font-ui);
     cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+.tx-filter-open:hover {
+    color: var(--txt);
+    border-color: var(--l2);
 }
 .tx-filter-open.has-filters {
     border-color: rgba(0, 211, 242, 0.35);
@@ -6110,121 +6063,17 @@ select option {
     font-size: 13px;
 }
 
-/* ============================================================
-   REDESIGN - Phase 6 : finitions (recherche + feuille de filtres tx)
-   ============================================================ */
-
-.tx-filters {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 16px;
+/* Sous 1024px la carte Transactions perd son fond/padding :
+   la barre d'outils s'aligne alors sur le bord de l'ecran. */
+@media (max-width: 1023px) {
+    .tx-filters {
+        padding: 0 0 14px;
+    }
+    .tx-search {
+        max-width: none;
+    }
 }
 
-.tx-search {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-radius: 13px;
-    border: 1px solid var(--l3);
-    background: var(--f3);
-}
-.tx-search input {
-    flex: 1;
-    width: auto;
-    border: none;
-    background: none;
-    padding: 0;
-    color: var(--txt);
-    font-size: 13px;
-    height: auto;
-}
-.tx-search input:focus {
-    outline: none;
-    box-shadow: none;
-    background: none;
-}
-.tx-search-ico {
-    width: 11px;
-    height: 11px;
-    flex: none;
-    border: 1.6px solid var(--dim);
-    border-radius: 50%;
-    position: relative;
-}
-.tx-search-ico::after {
-    content: '';
-    position: absolute;
-    right: -3px;
-    bottom: -2px;
-    width: 5px;
-    height: 1.6px;
-    background: var(--dim);
-    transform: rotate(45deg);
-}
-
-.tx-filter-open {
-    flex: 0 0 auto;
-    padding: 10px 14px;
-    border-radius: 13px;
-    border: 1px solid var(--l3);
-    background: var(--f3);
-    color: var(--soft);
-    font: 600 13px var(--font-ui);
-    cursor: pointer;
-}
-.tx-filter-open.has-filters {
-    border-color: rgba(0, 211, 242, 0.35);
-    background: rgba(0, 211, 242, 0.1);
-    color: var(--accTxt);
-}
-
-.tx-type-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 6px;
-}
-.tx-type-pills button {
-    padding: 8px 13px;
-    border-radius: 20px;
-    border: 1px solid var(--l3);
-    background: var(--f3);
-    color: var(--soft);
-    font: 600 12.5px var(--font-ui);
-    cursor: pointer;
-}
-.tx-type-pills button.active {
-    border-color: rgba(0, 211, 242, 0.4);
-    background: rgba(0, 211, 242, 0.14);
-    color: var(--accTxt);
-}
-
-.tx-date-row {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 16px;
-}
-.tx-date-field {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-.tx-date-field span {
-    font-size: 10.5px;
-    color: var(--dim);
-}
-.tx-date-field input {
-    border-radius: 13px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-}
 /* ============================================================
    REDESIGN - Carte graphique (mobile ET desktop, cf. maquette)
    ============================================================ */
