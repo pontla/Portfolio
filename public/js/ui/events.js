@@ -9,6 +9,7 @@ import { CONFIG, AI_PROVIDERS } from '../core/config.js';
 import { AuthService } from '../core/auth.js';
 import { Utils } from '../core/utils.js';
 import { APIService } from '../core/api.js';
+import { isDegiroCSV } from '../core/import-degiro.js';
 
 export const events = {
     // Le cablage est decoupe par ecran : chaque bind* ne connait que ses propres
@@ -401,11 +402,34 @@ export const events = {
                 const text = await file.text();
                 importCsvInput.value = '';
 
+                // Un releve de courtier ne porte pas de colonne « portfolio » :
+                // il faut savoir ou le deposer avant de lancer l'import.
+                let portfolioName = '';
+                if (isDegiroCSV(text)) {
+                    const active = this.service.getPortfolioById(this.service.activePortfolioId);
+                    const suggested =
+                        this.service.activePortfolioId !== 'GLOBAL' && active
+                            ? active.name
+                            : 'CTO Degiro';
+                    portfolioName = (
+                        prompt(
+                            'Relevé Degiro détecté.\nNom du portefeuille de destination (créé s’il n’existe pas) :',
+                            suggested
+                        ) || ''
+                    ).trim();
+                    if (!portfolioName) return;
+                }
+
                 try {
-                    const { added, errors } = await this.service.importFromCSV(text);
+                    const { added, errors } = await this.service.importFromCSV(text, {
+                        portfolioName,
+                    });
                     let msg = `${added} transaction(s) importée(s).`;
                     if (errors.length)
-                        msg += `\n${errors.length} erreur(s) :\n` + errors.slice(0, 10).join('\n');
+                        msg +=
+                            `\n\n${errors.length} ligne(s) non importée(s) :\n` +
+                            errors.slice(0, 15).join('\n') +
+                            (errors.length > 15 ? `\n… et ${errors.length - 15} autre(s).` : '');
                     alert(msg);
                 } catch (err) {
                     alert('Erreur import : ' + err.message);

@@ -10,6 +10,7 @@ import { db } from './supabase.js';
 import { Utils } from './utils.js';
 import { APIService } from './api.js';
 import { AuthService, isJwtTimingError, jwtIssuedAt } from './auth.js';
+import { isDegiroCSV, parseDegiroCSV } from './import-degiro.js';
 
 // Dates d'un historique quotidien, triees une fois pour toutes. Les historiques
 // sont toujours remplaces en bloc (refreshPrices assigne l'objet renvoye par
@@ -985,8 +986,17 @@ export class PortfolioService {
     }
 
     async addTradesBulk(tradesDataArray) {
-        const rows = tradesDataArray.map((td) => {
-            const n = this.normalizeTradeInput(td);
+        return this._insertTradesBulk(tradesDataArray.map((td) => this.normalizeTradeInput(td)));
+    }
+
+    /**
+     * Insere en bloc des transactions **deja normalisees**. L'import CSV
+     * normalise lui-meme, ligne apres ligne, pour que chaque ligne voie les
+     * precedentes du meme fichier ; renormaliser ici ecraserait ce contexte.
+     * @param {any[]} normalizedTrades
+     */
+    async _insertTradesBulk(normalizedTrades) {
+        const rows = normalizedTrades.map((n) => {
             return {
                 user_id: this.userId,
                 portfolio_id: n.portfolioId,
@@ -1071,11 +1081,104 @@ export class PortfolioService {
         return lines.join('\n');
     }
 
-    async importFromCSV(csvText) {
-        const rows = Utils.parseCSV(csvText);
-        if (!rows.length) return { added: 0, errors: ['Fichier CSV vide'] };
+    /**
+     * Suffixe Yahoo d'un symbole (`PERI.TA` -> `.TA`), chaine vide sans point.
+     * @param {string} symbol
+     */
+    static _symbolSuffix(symbol) {
+        const i = String(symbol || '').indexOf('.');
+        return i === -1 ? '' : String(symbol).slice(i);
+    }
 
+    /**
+     * Symbole cotable pour une ligne de releve Degiro. L'ISIN est l'entree la
+     * plus fiable, mais il peut designer plusieurs cotations d'un meme titre :
+     * la place boursiere du releve tranche. A defaut, le libelle du produit
+     * sert de seconde chance — un ISIN reste muet pour un titre radie ou
+     * absent du referentiel de la source.
+     * @param {any} row
+     */
+    async _resolveDegiroSymbol(row) {
+        // Un symbole cotable est court et sans espace. La recherche par libelle
+        // peut renvoyer le libelle lui-meme faute de correspondance : mieux vaut
+        // signaler la ligne que lui inventer un symbole.
+        const plausible = (sym) => /^[A-Za-z0-9.^=-]{1,20}$/.test(sym || '');
+        const pick = (list) => {
+            const items = (list || []).filter((x) => x && plausible(x.displaySymbol));
+            if (!items.length) return null;
+            if (row.expectedSuffix == null) return items[0].displaySymbol;
+            const match = items.find(
+                (x) => PortfolioService._symbolSuffix(x.displaySymbol) === row.expectedSuffix
+            );
+            return match ? match.displaySymbol : null;
+        };
+
+        const byIsin = row.isin ? await APIService.searchSymbol(row.isin) : [];
+        let found = pick(byIsin);
+        if (!found && row.product) found = pick(await APIService.searchSymbol(row.product));
+        // Aucune cotation ne correspond a la place du releve : plutot que de
+        // perdre la ligne, on retient la meilleure reponse de l'ISIN.
+        if (!found && byIsin.length && plausible(byIsin[0].displaySymbol))
+            found = byIsin[0].displaySymbol;
+        return found || null;
+    }
+
+    /**
+     * Complete les lignes Degiro par leur symbole. Les lignes non resolues sont
+     * ecartees et signalees plutot qu'importees sous un symbole approximatif.
+     * @param {any[]} rows
+     * @param {string[]} warnings enrichi sur place
+     */
+    async _resolveDegiroSymbols(rows, warnings) {
+        /** @type {Record<string, string|null>} */
+        const cache = {};
+        const resolved = [];
+        for (const row of rows) {
+            const key = `${row.isin}|${row.expectedSuffix == null ? '*' : row.expectedSuffix}`;
+            if (!(key in cache)) {
+                cache[key] = await this._resolveDegiroSymbol(row);
+                // La devise de cotation est demandee a l'API avant la
+                // conversion des prix : l'heuristique de suffixe se trompe sur
+                // un symbole sans point cote hors USD.
+                if (cache[key]) {
+                    const apiCurrency = await APIService.resolveCurrency(cache[key]);
+                    if (apiCurrency) this.symbolCurrencies[cache[key]] = apiCurrency;
+                }
+            }
+            const symbol = cache[key];
+            if (!symbol) {
+                warnings.push(
+                    `Ligne ${row.line} : ${row.product} (${row.isin}) — aucun symbole coté trouvé, ligne ignorée`
+                );
+                continue;
+            }
+            if (row.isin) this.symbolIsins[symbol] = row.isin;
+            resolved.push({ ...row, symbol });
+        }
+        return resolved;
+    }
+
+    /**
+     * @param {string} csvText CSV natif (`;`) ou releve de courtier reconnu.
+     * @param {{portfolioName?: string}} [opts] nom du portefeuille destinataire
+     *   pour un releve sans colonne « portfolio » (cas Degiro).
+     */
+    async importFromCSV(csvText, { portfolioName = '' } = {}) {
         const errors = [];
+        const degiro = isDegiroCSV(csvText);
+        let rows;
+        if (degiro) {
+            const parsed = parseDegiroCSV(csvText, { portfolioName });
+            errors.push(...parsed.warnings);
+            rows = await this._resolveDegiroSymbols(parsed.rows, errors);
+        } else {
+            rows = Utils.parseCSV(csvText);
+        }
+        if (!rows.length) {
+            if (!errors.length) errors.push('Fichier CSV vide');
+            return { added: 0, errors };
+        }
+
         const portfolioNameToId = {};
         this.portfolios.forEach((p) => {
             portfolioNameToId[p.name.toLowerCase()] = p.id;
@@ -1094,7 +1197,21 @@ export class PortfolioService {
                 ? this.activePortfolioId
                 : this.portfolios[0] && this.portfolios[0].id;
 
-        const tradesData = [];
+        // Un releve de courtier n'apporte pas les mouvements de cash : le
+        // financement de chaque achat est deduit du solde disponible plutot que
+        // suppose preleve. Le format natif, lui, garde son defaut historique.
+        const defaultCashSource = degiro ? '' : 'CASH';
+
+        // Chaque ligne est validee et normalisee en voyant celles qui la
+        // precedent dans le meme fichier : sans cela, la vente d'une position
+        // achetee plus haut dans le releve serait refusee (« quantite detenue »)
+        // et un achat finance par un depot du meme fichier serait juge direct.
+        // L'etat reel n'est pas touche : on travaille sur une copie, restauree
+        // avant l'insertion.
+        const realTrades = this.trades;
+        this.trades = realTrades.slice();
+
+        const normalizedTrades = [];
         rows.forEach((row, idx) => {
             try {
                 if (!row.date || !row.type) throw new Error('date/type manquant');
@@ -1131,21 +1248,31 @@ export class PortfolioService {
                     // les lignes anterieures a la colonne. Deduire « direct »
                     // laisserait au contraire les depots intacts a tort.
                     // (parseCSV met les en-tetes en minuscules)
-                    cashSource: row.cashsource || row.cash_source || 'CASH',
+                    cashSource: row.cashsource || row.cash_source || defaultCashSource,
                     date: row.date,
+                    // Fourni par les releves de courtier ; ignore s'il n'a pas
+                    // la forme d'un ISIN valide (voir normalizeTradeInput).
+                    isin: row.isin,
                 };
 
                 const normalized = this.normalizeTradeInput(rowTrade);
                 this.validateTrade(normalized, undefined, { checkCash: false });
-                tradesData.push(rowTrade);
+                normalizedTrades.push(normalized);
+                // Un identifiant est indispensable : la validation exclut du
+                // calcul la ligne dont l'id vaut `excludeTradeId` (undefined
+                // ici), ce qui masquerait une ligne sans id.
+                this.trades.push({ ...normalized, id: `import-${idx}` });
             } catch (e) {
-                errors.push(`Ligne ${idx + 2} : ${e.message}`);
+                // `row.line` porte le numero dans le fichier d'origine, que le
+                // tri chronologique du releve Degiro a decorrele de l'index.
+                errors.push(`Ligne ${row.line || idx + 2} : ${e.message}`);
             }
         });
 
-        if (tradesData.length === 0) return { added: 0, errors };
+        this.trades = realTrades;
+        if (normalizedTrades.length === 0) return { added: 0, errors };
 
-        const added = await this.addTradesBulk(tradesData);
+        const added = await this._insertTradesBulk(normalizedTrades);
         return { added, errors };
     }
 
